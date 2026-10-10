@@ -1,0 +1,2 @@
+# Keep the original cp1252/CRLF files byte-for-byte
+* -text

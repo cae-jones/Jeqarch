@@ -1,0 +1,100 @@
+
+Mostly the same as SCS. These are SJ-specific:
+
+This is how you can view story text line by line, like in the Oda Rising campaign:
+
+story 0 text=this is the first line of the story
+story 1 text=this is the second line of the stor
+story 5 text=this is the sixth line of the story; it's 0-based.
+read story
+
+Adding items works just like in SCS, except the amount variable only affects arrows.
+
+This adds 1 katana:
+
+add item 1 10,10,25,25 katana
+
+
+This adds a collection of 15 arrows:
+
+add item 15 2,2,3,3 arrows
+
+This adds 10 arcbuses, spread around the given area:
+
+add items 10 20,20,3,30 arcbus
+
+
+The map command loads saved maps in the maps folder, and places the player in district A0
+To change the district, type "district", followed by an equals, followed by the value (a letter, then a number, no spaces). 10by10 is the maximum size.
+
+district=a0
+
+district=E9
+
+
+You can change the number of districts in a map by typing the word "resize", followed by the word "map", followed by a space, the number of districts east to west, a comma, and the number of districts north to south. Like so:
+
+resize map 2,3
+
+
+You can add people in a few different ways:
+
+add random samurai=2
+
+^ adds two samurai at random locations in the current district.
+
+add spot 10,20,20,30 shinobi=10
+
+^ adds 10 shinobi to the area with a corner at (10, 20) and the other at (20, 30).
+
+The possible classes you can use are:
+
+shogun
+daimyou
+samurai
+ronan
+shinobi
+kanoichi   (Makes the created Shinobi female)
+civilian
+man   (makes the created civilian male)
+woman  (makes the created civilian female)
+monk  (civilian with ihatsu)
+
+If you use an unrecognized value, a civilian will be created.
+(You can get male/female civilians with other words, like boy/girl.)
+
+
+You cannot add people to zones, since there is no such thing, but you can add them to specific tile types, for example:
+
+add tile shinobi=3 campsite
+add tile civilian=10 house
+add tile samurai=5 horse
+
+The tiles you can use are:
+
+clear
+campsite
+fire
+water
+deep_water
+castle_wall
+castle_room
+courtyard
+broken_wall
+tree
+hole
+boulder
+boat
+horse
+house
+garden
+
+
+Removing people is a little tricky, since you get to specify two things.
+You can specify all people of a given class, all people in general... but with an optional flag, you can specify only enemies, only allies, only independents, or only people with a specific name.
+
+remove people 10,10,25,25 samurai
+remove people 0,0,50,50 shinobi neutral
+remove people 5,10,15,20 civilian allies
+remove people 30,10,40,25 any enemies
+

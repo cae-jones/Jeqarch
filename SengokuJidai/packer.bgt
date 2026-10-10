@@ -1,0 +1,33 @@
+
+void main() {
+tts_voice voice;
+voice.rate=5;
+voice.speak("Starting.");
+pack_file pack;
+pack.create("sounds.dat");
+string[] files=find_files("music/*");
+for(uint i=0; i<files.length(); i++) pack.add_file("music/" + files[i], "music/" + files[i]);
+voice.speak_interrupt("Voices.");
+files=find_files("voice/*");
+for(uint i=0; i<files.length(); i++) pack.add_file("voice/" + files[i], "voice/" + files[i]);
+voice.speak_interrupt("SFX");
+files=find_files("sfx/*");
+for(uint i=0; i<files.length(); i++) pack.add_file("sfx/" + files[i], "sfx/" + files[i]);
+// Add the Daimyou's son's voice.
+voice.speak_interrupt("CA10");
+string path="c:\\users\\planet seva\\jeqo\\games\\jl2010\\";
+pack.add_file(path + "ca10-hai-ii.wav", "voice/kiai_b6.wav");
+for(uint i=0; i<6; i++) pack.add_file(path + "ca10attack" + i + ".wav", "voice/kiai_b" + i + ".wav");
+for(uint i=0; i<=12; i++) pack.add_file(path + "ca10hit" + i + ".wav", "voice/hit_b" + i + ".wav");
+pack.add_file(path + "ca10KO.wav", "voices/die_b.wav");
+
+// Girl.
+for(uint i=0; i<8; i++) {
+pack.add_file("c:\\users\\planet seva\\saved games\\bgt\\dle\\voices\\children\\girl2attack" + i + ".wav", "voices/kiai_g" + i + ".wav"); pack.add_file("c:\\users\\planet seva\\saved games\\bgt\\dle\\voices\\children\\girl2hit" + i + ".wav", "voices/hit_g" + i + ".wav");
+}
+ pack.add_file("c:\\users\\planet seva\\saved games\\bgt\\dle\\voices\\children\\abscream1.wav", "voices/die_g.wav");
+
+
+pack.close();
+voice.speak_interrupt_wait("Done.");
+}

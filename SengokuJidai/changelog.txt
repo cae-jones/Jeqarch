@@ -1,0 +1,351 @@
+----------
+2.6 12:46 AM 3/1/2014
+
+* Attacking when in deep water should sometimes make water noise, and sometimes be a little slower.
+* Added a new item as a potential reward from scouting quests
+* Added the "Kamikaze" map to free mode. It's a standard randomly-generated ocean map, but it is also being invaded by the Shi'ten'noh, led by Kublai Khan. They are mighty, and each of the 4 'bosses' is supposed to be somewhat unique (Japanese puns, sorta). Hopefully they don't die in stupid scenery-related accidents before you get to fight them.
+* Sushi now gives you a random health boost. Too much reliance on yasai, so I decided to mix it up a little.
+* Kudamono ("fruit") now restores lots of stamina.
+* If you start out in an ocean map, you will at least start on a boat.
+* Adjusted the Kamikaze mission so that your shogun starts out with extra health and food.
+
+
+----------
+2.5.1 5:47 PM 9/23/2013
+
+* Caught a couple more menus without waits.
+* Fixed the character view menu (v) so that the timer pauses! Originally, if you left the game there for several minutes, you were likely to starve and die as soon as you closed the menu!
+* Added new server address to the list (thanks Guilevi!)
+* Ocean camps now have a campsite instead of fire.
+
+
+----------
+2.5 8:41 AM 9/23/2013
+
+
+* When upgrading Samurai to Daimyou, they can now take a few followers, to better organize your forces.
+* Made some changes to the "Surrounded district" quest to make the invaders more capable, especially in the ocean.
+* Attempted to catch the case where just-out-of-sight samurai will contradict your orders because they can't tell they came from you. Orders should now flow from above a little better.
+* Trying to make multiplayer alliances work better. Currently, shoguns cannot form alliances in any mode, but hopefully this fix will enable temporary alliances in multiplayer by sending requests when trying to recruit other players.
+* Noticed that the loop for looking around by tile causes other windows applications to lag, and fixed it.
+
+
+
+----------
+2.4 10:50 AM 7/22/2013
+
+
+* Upgraded to bgt1.3
+* AI-controlled characters now get twice as much from eating. Really tired of them starving all the time.
+* Earthquakes should now happen about half as often. Still watch out for those, but they should be much less annoying now.
+* Hitting trees with the woodaxe now defaults to building houses for players; hold shift to build castle walls instead, which also affects surrounding tiles, and costs more food/fatigue.
+* Boats should now be able to travel through shallow water as well, though this only really matters on some unique maps at the moment.
+* Slowed down the max speed a little, since it seems like it might be related to the "getting stuck" bug.
+* Civilians can now randomly start with the ihatsu, woodaxe and Hammer.
+* The death reports now clear on game over.
+* If you use the "steal" command as a shinobi, not only will nearby shinobi start trying to steal stuff, but you will try to steal things from anyone near you. Be warned, though; they won't like it if they notice you!
+* Tried to fix the "people not following orders" bug. It has been improved, but still seems to pop up from time to time! Arg!
+
+
+----------
+2.3 3:48 AM 11/6/2012
+
+
+* Fixed more rare runtime errors.
+* Added a new display mode (where one tile is a 2by2 square). Hopefully this is of some use for people with some vision?
+* Trying to correct the issue with orders not being obeyed correctly at all times.
+
+
+----------
+2.2.1 8:49 PM 11/5/2012
+
+* default server address adjusted (thanks Hadi!)
+* Added notification for when the player character begins to starve.
+
+
+
+----------
+2.2 4:32 AM 11/2/2012
+
+* Adjusted the first campaigne so that daimyou are less likely to die before you can recruit them.
+* Tried to fix a rare runtime error.
+* You can now press k to check death reports. I'm sure I'm not the only one who has been frustrated by unexplained deaths, so now whenever someone in your army dies, their death is investigated and a cause is reported. You can clear this list after viewing by holding shift and pressing enter.
+* You can now press m to overview the map as a whole. This lets you see the types of each district, as well as hear its total population and who controls it.
+* Made a slight adjustment to game speed because it seemed like the "ninja" setting wasn't being properly caught.
+* Added more garbage collection and tried to fix the orders menu so that it doesn't pause the game when you close it.
+* Since campsites have become more useful, your steps sound different when you enter one.
+* The "counter freeze" bug has reared its head again. Still just throwing up work-arounds until I can track down the cause.
+* The B command pauses the game for speech, since it can take a few seconds to complete.
+
+
+----------
+2.1 9:58 AM 10/12/2012
+
+* You can get an overview of hunger levels in your followers by holding shift and pressing F.
+* Your followers orders should appear in the view list (v)
+
+
+
+
+----------
+2.0 12:46 PM 8/31/2012
+
+* Temporary patch for the "no moving for you" bug.
+* People are more likely to go look for food when starving. (A low-pitched version of the target beacon should play when this decision is made.). In particular, if there is a conversation going on, they will not let talk be a distraction, though you may still hear hurried replies.
+* Fatigue can potentially cause people to stumble in a random direction. This happens more often at higher difficulties, and with higher fatigue. If this is happening to the player, the beacon will play at a random pitch as a warning.
+* Tried to improve potential for population growth. The weather no longer has to be nice, Food requirements reduced (more so if enemies are the parents, since love as warfare is not unheard of), reduced the lower bounds on food costs, and overall tried to loosen the requirements. In other words, the tome of love might actually accomplish something other than giving your army a chance to rest.
+* Changed how orders are relayed through your army. It's a bit more restrictive, so as to prevent the order clashes when someone of lower rank contradicts their leader by being out of sight when the orders are given. (Hopefully this will prevent the situations where separate groups will sit and argue over whether to find food or to follow their original orders, hilarious though these scenes were.) If this has the opposite of the desired effect, it can be reverted, but so far so good.
+* Changed how people look for food. A misplaced brace originally meant that every frame, they would search the map for every item in their inventory that isn't a net! Put that brace in its place, and also included a count for how much food that person has actually found. If it is above a certain amount, the searcher has a chance to consider the mission accomplished, and might return to base (more likely for samurai, and a little likely for shinobi. Everyone else is much less likely to return to base after shopping.)
+* Tried to change the first campaigne so that Nobumitsu isn't at risk of rebellion the instant the game starts.
+* A message should now inform you when you attempt to recruit someone who follows an enemy shogun.
+* Daimyou now make more requests when you seek an alliance.
+* Fixed a bug that would cause the first frame of the game to cover the amount of time it took you to begin playing. This is a rather serious bug, as it can easily cause people to starve or drown before you can respond!
+
+
+
+
+----------
+1.9 4:30 PM 8/24/2012
+
+* Fixed a typo that made the map selection not work properly.
+* Fixed a typo that sometimes caused the game to crash when using the tome of war.
+* the tome of water now throws in extra nets in the district where it is used
+* the tome of love now feeds your followers more than 10%.
+* it takes slightly less energy for children to be born
+* Horses traveling through shallow water should actually work this time.
+* Made AI less likely to talk if hungry, since more people started starving after talking was added.
+* Fixed the build submenu so that you can back out with escape. It was previously F4 for some long-forgotten reason.
+* Remade the multiplayer map. The northwest half is more themed (organized villages, castles with gardens, island-chains designed to be traveled by boat or horse, a giant castle with a few traps, etc), while the southeast half remains in the style of random maps.
+* AI riders should now be more careful about dismounting.
+* Tweaked the Tome of War. Previously it was not reporting the results properly, and could skip as much as half your inventory.
+* Woodaxes can now turn trees into houses or castle walls. I had completely forgotten that multiplayer can give unarmed characters axes.
+* pressing enter in a campsite should allow you to trade items. Since campsites don't really do anything at present besides protect people from bad weather, and since it's easy to gather a huge supply of redundant weapons, I thought I should do something like this.
+
+
+----------
+1.8 8:56 PM 6/26/2012
+
+* It is now possible to specify an alternate server address at the new game menu by pressing + (plus).
+* Replaced a few sounds
+* modified the code that plays fire sounds to try and improve the problems with large clusters of burning tiles.
+* Sound now plays whenever someone harvests from a garden or builds boats, houses or castles.
+* Added a command to check the last minute's worth of deaths to your people, and the total number of enemies killed by your army. (Press B to hear this information)
+* Decreased the volume of the Earthquake sound, since it was a bit overwhelming.
+* Whenever you enter a new district or build a canal, sound will play where boats are located. These sounds will not move with the boats, however.
+* You can now hold shift and type the first letter in the name of an item to find it more quickly in your inventory. Ur, supposedly.
+* Pressing G when you've conquered the entire map now results in a victory message.
+* Damage from Earthquakes reduced slightly, and hopefully Earthquake damage will happen a little less often.
+* Coordinates of characters wil be spoken at character select.
+* Changed the system for spoken feedback. Screen reader output, multiple sapi voices, and speed/pitch variations for some TTS now supported.
+* The look commands (shift + directions and shift + enter) now use sound and single messages in place of the multiple message system used previously.
+* Horses can now displace shallow water rather than being blocked by it.
+* Boats will now carry anyone within one tile of them (about a third of the time, as to prevent a huge number of loops).
+* Updated AI to be a bit smarter about using horses and boats.
+* Added a few special abilities, Activated by holding shift when an attack hits. Be warned, though, as enemies can use them as well! (They do so more often if the difficulty is higher.)
+** The katana's special attack moves the user toward their target and enhances range.
+** The yumi, Rocket-bow and blow-dart can be fired high to get past shields, but the range and damage is reduced.
+** Kanabo can push opponents for reduced damage.
+** Naginata, jo and bo can disarm opponents. Damage is cut in half, and there is an increased recovery afterward.
+** The black egg can be thrown at a single target, so long as the target is in sight.
+** Shuriken can be thrown in all directions, with slightly reduced damage and increased recovery. (And it takes away all your shuriken!)
+** The kusurigami can somehow be used to drag a target toward you.
+* Your character will now only talk if enter doesn't activate something else, such as getting items or interacting with the map.
+* added the ihatsu, the robe and bowl of a monk. A civilian or shinobi wielding the ihatsu will be unlikely to be attacked by enemies, and will give and receive gifts of food, and can help heal the injured.
+* Added two premade maps to hopefully help beginners.
+* Changed the sounds for when an attack fails to penetrate armor (Thanks Hadi!).
+* Added Hammers as special items that can move boulders just like kanabo, but with less range. Hammers cannot be used as weapons, and currently only appear in the premade maps.
+
+
+----------
+1.7 6:14 AM 6/25/2012
+
+* Fixed bugs with the Tomes of Water and War
+* Fixed typo that caused the heir in the heir subquest to start out exhausted.
+* Reduced civilian chatter considerably
+* Made some significant improvements to game speed.
+
+
+----------
+1.6 9:13 AM 1/2/2012
+
+* The sound of being burned in the fire will no longer repeat quite so rapidly.
+* Added the ability to combo the Tanto and Wakazushi.
+* Fixing more of the occasional runtime error that occurs when building boats.
+* If you're standing near a house, wall, boulder or hole during an earthquake, it can collapse and hurt you.
+* Added the ability to start subquests by sending out scouts. There are seven different subquests so far.
+* Added the kusurigami as a special weapon that only appears during subquests. It is very similar to the kanabo, but it can hit all around. It is slightly weaker than the kanabo and slightly less likely to break shields, and its speed is randomized (so it might swing a little faster, or a little slower than a kanabo).
+* Added tomes, which can only be found by completeing subquests. Tomes enable you to perform special tasks, such as forging new armor, distributing the stockpile of weapons you probably found, change the ranks of your followers, etc.
+* Made changes to how AI is run to hopefully reduce lag.
+* You can now hear weapons being kicked from two steps away rather than just one.
+* Characters now talk when not doing anything. Mostly just saying hello and talking about the weather, but NPCs might invite each other home if they manage to make eye contact.
+* Compiled the game into a .exe.
+
+
+----------
+1.5 4:55 PM 12/31/2011
+
+* Command to check online players added.
+* Corrected multiplayer map and load function.
+* The game should try the default server address automatically.
+* Added ability to backspace to sapi text fields.
+* Added display support (NVDA at least should now support braille display). Press grahv (`) or the tilde key to toggle display modes.
+* Gardens now become barren more quickly if it is snowing.
+* Gardens are slightly more likely to be used up by AI characters.
+
+
+----------
+1.4 5:53 PM 12/30/2011
+
+* Added multiplayer
+* The game should no longer crash if you are playing as the last person in your army and die.
+
+
+----------
+
+1.3 1:33 PM 12/24/2011:
+
+* Fixed more runtime errors with boat-building.
+* Saving and loading now notifies you when the process begins.
+* The pause menu shouldn't slow down other programs anymore.
+* You can now press escape to close the list of nearby people.
+* Civilians and Shinobi now wander around and such.
+* Tried to fix a runtime error that happened if a pair had children.
+* Set up Campaigne and Multiplayer modes (neither is complete, though!).
+* Fixed the title to reflect the version number.
+* You can now press q to hear your current objective in campaigne mode.
+* Save/load updated to facilitate campaigne mode.
+* Sapi now starts out at rate 4.
+*Added first mission to campaigne mode.
+
+
+----------
+
+1.2 1:27 AM 10/14/2011:
+* Ronan now wander around when not busy.
+* Civilians will wander around if not busy.
+* If two people of opposite genders are in a house without too many people nearby, they might have a baby.
+* Civilians should try to talk to people.
+* Pressing enter while facing a non-enemy should have your character try to greet them.
+* Castle building should now work, sorta.
+* Fixed a bug that caused the game to crash if you tried to build at the south end of the map.
+* Kanabo can now be used to push boulders (pushed boulders can damage anyone in their path).
+* Diagonal aiming now hits only in a straight line and not a whole square.
+* Added arcbus.
+* Removed the mountain echo, because it was more confusing than atmospheric.
+* Attempt to clean up some of the runtime errors that sometimes occur when trying to build boats.
+
+
+----------
+
+1.1 12:42 AM 7/31/2011
+
+ * Fixed bug that would add [counter] and [face] to empty inventories when loading a game.
+ * The command to destroy bases should now work. Shinobi will try to set buildings on fire, while everyone else will try to tear them apart with kanabo.
+ * Change the make camp command to build.
+ * Added the ability to jump to the next non-ally in the view people list by pressing right.
+ * Corrected the bug that inflated your army if you load a game after having already been playing.
+ * Underlings can be ordered to build houses, boats or castles (though castles don't currently work).
+ * Underlings can be ordered to steal from enemies.
+
+-----------
+
+1.0 5:03 AM 7/4/2011
+
+ * Characters should not start out trapped inside walls
+ * Changed ocean camps to be made up of boats
+ * AI will try to defend its territory
+ * Daimyou are a bit harder to negotiate with
+ * Followers should follow their leader into different districts.
+ * Fixed a bug that caused the game to crash if playing as the last person in the army and getting killed.
+ * Made it possible to avoid falling out of boats being controlled by other characters (though it will probably still happen quite often, it should be easier to transport multiple people on one boat now).
+ * Rain and snow extinguish fires much more often.
+ * One now recovers from fatigue more quickly while in a house.
+ * fixed bug that prevented found kanabo from being used.
+ * Added ability to save and load games.
+ * Fixed bug that prevented leaders from being accurately counted with the g command.
+ * Made it slightly more likely that a kanabo strike will break walls.
+ * The district of a character is now spoken at character select.
+
+
+----------
+
+0.9b 4:19 AM 6/22/2011
+
+ * AI can now interpret the order to attack and will seek out enemies to fight.
+ * Fixed bug that prevented non-player characters from moving to different districts.
+ * Various IOBEs corrected
+ * Modified the check for playing character sounds to help prevent sounds from other districts from being played.
+ * Corrected playamb so that weather sounds always start at the volume that has been set.
+ * AI can pick up items.
+ * Replaced numerous strings with ints to combat lag.
+ * added sounds for walking and dismounting in snow
+ * AI can be ordered to try to recruit independent people into your forces.
+ * AI can be ordered to look for food.
+ * Snow now causes food to be used more quickly
+ * During storms, lightning can randomly strike and damage trees, gardens or people.
+ * Enemy leaders give their troops random orders at the start of a game.
+ * AI has been split up so that the west half of a district will run every twentieth frame, and the east half will run every fortieth frame. This means that there should be a 0.2 second delay between an action from one party and the other responding. (Research suggests that 0.25 seconds is about the speed that people can react to things, so this isn't too horribly bad).
+
+----------
+
+0.8b 9:47 AM 6/19/2011
+ * Added horse and storm sounds
+ * Changed responses to gifts from using speak to speak_interrupt.
+ * Added the ability to silence confirm prompts with control.
+ * I think the crashes due to unarmed combat have been eliminated.
+ * Added sound to indicate which direction AI-controlled characters dodge
+ * Added ability to target specific people.
+ * Added ability to check player position while looking around.
+ * Changed the timer on weather to be more consistent.
+ * Allowed food to slowly heal people.
+ * Set up oceans to allow castles and island villages.
+ * Rain should cause gardens to regrow.
+ * Rain, storms and snow will sometimes put out fires
+ * Fire now hurts people that stand in it
+ * Deep water now causes fatigue after prolonged exposure, and can lead to drowning
+ * Added target beacon
+ * AI will try to avoid starvation. Note that Samurai and daimyou will not switch to looking for food if they have different orders.
+ * It is possible to give orders, though some don't do anything yet.
+ * Shogun and Daimyou will automatically relay their orders to underlings when applicable.
+ * Boats seem to be fixed (though AI doesn't know how to use them)
+ * AI can navigate castles somewhat.
+
+
+----------
+
+ Version 0.7b 12:02 PM 6/18/2011
+
+ * Added water sounds, swimming, and ice during snow
+ * Added fishing nets
+ * Fixed bugs that caused the game to crash when unarmed characters fight
+ * Set default bases for some starting characters.
+ * Shinobi, Ronan and independent civilians can be recruited
+
+----------
+
+
+
+
+Version 0.6B 11:57 AM 6/17/2011
+ * Shinobi can climb walls
+ * Added the ability to craft items from wood
+ * Added echo location in castles
+ * added mountain echo
+ * Sepuku now plays sound
+ * Added population overview command
+ * Added game and sapi speed controls
+ * added weather (sorta)
+ * added environmental sounds
+ * Shinobi can replenish their special weapons by picking up those dropped by others
+ * Added the ability to get fruit from trees
+ * Horses and boats are vulnerable to attack
+ * Vegetables can be picked from gardens
+ * Horses can travel over gardens
+ * Bo and Jo speeds corrected
+ * Shinobi can hide in trees
+ * Speed settings adjusted to combat lag caused by AI
+ * AI runs every 21 frames rather than every frame
+ * It is possible to disarm opponents that block.
+ * Changed default speed from slow to normal
+ * Dodging and basic defense added to AI
+ * probably more things I forgot

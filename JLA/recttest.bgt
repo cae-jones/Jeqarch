@@ -1,0 +1,144 @@
+
+ // If given the endpoints for two line segments, this function returns the point at which they intersect.
+ // If the segments do not intersect, the return value will be null.
+ Point@ lineIntersects(vector p1, vector p2, vector p3, vector p4) {
+ // Let's be sure that our points are in left-right order.
+ double x1=p1.x; double x2=p2.x; double x3=p3.x; double x4=p4.x;
+ double y1=p1.y; double y2=p2.y; double y3=p3.y; double y4=p4.y;
+ if(x3>x4) {x3=p4.x; x4=p3.x; y3=p4.y; y4=p3.y;}
+ if(x1>x2) {x1=p2.x; x2=p1.x; y1=p2.y; y2=p1.y;}
+
+ // Now, find the slopes.
+ // Ur, be aware that vertical lines might happen...
+ double m1;
+ if(x1==x2) m1=1999999999;
+ else m1=(y2-y1)/(x2-x1); 
+ double m2;
+ if(x3==x4) m2=1999999999;
+ else m2=(y4-y3)/(x4-x3);
+
+ double b1=y1-(m1*x1);
+ double b2=y3-(m2*x3);
+ if(m1==m2) {
+ if(b1==b2) {
+ // One point must be between the other two.
+ if((x3>=x1)&&(x3<=x2)) return newPoint(x3, y3);
+ else if((x4>=x1)&&(x4<=x2)) return newPoint(x4, y4);
+ else if((x1>=x3)&&(x1<=x4)) return newPoint(x1, y1);
+ else if((x2>=x3)&&(x2<=x4)) return newPoint(x2, y2);
+ else return null;
+ }
+ else return null;
+ }// They don't collide unless b1 and b2 are the same.
+ else {
+double rx=(b2-b1)/(m1-m2);
+ if((rx>=x1)&&(rx<=x2)&&(rx>=x3)&&(rx<=x4)) {
+ double ry = (m1*rx)+b1;
+
+ return newPoint(rx, ry);
+} else return null;
+}
+// return null;
+ }
+ class Point {
+double x; double y;
+ Point() {x=0; y=0;}
+ Point(double xx, double yy) {x=xx; y=yy;}
+}// Point.
+ Point@ newPoint(double x, double y) {Point ret(x, y); return ret;}
+ vector newVector(double x, double y, double z=0) {vector ret(x, y, z); return ret;}
+
+class Rectangle {
+ float x; float y;
+ float width; float height;
+ Rectangle() {x=0; y=0; width=0; height=0;}
+ Rectangle(float xx, float yy, float w, float h) {x=xx; y=yy; width=w; height=h;}
+ void moveTo(float tx, float ty) {x=tx; y=ty;}
+ void moveBy(float dx, float dy) {x+=dx; y+=dy;}
+ bool collide_line(vector p, float angle) {return collide_line(p.x, p.y, angle);}
+ bool collide_line(float lx, float ly, float angle) {
+// Convert to cartesian, please.
+ // I think the slope is just the tangent of the angle, so:
+ float m=tangent(angle);
+ vector p1(lx, ly);
+ vector p2(lx+100, ly+(100.0*m));
+ vector[] points=getPoints();
+ for(uint i=0; i<points.length(); i++) {
+ vector p3=points[i];
+ vector p4=points[i%points.length()];
+  Point@ res=lineIntersects(p1, p2, p3, p4);
+ if(@res!=null) return true;
+ }// Collisions. Does it really work this way?
+ return false;
+ }// Collide_line. Or ray, to be more precise.
+ bool collide(Rectangle@ r) {
+ if(@r==null) return false;
+return collide(r.x, r.y, r.width, r.height);}
+ bool collide(float rx, float ry, float rw, float rh) {
+ float x1=x; float x2=x+width;
+ float x3=rx; float x4=rx+rw;
+ float y1=y; float y2=y+height;
+ float y3=ry; float y4=ry+rh;
+ return (
+ (((x3>=x1)&&(x3<=x2))||((x4>=x1)&&(x4<=x2)))&&
+(((y3>=y1)&&(y3<=y2))||((y4>=y1)&&(y4<=y2)))
+);
+}// Collide.
+
+// Returns points starting from (x, y) and continuing counterclockwise along the edge of the rectangle.
+ vector[] getPoints() {
+ vector[] ret={
+ newVector(x, y),
+ newVector(x, y+height),
+ newVector(x+width, y+height),
+ newVector(x+width, y)
+};
+ return ret;
+ }
+ Rectangle@ clone() {
+ return newRectangle(x, y, width, height);
+ }
+ Rectangle@ rotate() {
+ return newRectangle(x, y, height, width);
+}
+ string save() {return "" + x + ", " + y + ", " + width + ", " + height;}
+}// Rectangle.
+ Rectangle@ newRectangle(float x, float y, float width, float height) {Rectangle ret(x, y, width, height); return ret;}
+ Rectangle@ loadRectangle(string txt) {
+ string[] parts=string_split(txt, ", ", true);
+ Rectangle@ ret=newRectangle(0, 0, 1, 1);
+ if(parts.length()>0) ret.x=string_to_number(parts[0]);
+ if(parts.length()>1) ret.y=string_to_number(parts[1]);
+ if(parts.length()>2) ret.width=string_to_number(parts[2]);
+ if(parts.length()>3) ret.height=string_to_number(parts[3]);
+ return ret;
+}// Load rectangle.
+
+void main() {
+/*
+Rectangle@ r1=newRectangle(
+ string_to_number(input_box("X", "X")),
+ string_to_number(input_box("Y", "Y")),
+ string_to_number(input_box("Width", "Width")),
+ string_to_number(input_box("Height", "Height"))
+);
+Rectangle@ r2=newRectangle(
+ string_to_number(input_box("X", "X")),
+ string_to_number(input_box("Y", "Y")),
+ string_to_number(input_box("Width", "Width")),
+ string_to_number(input_box("Height", "Height"))
+);
+ 
+ alert("Results", ((r1.collide(r2)) ? "R1.collide(r2) is true" : 
+((r2.collide(r1)) ? "R2.collide(r1) = true" : "No collision")
+));
+*/
+
+ timer t;
+ for(uint i=0; i<1000; i++) {
+ Rectangle a(random(0, 15), random(0, 15), random(1, 5), random(1, 5));
+ Rectangle b(random(0, 15), random(0, 15), random(1, 5), random(1, 5));
+ bool col=a.collide(b);
+ }// Loop.
+ alert("Results", "It took " + t.elapsed + " milliseconds to determine 1000 collisions.");
+}

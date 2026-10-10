@@ -1,0 +1,1428 @@
+#include "sound_pool.bgt"
+#include "sound_positioning.bgt"
+#include "custom_voice.bgt"
+custom_voice voice;
+ void loadVoice() {
+ voice.config_path="voice.ini";
+ voice.load_config();
+}
+
+ class EchoD {
+
+ string filename; // the sound to be echoed.
+ double x; double y; // The spacial position of the sound to be echoed.
+ double decay; // How much quieter the sound should be than the source sound. Note that playing it at a distance will likely cut the volume even further.
+ double delay; // How long before the echo plays.
+ double pitchBend; // If the echo is pitched compared to the original.
+
+ EchoD(string fn) {filename=fn; pitchBend=100;}
+ EchoD(string fn, double xx, double yy, double dec, double del) {filename=fn; x=xx; y=yy; decay=dec; delay=del; pitchBend=100;}
+ EchoD(string fn, double xx, double yy, double dec, double del, double pb) {filename=fn; x=xx; y=yy; decay=dec; delay=del; pitchBend=pb;}
+
+ EchoD clone() {return this;} //?
+
+ // This version of clone changes the filename, but leaves everything else the same.
+ // This is a quick way to use the EchoD object for echoes of individual sounds based on a master EchoD templet.
+ EchoD clone(string fn) {
+ EchoD ret(fn, x, y, decay, delay, pitchBend);
+ return ret;
+ }
+
+}// EchoD.
+
+
+// Map constants.
+ const int ground=0, wall=1, closedDoor=3, openDoor=2, computer=4, stepplate=5;
+
+// Action constants.
+const int standing=0, dead=-1, left=1, right=2, up=3, down=4, attack=8;
+ int plot=0; // Global events. These events don't care about whether you've done any time-jumping.
+
+ int mission=0;
+ int lastMissionCompleted=0; // For unlocking.
+ string[] missions={
+ "the experiment",
+ "the awakening",
+ "up from the depths",
+ "no name",
+ "a familiar stranger"
+}; // Mission names.
+ sound_pool pool;
+
+
+ // This class represents an instance of the player character.
+ // To save memory, we'll keep coordinates between 0 and 32.
+ // The bottom 5 bits are x, and the second 5 are y.
+
+ class Steve {
+ int[] whatidid; // Actions for each tick of time.
+ int[] pose; // Position for each tick.
+ // I think we need to keep track of all of these. Is there a more efficient way?
+ Steve() {
+ // Initialize the arrays to be empty and large.
+ // We can expand beyond the default sizes, but this should avoid the need to do so too soon.
+ whatidid.resize(300); pose.resize(300);
+ for(uint i=0; i<whatidid.length(); i++) {whatidid[i]=-1; pose[i]=0;}
+
+}// Initialize.
+
+ int getX() {return getX(tick);}
+ int getX(int t) {
+ if((t<0)||(t>=pose.length())) return -1;
+ return ((pose[t])&31);
+}// Get x.
+ int getY() {return getY(tick);}
+ int getY(int t) {
+ if((t<0)||(t>=pose.length())) return -1;
+ return ((pose[t]>>5)&31);
+} // Get Y.
+
+ void moveTo(int x, int y, int t) {
+ if(t<0) return;
+ // Please notice: this ignores the map!
+ int targ= (x|(y<<5));
+ if(t>=pose.length()) {pose.resize(t+1);}
+ pose[t]=targ;
+}// Move.
+
+ int getAction(int t) {
+ // If we're looking at a tick beyond the highest tick that this instance has encountered,
+ // Then we return -1, because that means this instance isn't there.
+ if((t<0)||(t>=whatidid.length())) return -1;
+ return whatidid[t];
+ }// Get action.
+ void setAction(int t, int act) {
+ // This does not do any checks!
+ if(t<0) { return;}
+ while(whatidid.length()<=t) whatidid.insert_last(-1); //whatidid.resize(t+1);
+ whatidid[t]=act;
+// clipboard_copy_text("Action is " + getAction(t) + " at tick " + t + ". ");
+}// set action.
+
+}// Player character.
+
+ string[] coords={
+ "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA", "BB", "CC", "DD", "EE", "FF", "GG"
+};
+
+ string getCoords(int x, int y) {
+ if(x<0) return "" + x + " " + y;
+ return (coords[x%coords.length()]) + " " + (y+1);
+}
+ string getCoords(int pose) {
+ return getCoords((pose&31), ( (pose>>5)&31));
+}
+
+
+ class Map {
+ int[][] values;
+ string[][] descs;
+ Guard@[] guards;
+ Map(int width, int height) {
+  values.resize(width); descs.resize(width);
+ for(uint i=0; i<width; i++) {values[i].resize(height); descs[i].resize(height);}
+}/// Map.
+
+ // Methods for adding guards.
+ Guard@ add(int x, int y) {
+ Guard g("guard"); g.moveTo(x, y, 0); guards.insert_last(g); return g;
+}
+ Guard@ add(string n, int x, int y) {
+ Guard g(n, x, y); guards.insert_last(g); return g;
+}
+
+ }// Map.
+
+class Guard {
+ int[] pose; int[] whatidid; string desc;
+
+ Guard() { desc="guard";}
+ Guard(string n) {desc=n;}
+ Guard(string n, int x, int y) {
+ desc=n;
+ moveTo(x, y, 0);
+}
+ int getX() {return getX(tick);}
+ int getX(int t) {
+ if((t<0)||(t>=pose.length())) t=pose.length()-1; //return -1;
+ return ((pose[t])&31);
+}// Get x.
+ int getY() {return getY(tick);}
+ int getY(int t) {
+ if((t<0)||(t>=pose.length())) t=pose.length()-1; //return -1;
+ return ((pose[t]>>5)&31);
+} // Get Y.
+
+ void moveTo(int x, int y, int t) {
+ if(t<0) return;
+ // Please notice: this ignores the map!
+ int targ= (x|(y<<5));
+ if(t>=pose.length()) {pose.resize(t+1);}
+ pose[t]=targ;
+}// Move.
+
+ int getAction(int t) {
+ // If we're looking at a tick beyond the highest tick that this instance has encountered,
+ // Then we return what this guard was doing in the last recorded tick.
+ if(t<0) return -1;
+ else if(t>=whatidid.length()) {
+ if(whatidid.length()==0) return standing;
+ return whatidid[whatidid.length()-1];
+}
+ return whatidid[t];
+ }// Get action.
+ void setAction(int t, int act) {
+ // This does not do any checks!
+ if(t<0) return;
+ if(whatidid.length()<=t) {
+ int conted=standing; if(whatidid.length()>0) conted=whatidid[whatidid.length()-1];
+ while(whatidid.length()<=t) whatidid.insert_last(conted);
+ // Make sure that the last action of this guard continues up to the present.
+ }
+ if(t>=whatidid.length()) alert("ERROR!", "Our loop failed!");
+ whatidid[t]=act;
+ // Make sure that the guard continues to do the same for the rest of time unless otherwise prompted.
+ for(uint i=t; i<whatidid.length(); i++) {
+ // This shouldn't override death, however.
+ if(whatidid[i]>=0) whatidid[i]=act;
+}
+}// set action.
+
+
+}
+
+ int tick=0;
+
+Map@ gloc;
+
+ Map@ loadMap(int m) {
+ voice.speak_interrupt("Loading mission");
+ // I'd like to be able to port Aprone's map-loading code, but I think my head might explode if I tried that.
+ Map@ ret=null;
+ instances.resize(0);
+ // First, let's see if we can load from Aprone's map files.
+ if(file_exists("map" + m)) {
+ file fin; fin.open("map" + m, "r");
+ string txt=fin.read(0);
+ fin.close();
+ string[] lines=string_split(txt, "\n", true);
+
+ // Note that BGT ignores blank lines, of which there are many.
+ int width=string_to_number(lines[2]); int height=string_to_number(lines[1]);
+ Map map(width+1, height+1);
+ @ret=map;
+ for(uint x=0; x<=width; x++) {for(uint y=0; y<=height; y++) {
+ ret.values[x][y]=string_to_number(lines[4+(2*x*(height+1))+(2*y)]);
+ ret.descs[x][y]=lines[4+(2*x*(height+1))+(2*y)+1];
+// clipboard_copy_text("Last successful tile loaded: " + x + ", " + y + ". " + (ret.values[x][y]) + ", " + ret.descs[x][y] + ".  Lines.length is " + lines.length() + ". ");
+}}// Loops.
+
+}
+ else {
+
+}// Unable to load map from file, do it another way.
+
+ switch (m) {
+ case 0 : {
+ // Tutorial.
+ // Load enemies into the fitness center for practice. At least ten of them, probably more.
+ string[] guardnames={"guard", "guard"};
+ if(lastMissionCompleted>=1) guardnames.insert_last("armed guard");
+ for(uint i=0; i<12; i++) {
+ Guard@ g=ret.add(guardnames[random(0, guardnames.length()-1)], random(4, 6), random(1, 8));
+ // Make sure that the guard isn't blocking the door.
+ if((g.getX(0)==4)&&(g.getY(0)==3)) g.moveTo(5, 3, 0);
+ g.setAction(0, random(1, 4));
+}// Add guards.
+
+ string[] scene={
+"Blackness begins to swirl around you, as you hear distant voices.",
+ "You can\'t quite make out what the voices are saying, but you pick out the words \"subconscious\" and \"take suggestion\".",
+ "You slowly find yourself aware of being set down in the corner of a room. You hear footsteps, and a door closing.",
+ "Without thinking, you crawl across the floor. You can hear a voice instructing you to find a way out of the room.",
+ "You somehow know that a switch in the room will open the door, but in order to escape, you will have to hold the switch and walk through the door at the same time!"
+};
+ cutscene(scene, "You stagger to your feet.");
+ }; break;
+ case 1 : {
+ // Mission 1.
+
+ // Let's set up the guards.
+ plot=0;
+ spotted=-1; // The guards haven't spotted you yet.
+ ammo=0;
+ Guard@ guard;
+ @guard=ret.add("lab technician", 6, 7);
+ guard.setAction(0, down);
+ @guard=ret.add(8, 4);
+ guard.setAction(0, left);
+ @guard=ret.add(9, 5);
+ guard.setAction(0, left);
+ @guard=ret.add(12, 4); guard.setAction(0, left);
+ @guard=ret.add(9, 6); guard.setAction(0, up);
+ @guard=ret.add(10, 9); guard.setAction(0, up);
+ @guard=ret.add("lab technician", 13, 8); guard.setAction(0, down);
+ @guard=ret.add("lab supervisor", 2, 8); guard.setAction(0, up);
+ @guard=ret.add(2, 4); guard.setAction(0, right);
+ @guard=ret.add(1, 3); guard.setAction(0, down);
+ @guard=ret.add(2, 2); guard.setAction(0, down);
+
+ string[] scene={
+"You are aware.  In an instant, you take in the sounds and smells of the room.  How long have I been here?  Where exactly IS here?",
+"A flood of stray thoughts hits you, even as you ask yourself those questions.  You somehow have answers, but not all of the answers you want.",
+"You\'re in a government facility, being studied because of your abilities.  To keep you under control, they have been drugging you.  Someone must have made a mistake, because you have woken up."
+};
+ cutscene(scene, "Your eye opens.");
+ }; break;
+ case 2 : {
+ // Mission 2.
+ plot=0;
+ ammo=0;
+ Guard@ g=ret.add("armed guard", 2, 11);
+ @g=ret.add("armed guard", 1, 5);
+ @g=ret.add("armed guard", 2, 7);
+ @g=ret.add("armed guard", 3, 1);
+ @g=ret.add("security guard", 6, 2);
+ @g=ret.add("armed guard", 12, 3);
+ @g=ret.add("security guard", 13, 4);
+ @g=ret.add("security guard", 12, 7);
+ @g=ret.add("security guard", 8, 12);
+ @g=ret.add("armed guard", 9, 10);
+ @g=ret.add("armed guard", 6, 10);
+ @g=ret.add("security guard", 7, 5); g.setAction(0, left);
+  @g=ret.add("security guard", 7, 6); g.setAction(0, left);
+ string[] scene={
+"The final clang of the vault door, brings complete silence from the screaming.  An evil grin crosses your face as you begin slowly walking forward.",
+ "Intense dizziness overwhelms you, and you drop to one knee, holding the wall to help balance yourself.  You open your eyes to find yourself hunched over against the wall.  Clearly the drugs are not completely out of your system, and you must have blacked out for a moment.",
+ "The people running this place obviously know something about you.  You can\'t jump backward through time, before the last time you fell asleep.  These drugs are having the same effect, so now you can\'t jump back any farther than this moment.",
+ "As you lift yourself on to your knees, the hallway goes pitched black.  Several clicks, from all around you, signal the activation of backup generators, bathing everything in the dim red glow of emergency lighting.",
+ "You need to find the elevator that leads up, out of this prison.  There's little doubt, that huge vault door was supposed to make sure you could never get this far.  Don't be surprised if some of these men have orders to kill you."
+};
+ cutscene(scene, "You stand up.");
+
+ }; break;
+ case 3 : {
+ // Mission 3.
+ }; break;
+ case 4 : {
+ // Mission 4.
+ }; break;
+
+}// Mapswitch.
+ return ret;
+}// Load Map.
+
+ // Loc constants.
+ const int MAIN=0, game=1; // Wait, is that all?
+ int loc=MAIN;
+
+ // Here's an idea. Maybe you can pick up weapons from armed guards that you kill,
+ // But they're designed so that only authorized personnel can use them.
+ // So to make use of them, you have to discover the authorization code, or something like that.
+ // Also, if you can get a shot at them, they can get a shot at you, so you'd still need to use time travel to make a safe kill.
+
+ // Anyway.
+
+ Steve@[] instances;
+ Steve@ me;
+ string[] messages;
+
+ // Settings for auto ticks.
+ int tickSpeed=0; // 0 is turn-based. 1 is about two seconds to a tick, and it gets halved from there.
+ string[] speedDescs={"Ticks will pass only when an action is performed.", "Slow", "Normal", "fast", "blazing"};
+ int highestTick=0; // The farthest in the future you can jump.
+
+
+void main() {
+
+ // Against my better judgment...
+ loadVoice();
+ if(screen_reader_is_running(JAWS)) install_keyhook();
+ if(file_exists("progress.ini")) {
+ file fin; fin.open("progress.ini", "r");
+ string txt=fin.read(0); fin.close();
+ string[] lines=string_split(txt, "\n", true);
+ tickSpeed=string_to_number(lines[0]);
+ lastMissionCompleted=string_to_number(lines[1]);
+
+}// Initialize.
+ pool.pan_step=3; // Adjust as needed.
+ pool.volume_step=3;
+ pool.behind_pitch_decrease=-2.0; // Will that work?
+
+ show_game_window("Temporal, made by Aprone, adapted by C A E Jones");
+ voice.speak("Welcome to Temporal. Original game by Aprone, adapted to BGT by C A E Jones.");
+ string[] mainMenu={
+"play the game", "load game", "how to play", "voice options", "exit"
+ };
+ int menu_x=mainMenu.length()-1;
+ while((!key_down(KEY_LMENU))&&(!key_down(KEY_F4))) {
+ systemCommands();
+ bool speak=true;
+ if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) menu_x--;
+ else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) menu_x++;
+ else if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {
+ pool.play_1d("sound/menu2.wav", 0, 0, false); wait(100);
+ if(mainMenu[menu_x]=="exit") save_exit();
+ else if(mainMenu[menu_x]=="voice options") voice.options_menu();
+ else if(mainMenu[menu_x]=="play the game") {
+ // Mission select.
+ int mx=missions.length();
+ voice.speak_interrupt("Choose mission");
+ bool cont=true;
+ while(cont) {
+ systemCommands();
+ bool speak2=true;
+ if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) mx--;
+ else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) mx++;
+ else if((key_pressed(KEY_SPACE))||(key_pressed(KEY_RETURN))) {
+ if((mx<0)||(mx>=missions.length())) {
+ pool.play_1d("sound/menu3.wav", 0, 0, false);
+ cont=false;
+ }// Canceled.
+ else if(lastMissionCompleted<mx-1) voice.speak_interrupt("That mission is not currently available");
+ else {
+ pool.play_1d("sound/menu2.wav", 0, 0, false);
+  mission=mx;
+ @gloc=loadMap(mission);
+ highestTick=0;
+ plot=0;
+ // Initialize the player and instances.
+ instances.resize(0);
+ Steve pl;
+ @me=pl;
+ // Starting position
+ switch (mission) {
+ case 0 : me.moveTo(2, 8, 0); break;
+ case 1 : me.moveTo(6, 9, 0); break;
+ case 2 : me.moveTo(5, 13, 0); break;
+}
+ camX=me.getX(); camY=me.getY();
+ tick=0;
+ time.restart(); time.resume();
+ playGame();
+ }// Starting!
+ }// Activated.
+ else if(key_pressed(KEY_ESCAPE)) {pool.play_1d("sound/menu3.wav", 0, 0, false); cont=false; speak2=false;}
+ else speak2=false;
+ if(mx<0) mx=missions.length(); else if(mx>missions.length()) mx=0;
+ if(speak2) {
+ pool.play_1d("sound/menu1.wav", 0, 0, false);
+ if(mx>=missions.length()) voice.speak_interrupt("Previous menu");
+ else if(lastMissionCompleted<mx-1) voice.speak_interrupt("Mission " + mx + " locked");
+ else voice.speak_interrupt("Mission " + mx + ", " + missions[mx]);
+
+}
+ wait(5);
+ }// Loop.
+
+}// New game.
+ else if(mainMenu[menu_x]=="load game") {
+ loadGame();
+ playGame();
+ // Load game.
+ }// Load.
+ else if(mainMenu[menu_x]=="how to play") {
+ string[] helptext={
+"Temporal is a time traveling, turn-based puzzle game, by Aprone.  The game is currently a very rough beta, so please bear with me as I work out bugs and add more content to the game.  I am posting this rough version, because I am interested to know how the community feel about this game\'s concept.  If it ends up being too difficult, or too easy, I would like to know before adding too much more into the game.",
+"The game takes place on a large grid.  Use the arrow keys to move around to inspect the environment.  Press X, at any time, to jump to the tile you are currently on.  Keep in mind that this is a turn based game, you may take all the time you need planning your next move.",
+"The regular guards and scientists are not looking to kill you, only contain you for continued study.  When you walk up to them, they will turn to face you.  While facing you, you cannot attack any of these people because they would see the attacking coming and defend themselves.  You must attack them from the sides or from behind.",
+"Armed guards follow the same rules as unarmed guards, except these men are attempting to kill you.  In the dim light, these guards will only notice you when you walk right up to them.  The moment you do, they will raise their gun and prepare to fire.  If you aren\'t out of the way, by the next tick, you will be shot.  Even if you get out of the way, the armed guards will still fire a shot in the direction they were aiming.  Be careful you don\'t dodge a bullet, only for that bullet to hit and kill a past version of yourself!",
+"Hold shift, and press the arrow keys, to move around.  With each movement, a single tick of time will pass.  Press Z, at any time to hear what the current tick of time it is.  Rather than running around frantically, carefully examine the situation and monitor the ticks of time carefully.",
+"Press Enter if you wish to simply stand still, while allowing a tick of time to pass.  This is useful when you want time to continue moving forward, but you want to stay where you are.  One example is when your character must hold down a button to keep a door open.",
+"Things really get interesting when you press the space bar.  Pressing the space bar allows your character to travel forward or backward through time!  An input box asks you to enter the tick of the exact moment in time you wish to travel to.  You won\'t be allowed to go forward beyond the farthest point you\'ve traveled, and you won\'t be allowed to go back before the moment you woke up.",
+"When you travel through time, your current position will not change.  This means, if you walk to the right side of a room and then travel back in time, you will still be on the right side of the room.  You will, however, see the older version of yourself on the left side of the room, walking toward you!",
+"You may wonder, what is the point of traveling through time if your current position stays the same.  The important benefit is that all guards and doors will be as they were, at the time you\'ve jumped to.  You will also be able to accomplish multiple tasks at the same time, since your older self can perform one task as you complete another.",
+"As you might imagine, really bad things happen if you interrupt other versions of yourself.  To function as a temporal being, you have trained yourself to faithfully follow whatever plan you\'ve come up with.  This means, the older versions of you will do exactly what you did back when you were them!  They will ignore you, and eachother, so that they do not stray from the proper flow of events.",
+"If you accidentally do anything to disrupt a past self, you will have destroyed the continuity of your actions.  This will cause you to lose the game.  If, for example, you stood in the way of your past self walking across the room, you have changed when, and how, everything would have worked out leading up to where you are now.  Avoid this at all costs!",
+"As you can imagine, with several jumps you could find yourself surrounded by past versions of yourself, each doing their own thing.  You must take special care not to interrupt any of them.  Skilled players will anticipate future versions of themselves, and will do things so that they will work to benefit themself later on.",
+"To help you keep track of your past selves, use the arrows to select the tile they are on, and you will be told what action they are preparing to do when the next tick occures.  This is useful when standing next to a past version of yourself, so you can know, in advance, if they plan to walk to where you are currently standing, or where you plan to move next.",
+"Previous menu"
+};
+ int hx=helptext.length()-1;
+ voice.speak_interrupt("arrow down for information");
+ while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {
+ systemCommands();
+ bool speak2=true;
+ if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) hx++;
+ else if((key_pressed(KEY_UP))||(key_pressed(KEY_LEFT))) hx--;
+ else speak2=false;
+ if(hx<0) hx=helptext.length()-1;
+ else if(hx>=helptext.length()) hx=0;
+ if(speak2) voice.speak_interrupt(helptext[hx]);
+ wait(5);
+}// Loop.
+ }// Help.
+ }// Activate.
+ else speak=false;
+ if(menu_x<0) menu_x=mainMenu.length()-1; else if(menu_x>=mainMenu.length()) menu_x=0;
+ if(speak) {
+ pool.play_1d("sound/menu1.wav", 0, 0, false);
+ voice.speak_interrupt(mainMenu[menu_x]);
+ }// Speak.
+ wait(5);
+ }// Loop.
+
+ save_exit();
+}// Main.
+
+ void systemCommands() {
+ if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) voice.stop();
+ if(key_pressed(KEY_F5)) voice.options_menu();
+ if(((key_down(KEY_LMENU))||(key_down(KEY_RMENU)))&&(key_pressed(KEY_F4))) save_exit();
+ if(key_pressed(KEY_LBRACKET)) {
+ tickSpeed--;
+ if(tickSpeed<0) tickSpeed=0;
+  voice.speak_interrupt(speedDescs[tickSpeed]);
+ }
+ else if(key_pressed(KEY_RBRACKET)) {tickSpeed++; if(tickSpeed>=speedDescs.length()) tickSpeed=speedDescs.length()-1;
+ voice.speak_interrupt(speedDescs[tickSpeed]);
+ }// Faster.
+ // BGM volume?
+ }
+
+ sound bgm;
+timer time;
+ int camX=0; int camY=0;
+
+ void playGame() {
+ // We run this in a loop? Bleh. Bleh, bleh, bleh, bleh, bleh.
+ while(true) {
+ systemCommands();
+ double dt=0.005; // Hopes?
+ for(uint i=0; i<echoes.length(); i++) {
+ echoes[i].delay-=dt;
+ if(echoes[i].delay<=0.0) {
+ pool.play_extended_2d(echoes[i].filename, me.getX(), me.getY(), echoes[i].x, echoes[i].y, 0, 0, 0, 0, false, 0.0, 0, echoes[i].decay, echoes[i].pitchBend);
+ echoes.remove_at(i); i--;
+}// Play and remove echo.
+}
+ if(radar_on) updateRadar();
+ // There are two conditions that call for a tick.
+ // Either the player has performed an action,
+ // Or the speed is >0 and enough time has elapsed.
+ bool tickme=false;
+ if(tickSpeed>0) {
+ int count=2000;
+ for(int i=1; i<tickSpeed; i++) count/=2;
+ if(time.elapsed>=count) {tickme=true; time.restart(); time.resume();}
+}// Automatic.
+
+ // To simplify movement, let's do this:
+ int dx=0; int dy=0;
+
+ // Key Check.
+ if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) {
+ // I think this will be faster than typing a bunch of ifs.
+ int[] keys=keys_pressed();
+ for(uint i=0; i<keys.length(); i++) {
+ int k=keys[i];
+//switch(keys[i]) {
+ if(k==KEY_UP) dy=-1;
+ else if(k==KEY_DOWN) dy=1;
+ else if(k==KEY_LEFT) dx=-1;
+ else if(k==KEY_RIGHT) dx=1;
+ // Add navigation shortcuts and such.
+
+//}// Keyswitch.
+ }// Keys loop.
+ }// Pressing shift.
+ else {
+ // I can't decide if I want to keep it the way Aprone had it,
+ // Or change it so that shift is for reviewing, and plain arrows are for movement.
+ if(key_pressed(KEY_UP)) moveCam(camX, camY-1);
+ else if(key_pressed(KEY_DOWN)) moveCam(camX, camY+1);
+ else if(key_pressed(KEY_LEFT)) moveCam(camX-1, camY);
+ else if(key_pressed(KEY_RIGHT)) moveCam(camX+1, camY);
+ else if(key_pressed(KEY_X)) moveCam(me.getX(tick), me.getY(tick));
+ else if(key_pressed(KEY_Z)) voice.speak_interrupt("Tick " + tick);
+ else if(key_pressed(KEY_D)) {
+ if(messages.length()>0) {
+ string msg=messages[messages.length()-1];
+ voice.speak_interrupt(msg);
+ messages.insert_at(0, msg);
+ messages.remove_at(messages.length()-1);
+}
+ else voice.speak_interrupt("No messages.");
+}// Previous message.
+ else if(key_pressed(KEY_F)) {
+ if(messages.length()>0) {
+ string msg=messages[0];
+ voice.speak_interrupt(msg);
+ messages.insert_last(msg);
+ messages.remove_at(0);
+}
+ else voice.speak_interrupt("No messages.");
+}// Next message.
+ else if(key_pressed(KEY_ESCAPE)) {
+ string[] menu={"play game", "save current game", "load game", "voice options", "exit"};
+ int lx=menu.length()-1;
+ bool cont=true;
+ while(cont) {
+systemCommands();
+ bool speakme=true;
+ if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) lx--;
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_RIGHT))) lx++;
+ else if(key_pressed(KEY_ESCAPE)) {cont=false; speakme=false;}
+ else if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {
+ if(menu[lx]=="play game") return;
+ else if(menu[lx]=="exit") save_exit();
+ else if(menu[lx]=="voice options") voice.options_menu();
+ else if(menu[lx]=="save current game") saveGame();
+ else if(menu[lx]=="load game") loadGame();
+ }// Selected.
+
+ if(lx<0) lx=menu.length()-1;
+ else if(lx>=menu.length()) lx=0;
+ if(speakme) voice.speak_interrupt(menu[lx]);
+
+wait(5);
+}// Menu.
+ tickme=false;
+ voice.speak_interrupt("Tick " + tick + ". " + messages.length() + " messages.");
+ }// Menu.
+
+ else if(key_pressed(KEY_C)) {voice.speak_interrupt("" + messages.length() + " messages");}
+ else if(key_pressed(KEY_SPACE)) {
+ string inp=input_box("Time Travel", "Enter which tick in time you\'d like to jump to.");
+ if(inp=="") voice.speak_interrupt("Time jump aborted.");
+ else {
+
+
+ int targ=string_to_number(inp);
+ if(targ>highestTick) {voice.speak_interrupt("You cannot jump that far in the future until you have reached it normally."); continue; }
+ me.setAction(tick, 7);
+ instances.insert_last(me);
+ Steve pl;
+ pl.moveTo(me.getX(tick), me.getY(tick), targ);
+ pl.moveTo(me.getX(tick), me.getY(tick), targ-1);
+ @me=pl;
+ tick=targ-1; tickme=true; // See if that handles any of our bug-things.
+ if(tick<0) {tick=0; tickme=false;
+
+ // Make sure that the emergency doors and vault doors in mission 1 are opened.
+ if(mission==1) {
+ gloc.values[4][1]=openDoor; gloc.values[4][2]=openDoor;
+ gloc.values[3][4]=openDoor; gloc.values[3][5]=openDoor;
+}
+} // Try to avoid negative bugs.
+ pool.destroy_all(); playsound("sound/arrive.wav", me.getX(tick), me.getY(tick));
+ voice.speak_interrupt("You have jumped through time.");
+}// Jump.
+
+ }// Jumping through time.
+ else if(key_pressed(KEY_RETURN)) {
+ me.setAction(tick, standing);
+ tickme=true;
+}// Standing still.
+ }// Shift not pressed.
+ if((dx!=0)||(dy!=0)) {
+ // Only tick if the movement actually occurs.
+ int tx=me.getX(tick)+dx; int ty=me.getY(tick)+dy;
+ Map@ map=gloc;
+
+ if((tx<0)||(tx>=map.values.length())||(ty<0)||(ty>=map.values[tx].length())) {
+ if((mission==1)&&(plot>=4)) {
+ voice.speak_interrupt("From the rest of the world\'s perspective, it has been only moments since you first opened your eyes in your cell.  The Vault door slowly closes behind you, as you casually walk away from the muffled screams.  Simultaneously, within the vault, several men are being attacked, and the back up data is being deleted from the computers.  For a brief moment, you wonder if they have any idea what has just been set loose upon the world.");
+ while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))&&(!key_pressed(KEY_ESCAPE))) {systemCommands(); wait(5);}
+ voice.speak_interrupt_wait("You have escaped the vault! Congratulations on a job well done!");
+ if(lastMissionCompleted<1) lastMissionCompleted=1;
+ return;
+
+ }// Mission 1 complete.
+ else if(mission==0) {
+ voice.speak_interrupt("As you step into the room, your nostrils are filled with a strong odor. Even before you became conscious enough to take part in the experiment, this room was filled with sleeping gas, to ensure that you wouldn\'t be able to time travel your way through it! You quickly collapse, and are taken back to your cell.");
+ while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))&&(!key_pressed(KEY_ESCAPE))) {systemCommands(); wait(5);}
+ voice.speak_interrupt_wait("Today\'s Experiment: Success!"); if(lastMissionCompleted<0) lastMissionCompleted=0; return;
+ }// This is where the exit to mission 0 is, too?
+ else {
+ voice.speak_interrupt("Edge of map.");
+ tickme=false;
+}// Otherwise, it's treated as a barrier.
+ }// Edge of map.
+ else {switch(map.values[tx][ty]) {
+// case ground : tickme=true; break;
+ case wall : {tickme=false;
+ if(map.descs[tx][ty]=="wall") voice.speak_interrupt("Cannot walk through the wall.");
+ else voice.speak_interrupt("You cannot walk here at this time");
+ // play sound?
+ playsound("sound/wall.ogg", tx, ty);
+}; break;
+ case closedDoor : {
+ // There is one case where this won't happen this way.
+ if((mission==1)&&(tx==4)&&(ty>2)&&((plot&1)!=0)) {
+ string tosay="Password entered. The main doors have now been opened.";
+ addMessage(tosay); voice.speak_interrupt(tosay);
+ gloc.values[4][4]=openDoor; gloc.values[4][5]=openDoor;
+ playsound("sound/access.wav", tx, ty);
+ playsound("sound/open.wav", tx, ty);
+
+}// Open the doors.
+ else {
+ voice.speak_interrupt("Cannot walk through the closed door");
+ playsound("sound/door.wav", tx, ty);
+}
+ }; break;
+ default : {
+ clipboard_copy_text("Open space found. Looking for guards...");
+ // Check for guards.
+ tickme=true;
+ int action=0;
+ for(uint i=0; i<map.guards.length(); i++) {
+ int act=map.guards[i].getAction(tick);
+ if((map.guards[i].getX(tick)!=tx)||(map.guards[i].getY(tick)!=ty)) continue;
+ if(act<=0) tickme=true;
+ else {
+ // Keep in mind that guards might be attacking, so we only need to check the bottom 3 bits of act.
+ bool blocked=false;
+ int a=(act&7);
+ if((dx>0)&&( a==left)) blocked=true;
+ else if((dx<0)&&(a==right)) blocked=true;
+ else if((dy<0)&&(a==down)) blocked=true;
+ else if((dy>0)&&(a==up)) blocked=true;
+
+if(blocked) {tickme=false; playsound("sound/blocked" + random(1, 3) + ".wav", tx, ty); playsound("sound/" + map.guards[i].desc + "/block" + random(1, 5) + ".wav", tx, ty);
+ voice.speak_interrupt("You cannot attack people who are facing you.");
+ }// blocked.
+ else {
+ tickme=true;
+ playsound("sound/" + map.guards[i].desc + "/killed" + random(1, 3) + ".wav", tx, ty);
+ if(dx<0) action=attack|left;
+ else if(dx>0) action=attack|right;
+ else if(dy<0) action=attack|up;
+ else if(dy>0) action=attack|down;
+
+ }// Attack successful?
+}// The guards might be facing you.
+}// Guards.
+
+ if((tickme)&&(action==0)) {
+// playsound("sound/step" + random(1, 5) + ".wav", me.getX(), me.getY());
+
+ if(dx>0) action=right;
+ else if(dx<0) action=left;
+ else if(dy<0) action=up;
+ else if(dy>0) action=down;
+
+}// Ticked, no enemies.
+ if((tickme)&&(action!=0)) {
+ me.setAction(tick, action);
+
+}
+else clipboard_copy_text("No action set. Tickme is " + tickme + ", action is " + action + ", tx is " + tx + ", and ty is " + ty + ". ");
+}
+}}// Switch for map value.
+
+ }// Movement.
+
+ // Tick.
+ if(tickme) {
+ messages.resize(0);
+ if(tickSpeed>0) {
+ pool.play_1d("sound/tick" + (tick%2) + ".wav", me.getX(), me.getX(), false);
+ // Make sure that we aren't being eaten by the time demons.
+ if(me.getAction(tick)<0) me.setAction(tick, 0);
+}// Sound.
+// me.moveTo(me.getX(tick), me.getY(tick), tick+1);
+ for(uint i=0; i<instances.length(); i++) {stepInstance(instances[i]);
+ if((me.getX(tick)==instances[i].getX(tick))&&(me.getY(tick)==instances[i].getY(tick))) {
+ pool.play_1d("sound/gameover.wav", 0, 0, false);
+ voice.speak_interrupt_wait("You have bumped into a previous instance of yourself. Even this small change has disrupted the timeline. Game over!");
+ return;
+}// Game over.
+}
+ if(!stepInstance(me)) return;
+
+ tick++; if(tick>highestTick) highestTick=tick;
+ // Time-sensitive things.
+ if(mission==1) {
+ if(tick<2) {
+ gloc.values[4][1]=openDoor; gloc.values[4][2]=openDoor;
+}// Valt doors.
+ else {
+ if(tick==2) {string tosay="The vault doors have sealed shut to protect the rest of the base.  This probably happens automatically after authorized people enter or leave."; addMessage(tosay); voice.speak_interrupt(tosay); playsound("sound/close.wav", 4, 2);}
+ gloc.values[4][1]=closedDoor; gloc.values[4][2]=closedDoor;
+ }// Valt doors close.
+ if((tick>=spotted+12)&&(spotted>=0)) {
+ int guardsInLab=0;
+ for(uint i=0; i<gloc.guards.length(); i++) {
+ if((gloc.guards[i].getAction(tick)>=0)&&(gloc.descs[gloc.guards[i].getX(tick)][gloc.guards[i].getY(tick)]=="the lab")) guardsInLab++;
+}// Look for guards who can close the doors.
+ if(guardsInLab>0) {
+ if(gloc.values[3][4]==openDoor) {
+ playsound("sound/close.wav", 3, 5);
+ addMessage("The guards have sealed off the lab in an effort to trap you inside.");
+}
+ gloc.values[3][4]=closedDoor; gloc.values[3][5]=closedDoor;
+}// Closed.
+}// Close emergency doors.
+ else {
+ gloc.values[3][4]=openDoor; gloc.values[3][5]=openDoor;
+}// open emergency doors.
+
+}
+ // Guard actions.
+
+ for(uint i=0; i<gloc.guards.length(); i++) {
+ Guard@ g=gloc.guards[i];
+ if(g.getAction(tick)<0) continue; // Dead guards don't do things.
+ else if((g.getX()==me.getX())&&(g.getY()==me.getY())) {
+ g.setAction(tick, -1); continue; // Mostly because armed guards are poopy heads.
+ }// This is irritating.
+ int act=g.getAction(tick);
+ if((act&attack)!=0) {
+ // Shoot.
+ playsound("sound/shot.wav", g.getX(tick), g.getY(tick));
+ // locate the target.
+ string tosay="shot a bullet into the wall";
+ int a=(act&7);
+ if(a==left) {
+ int x=g.getX(); int y=g.getY();
+for(x=g.getX()-1; x>=0; x--) {
+ if(gloc.values[x][y]==wall) {tosay="shot a bullet into the wall at " + getCoords(x, g.getY()); x=-1;}
+ else if(gloc.values[x][y]==closedDoor) {tosay="shot a bullet into the closed door at " + getCoords(x, g.getY()); x=-1;}
+ else {
+ if((me.getX()==x)&&(me.getY()==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("You have been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+ for(uint j=0; j<instances.length(); j++) {
+ if((instances[j].getX(tick+1)==x)&&(instances[j].getY(tick+1)==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("A previous instance of you has been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+
+}// Instances.
+ for(uint j=0; j<gloc.guards.length(); j++) {
+ Guard@ enemy=gloc.guards[j];
+ if((enemy.getX()==x)&&(enemy.getY()==y)) {
+ playsound("sound/" + enemy.desc + "/killed" + random(1, 3) + ".wav", enemy.getX(), enemy.getY());
+ enemy.setAction(tick, -1);
+ tosay="shot and killed the " + enemy.desc + " at " + getCoords(enemy.getX(), enemy.getY());
+ x=-1;
+}// Shot.
+
+ }// Other guards.
+
+}// Look for people.
+}// Left.
+
+}// Left.
+ else if(a==right) {
+ int x=g.getX(); int y=g.getY();
+for(x=g.getX()+1; x<gloc.values.length(); x++) {
+ if(gloc.values[x][y]==wall) {tosay="shot a bullet into the wall at " + getCoords(x, g.getY()); x=34;}
+ else if(gloc.values[x][y]==closedDoor) {tosay="shot a bullet into the closed door at " + getCoords(x, g.getY()); x=34;}
+ else {
+ if((me.getX()==x)&&(me.getY()==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("You have been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+ for(uint j=0; j<instances.length(); j++) {
+ if((instances[j].getX(tick+1)==x)&&(instances[j].getY(tick+1)==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("A previous instance of you has been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+
+}// Instances.
+ for(uint j=0; j<gloc.guards.length(); j++) {
+ Guard@ enemy=gloc.guards[j];
+ if((enemy.getX()==x)&&(enemy.getY()==y)) {
+ playsound("sound/" + enemy.desc + "/killed" + random(1, 3) + ".wav", enemy.getX(), enemy.getY());
+ enemy.setAction(tick, -1);
+ tosay="shot and killed the " + enemy.desc + " at " + getCoords(enemy.getX(), enemy.getY());
+ x=33;
+}// Shot.
+
+ }// Other guards.
+
+}// Look for people.
+}// right.
+
+
+ }// Right.
+ else if(a==up) {
+ int x=g.getX(); int y=g.getY();
+for(y=g.getY()-1; y>=0; y--) {
+ if(gloc.values[x][y]==wall) {tosay="shot a bullet into the wall at " + getCoords(x, g.getY()); y=-1;}
+ else if(gloc.values[x][y]==closedDoor) {tosay="shot a bullet into the closed door at " + getCoords(x, g.getY()); y=-1;}
+ else {
+ if((me.getX()==x)&&(me.getY()==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("You have been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+ for(uint j=0; j<instances.length(); j++) {
+ if((instances[j].getX(tick+1)==x)&&(instances[j].getY(tick+1)==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("A previous instance of you has been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+
+}// Instances.
+ for(uint j=0; j<gloc.guards.length(); j++) {
+ Guard@ enemy=gloc.guards[j];
+ if((enemy.getX()==x)&&(enemy.getY()==y)) {
+ playsound("sound/" + enemy.desc + "/killed" + random(1, 3) + ".wav", enemy.getX(), enemy.getY());
+ enemy.setAction(tick, -1);
+ tosay="shot and killed the " + enemy.desc + " at " + getCoords(enemy.getX(), enemy.getY());
+ y=-1;
+}// Shot.
+
+ }// Other guards.
+
+}// Look for people.
+}// up.
+
+
+ }// up.
+ else if(a==down) {
+ int x=g.getX(); int y=g.getY();
+for(y=g.getY()+1; y<gloc.values[x].length(); y++) {
+ if(gloc.values[x][y]==wall) {tosay="shot a bullet into the wall at " + getCoords(x, g.getY()); y=331;}
+ else if(gloc.values[x][y]==closedDoor) {tosay="shot a bullet into the closed door at " + getCoords(x, g.getY()); y=33;}
+ else {
+ if((me.getX()==x)&&(me.getY()==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("You have been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+ for(uint j=0; j<instances.length(); j++) {
+ if((instances[j].getX(tick+1)==x)&&(instances[j].getY(tick+1)==y)) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait();
+ playsound("sound/gameover.wav", me.getX(), me.getY());
+ voice.speak_interrupt_wait("A previous instance of you has been shot by the " + g.desc + " at " + getCoords(g.getX(), g.getY()) + "! Game over!");
+ return;
+}// Shot.
+
+}// Instances.
+ for(uint j=0; j<gloc.guards.length(); j++) {
+ Guard@ enemy=gloc.guards[j];
+ if((enemy.getX()==x)&&(enemy.getY()==y)) {
+ playsound("sound/" + enemy.desc + "/killed" + random(1, 3) + ".wav", enemy.getX(), enemy.getY());
+ enemy.setAction(tick, -1);
+ tosay="shot and killed the " + enemy.desc + " at " + getCoords(enemy.getX(), enemy.getY());
+ y=33;
+}// Shot.
+
+ }// Other guards.
+
+}// Look for people.
+}// Down.
+
+
+ }// down.
+ else {
+
+ }// I have no idea what this is, but it's gotta be awesome!
+
+ // Guard is chillin'.
+ g.setAction(tick, 0);
+}// Guards attack?
+else {
+  int bestFace=0;
+ string room=gloc.descs[g.getX()][g.getY()];
+ // We check for possible targets.
+ // If there are multiple candidates, we use these rules:
+ // - If one is closer than the other, the closest takes priority.
+ // - If two are at the same distance, and we're already facing one, continue facing that one.
+ Steve@ closest=null;
+ if(myroom==room) {
+ if((me.getX()==g.getX())||(me.getY()==g.getY())) {
+ @closest=me;
+ if(me.getX()<g.getX()) bestFace=left;
+ else if(me.getX()>g.getX()) bestFace=right;
+ else if(me.getY()<g.getY()) bestFace=up;
+ else bestFace=down;
+
+ }// The player instance is a possible target.
+}// Look at the player.
+ for(uint j=0; j<instances.length(); j++) {
+  if((instances[j].getAction(tick)<0)||(instances[j].getX(tick)<0)||(instances[j].getY(tick)<0)||(instances[j].getX(tick)>=gloc.values.length())||(instances[j].getY(tick)>=gloc.values[0].length())) continue;
+
+ if((gloc.descs[instances[j].getX(tick)][instances[j].getY(tick)]==room)&&((instances[j].getX(tick)==g.getX(tick))||(instances[j].getY(tick)==g.getY(tick)))) {
+ if(@closest!=null) {
+ // Who's closer between these two instances?
+ int mydist=absolute(instances[j].getX(tick)-g.getX(tick))+absolute(instances[j].getY(tick)-g.getY(tick));
+ int cdist=absolute(closest.getX(tick)-g.getX(tick))+absolute(closest.getY(tick)-g.getY(tick));
+ if(mydist<cdist) {
+ @closest=instances[j];
+ if(instances[j].getX(tick)<g.getX(tick)) bestFace=left;
+ else if(instances[j].getX(tick)>g.getX(tick)) bestFace=right;
+ else if(instances[j].getY(tick)<g.getY(tick)) bestFace=up;
+ else bestFace=down;
+}// This one is closer.
+ else if(mydist==cdist) {
+ if(act!=bestFace) {
+@closest=instances[j];
+ if(instances[j].getX(tick)<g.getX(tick)) bestFace=left;
+ else if(instances[j].getX(tick)>g.getX(tick)) bestFace=right;
+ else if(instances[j].getY(tick)<g.getY(tick)) bestFace=up;
+ else bestFace=down;
+}
+ // Otherwise, they're already facing someone, and ignore this instance.
+}// Choose between the two if they're equidistant.
+}
+ else {@closest=instances[j];
+ if(instances[j].getX(tick)<g.getX(tick)) bestFace=left;
+ else if(instances[j].getX(tick)>g.getX(tick)) bestFace=right;
+ else if(instances[j].getY(tick)<g.getY(tick)) bestFace=up;
+ else bestFace=down;
+
+ }// Meh.
+ }// Possible target.
+}// Look at other instances of you.
+ if((act!=bestFace)&&(bestFace>0)) {
+ if(g.desc=="armed guard") {
+ g.setAction(tick, bestFace|attack);
+  addMessage("The " + g.desc + " at " + getCoords(g.getX(), g.getY()) + " is preparing to shoot, " + ((bestFace==up) ? "up" : (bestFace==down) ? "down" : (bestFace==left) ? "left" : "right" ) + "! Anyone on a line " + ((bestFace==up) ? "above" : (bestFace==down) ? "below" : (bestFace==left) ? "to the left of" : "to the right of") + " him on the next tick will die!");
+  playsound("sound/" + g.desc + "/face" + random(1, 4) + ".wav", g.getX(tick), g.getY(tick));
+ playsound("sound/loadgun.wav", g.getX(tick), g.getY(tick));
+}
+ else {
+ addMessage("the " + g.desc + " at " + getCoords(g.getX(tick), g.getY(tick)) + " has turned to face " + ((@closest==@me) ? " you " : " a previous instance of you "));
+ g.setAction(tick, bestFace);
+ playsound("sound/" + g.desc + "/face" + random(1, 4) + ".wav", g.getX(tick), g.getY(tick));
+}// Default for non-armed guards.
+}// Face the target.
+}// Guards aren't attacking, so they can pick targets.
+ }// Guards.
+
+
+ if(gloc.descs[me.getX()][me.getY()]!=myroom) {
+ myroom=gloc.descs[me.getX()][me.getY()];
+ int v=gloc.values[me.getX()][me.getY()];
+ if(v==openDoor) addMessage("This is an open doorway. ");
+ else if(v==closedDoor) {
+ sound snd; snd.load("sound/crushed.wav"); snd.play_wait(); snd.close();
+ pool.play_1d("sound/gameover.wav", 0, 0, false);
+voice.speak_interrupt_wait("You have been smashed by one of the building\'s large steel doors.  In time, they will be able to clean you up, but some poor janitor is going to have a rough day.  Game over!");
+ return;
+}// Crushed.
+ else if(v==computer) {
+ // which computer are we looking at?
+ bool success=false;
+ switch (mission) {
+ case 1 : {
+ if(me.getY()>4) {
+ if((plot&1)==0) {success=true; plot|=1; string tosay="You have hacked the security computer, and now know the password to the main doors."; addMessage(tosay); voice.speak_interrupt(tosay);}
+ else voice.speak_interrupt("You already know the password to the main doors.");
+ }// Server room.
+ else {
+ if((plot&2)==0) {
+ success=false;
+ voice.speak_interrupt("You need a supervisor\'s key-card to access this computer.");
+}
+ else {
+ success=true;
+ string tosay="Using the supervisor\'s key card, you have deleted the lab\'s data from studying you.";
+ addMessage(tosay); voice.speak_interrupt(tosay);
+ plot|=4;
+}
+ }// Backup server.
+ }; break;
+case 2 : {
+ // Elevator control.
+  success=true;
+ string tosay="The supervisor\'s key card works on this computer too.  The Docking room doors have opened.";
+ addMessage(tosay); voice.speak_interrupt(tosay);
+ gloc.values[1][8]=openDoor; gloc.values[2][8]=openDoor; plot=10;
+ }; break;
+ }// Missionswitch for computers.
+ if(success) playsound("sound/access.wav", me.getX(), me.getY());
+ }// Computers.
+ else {
+ if((myroom=="the lab")&&((tick<spotted)||(spotted<0))) {spotted=tick;
+ addMessage("Guards have noticed you and will lock down the room within moments!  If you can, kill them before any are able to pull the alarm.");
+ // Play some sounds.
+}// Spotted.
+ else if((mission==0)&&(me.getX()<4)&&(tick>1)) {
+ string tosay="A voice booms from an intercom. \"Experiment successful. If you\'ll please step to the left...\"";
+ addMessage(tosay); voice.speak_interrupt(tosay);
+}
+ else if((mission==2)&&(myroom=="Elevator")) {
+ string tosay = "Your thumb presses the button marked surface.  The elevator doors slowly close, and you feel yourself moving up toward the surface.  Congradulations on a job well done! ";
+ if(lastMissionCompleted<2) lastMissionCompleted=2;
+ voice.speak_interrupt(tosay);
+ while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))&&(!key_pressed(KEY_ESCAPE))) {systemCommands(); wait(5);}
+ return;
+}// Completing mission 2.
+ else if((mission==1)&&(me.getY()==0)) {
+ if((plot&4)==0) {
+ voice.speak_interrupt("Before leaving, you need to destroy any information these men have learned about you.");
+}
+ else {
+ voice.speak_interrupt("From the rest of the world\'s perspective, it has been only moments since you first opened your eyes in your cell.  The Vault door slowly closes behind you, as you casually walk away from the muffled screams.  Simultaneously, within the vault, several men are being attacked, and the back up data is being deleted from the computers.  For a brief moment, you wonder if they have any idea what has just been set loose upon the world.");
+ while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))&&(!key_pressed(KEY_ESCAPE))) {systemCommands(); wait(5);}
+ voice.speak_interrupt_wait("You have escaped the vault! Congratulations on a job well done!"); return;
+}
+ }// Exit.
+}// Room.
+}// Changing rooms.
+ pool.update_listener_2d(me.getX(tick), me.getY(tick));
+}// Ticking.
+
+ wait(5);
+ }// Loop.
+}// Play game.
+
+ EchoD@[] echoes;
+
+ void moveCam(int tx, int ty) {
+ camX=tx; camY=ty;
+ if(@gloc!=null) {
+ if(camX<0) camX=0;
+ if(camY<0) camY=0;
+ if(camX>=gloc.values.length()) camX=gloc.values.length()-1;
+ if(camY>=gloc.values[camX].length()) camY=gloc.values[camX].length()-1;
+}
+ // Check for guards.
+ string tosay= "" + gloc.descs[camX][camY];
+ if(gloc.values[camX][camY]==stepplate) tosay += ". Standing here holds a door open.";
+ else if(gloc.values[camX][camY]==closedDoor) tosay += ". This door is closed.";
+ else if(gloc.values[camX][camY]==openDoor) tosay += ". This door is open.";
+
+ for(uint i=0; i<gloc.guards.length(); i++) {
+ if((gloc.guards[i].getX(tick)==camX)&&(gloc.guards[i].getY(tick)==camY)) {
+ int act=gloc.guards[i].getAction(tick);
+ switch (act) {
+ case -1 : tosay = "dead " + gloc.guards[i].desc; break;
+ case left : tosay="" + gloc.guards[i].desc + " facing left"; break;
+ case right : tosay="" + gloc.guards[i].desc + " facing right"; break;
+ case up : tosay="" + gloc.guards[i].desc + " facing up"; break;
+ case down : tosay="" + gloc.guards[i].desc + " facing down"; break;
+ default : {
+ tosay=gloc.guards[i].desc;
+ // Get attacking, patrolling, etc.
+}
+}// Guards.
+}// Guard found.
+}
+ // Check for other instances of the player.
+ for(uint i=0; i<instances.length(); i++) {
+ Steve@ inst=instances[i];
+ if((inst.getX(tick)==camX)&&(inst.getY(tick)==camY)&&(inst.getAction(tick)>=0)) {
+ tosay="another you, ";
+ int act=inst.getAction(tick);
+ switch(act) {
+ case up : tosay += " preparing to walk up"; break;
+ case down : tosay += " preparing to walk down"; break;
+ case left : tosay += " preparing to walk left"; break;
+ case right : tosay += " preparing to walk right"; break;
+ case standing : tosay += " standing still"; break;
+ case 7 : tosay += " preparing to jump through time"; break;
+ default : {
+ if((act&attack)!=0) {
+ tosay += " attacking ";
+ act&=7;
+ switch (act) {
+ case up : tosay += "up"; break;
+ case left : tosay += "left"; break;
+ case down : tosay += "down"; break;
+ case right : tosay += "right"; break;
+ default : tosay += "in an unknown direction";
+}// Another actswitch? For shame!
+}// Attacking.
+}
+}// Actswitch for instances.
+}// Other instance found.
+}
+ // Finally, check for the player.
+ if((me.getX()==camX)&&(me.getY()==camY)) tosay="you are currently here.";
+ voice.speak("" + getCoords(camX, camY) + ", " + tosay);
+
+}// Move camera.
+
+ void playsound(string toplay, int x, int y) {
+
+ pool.play_2d(toplay, me.getX(), me.getY(), x, y, false);
+ // Determine if we need to echo.
+
+ // Echoes will go in four directions, and be positioned based on distance from walls or closed doors.
+/*
+ if((x<0)||(y<0)||(x>=gloc.values.length())||(y>=gloc.values[0].length())) return;
+ int v=gloc.values[x][y];
+ if(v>0) return; // I think?
+
+ int u=0; int l=0; int r=0; int d=0; // Distance in each direction. Must be non-zero for an echo to be added.
+
+ for(int yy=y-1; (yy>=0)&&(gloc.values[x][yy]<1); yy--) {
+ u=y-yy;
+ }
+ for(int yy=y+1; (yy<gloc.values[x].length())&&(gloc.values[x][yy]<1); yy++) {
+ d=yy-y;
+ }
+ for(int xx=x-1; (xx>=0)&&(gloc.values[xx][y]<1); xx--) {
+ l=x-xx;
+}
+ for(int xx=x+1; (xx<gloc.values.length())&&(gloc.values[xx][y]<1); xx++) {
+ r=xx-x;
+}
+
+ if(l!=0) {
+ l=absolute(l);
+ EchoD echo(toplay, x-l, y, -7, 0.075);
+ echoes.insert_last(echo);
+}// Left.
+ if(r!=0) {
+ r=absolute(r);
+ EchoD echo(toplay, x+r, y, -7, 0.15);
+ echoes.insert_last(echo);
+}// Right.
+ if(u!=0) {
+ u=absolute(u);
+ EchoD echo(toplay, x, y-u, -7, 0.225, 106);
+ echoes.insert_last(echo);
+}// Up.
+ if(d!=0) {
+ d=absolute(d);
+ EchoD echo(toplay, x, y+d, -7, 0.3, 94);
+ echoes.insert_last(echo);
+}// Down.
+*/
+ }// Playsound.
+
+ bool stepInstance(Steve@ inst) {
+ int act=inst.getAction(tick);
+ int x=inst.getX(tick); int y=inst.getY(tick);
+ // Let's ... catch these things that mean we're not really here:
+ if((act<0)||(x<0)||(y<0)||(x>=gloc.values.length())||(y>=gloc.values[0].length())) return true;
+ if( (act&attack)!=0) {
+ // There are two ways to do this, but only one is prepared at the moment.
+ int tx=inst.getX(tick);
+ int ty=inst.getY(tick);
+ int a=(act&7);
+ if(a==left) tx--;
+ if(a==right) tx++;
+ if(a==up) ty--;
+ if(a==down) ty++;
+ inst.moveTo(tx, ty, tick+1);
+for(uint i=0; i<gloc.guards.length(); i++) {
+ if((gloc.guards[i].getX(tick)==tx)&&(gloc.guards[i].getY(tick)==ty)&&(gloc.guards[i].getAction(tick)>=0)) {
+ gloc.guards[i].setAction(tick, -1);
+playsound("sound/" + gloc.guards[i].desc + "/killed" + random(1, 3) + ".wav", tx, ty); 
+ if((gloc.guards[i].desc=="lab supervisor")&&((plot&2)==0)) {
+ plot|=2; voice.speak_interrupt("You have taken the supervisor\'s keycard, which gives you access to the backup server.");
+}// Keycard.
+// Message.
+ addMessage( "" + ((@inst==@me) ? "You" : "A previous instance of you") + " has killed the " + gloc.guards[i].desc + " at " + getCoords(gloc.guards[i].getX(tick), gloc.guards[i].getY(tick)) + ". ");
+}// Kill.
+ }// Guards.
+
+}// Attacking.
+ else if(act==left) inst.moveTo(inst.getX()-1, inst.getY(), tick+1);
+ else if(act==right) inst.moveTo(inst.getX()+1, inst.getY(), tick+1);
+ else if(act==up) inst.moveTo(inst.getX(tick), inst.getY(tick)-1, tick+1);
+ else if(act==down) inst.moveTo(inst.getX(tick), inst.getY(tick)+1, tick+1);
+ else if(act==standing) inst.moveTo(x, y, tick+1);
+
+if((x!=inst.getX(tick+1))||(y!=inst.getY(tick+1))) {
+playsound("sound/step" + random(1, 5) + ".wav", inst.getX(), inst.getY());
+ // Check for stepplates.
+ if(gloc.values[x][y]==stepplate) {
+handleDoor(x, y, false);
+ }// Close door.
+
+}// Moved.
+
+ // Do checks for collisions.
+ if((inst.getX(tick+1)>=0)&&(inst.getY(tick+1)>=0)&&(inst.getX(tick+1)<gloc.values.length())&&(inst.getY(tick+1)<gloc.values[0].length())&&(gloc.values[inst.getX(tick+1)][inst.getY(tick+1)]==stepplate)) {
+ handleDoor(inst.getX(tick+1), inst.getY(tick+1), true);
+ }// Opening a door.
+
+ if((@inst!=@me)&&(inst.getX()==me.getX())&&(inst.getY()==me.getY())) {
+ pool.play_1d("sound/gameover.wav", 0, 0, false);
+ voice.speak_interrupt_wait("You have bumped into a previous instance of yourself. Even this small change has disrupted the timeline. Game over!");
+ return false;
+
+ }// Game over.
+
+ return true;
+}// Step instance.
+
+ // we need to keep track of time-sensitive variables for missions.
+ int spotted; // The tick when the guards see you in mission 1.
+ int ammo=0; // Ammo for guns that you find.
+ string myroom="";
+ void addMessage(string msg) {messages.insert_last(msg);}
+
+ void handleDoor(int x, int y, bool open) {
+ bool playit=true;
+ int px=-1; int py=-1;
+ switch (mission) {
+ case 0 : {
+ px=2; py=5; playit=true;
+}; break;
+ case 1 : {
+  if((x<=10)&&(y==9)) {
+ px=11; py=9; playit=true;
+}// Door at l 10.
+ else {px=12; py=3;}
+}; break;
+ case 2 : {
+ // doors in mission 2
+  if((x==9)&&(y==13)) {px=10; py=11;}
+ else if((x>=11)&&(y>=10)) {
+ px=2; py=3;
+ gloc.values[1][3]= (open) ? openDoor : closedDoor;
+}// Secondary door.
+ else if((x>=11)&&(y<9)) {px=9; py=7;} // Computer room door.
+ else {px=4; py=6;
+ gloc.values[4][5]=(open) ? openDoor : closedDoor;
+}
+}; break;
+}// Doors.
+ if(playit) {
+ if((open)&&(gloc.values[px][py]==openDoor)) playit=false;
+ else if((!open)&&(gloc.values[px][py]==closedDoor)) playit=false;
+}// Make sure the door in question isn't already at the desired value.
+ if(playit) {
+ if(open) gloc.values[px][py]=openDoor; else gloc.values[px][py]=closedDoor;
+ playsound("sound/" + ((open)? "open" : "close" ) + ".wav", px, py);
+ addMessage("The door at " + getCoords(px, py) + " has just " + ((open) ? " opened" : " closed" ) + ". ");
+}
+}// Door.
+void cutscene(string[] lines, string ending) {
+ int lx=lines.length()-1;
+ voice.speak_interrupt("Arrow for story, or enter to start game.");
+ if(key_pressed(KEY_RETURN)) {wait(300);}
+ if(key_pressed(KEY_RETURN)) alert("Hey!", "Are you holding the enter key?");
+ while(!key_pressed(KEY_RETURN)) {
+systemCommands();
+ bool speakme=true;
+ if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) lx--;
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_RIGHT))) lx++;
+ else speakme=false;
+ if(lx<0) lx=lines.length()-1;
+ else if(lx>=lines.length()) lx=0;
+ if(speakme) voice.speak_interrupt(lines[lx]);
+wait(5);}// Lines.
+ voice.speak_interrupt(ending);
+}// Cutscenes.
+ void save_exit() {
+ string txt="" + tickSpeed + "\n" + lastMissionCompleted + "";
+ file fout; fout.open("progress.ini", "w"); fout.write(txt); fout.close();
+ exit();
+}
+/*
+void saveGame() {
+string fn=input_box("Save game", "Enter save file name and press enter. Press escape to cancel.");
+ if(fn=="") {voice.speak_interrupt("Canceled"); return;}
+ string txt="";
+}
+ void loadGame() {
+string fn=input_box("Load game", "Enter saved file name and press enter. Press escape to cancel.");
+ if(fn=="") {voice.speak_interrupt("Canceled"); return;}
+ string txt="";
+ file fin; if(!fin.open(fn, "r")) {voice.speak_interrupt("Can\'t find that file."); return;}
+ txt=fin.read(0);
+
+}
+*/
+
+ string saveSteve(Steve@ me) {
+ string txt="[instance]\n";
+ string poses="";
+ for(uint i=0; i<me.pose.length(); i++) {poses = poses + "" + me.pose[i] + ", ";}
+ string actions="";
+ for(uint i=0; i<me.whatidid.length(); i++) {actions += "" + me.whatidid[i] + ", ";}
+ txt = txt + "\n[pose]\n" + poses + "\n[actions]\n" + actions + "\n[next]\n;\n";
+return txt;
+}// Save steve.
+ string saveGuard(Guard@ me) {
+ string txt="[guard]\n" + me.desc + "\n";
+ string poses="";
+ for(uint i=0; i<me.pose.length(); i++) {poses = poses + "" + me.pose[i] + ", ";}
+ string actions="";
+ for(uint i=0; i<me.whatidid.length(); i++) {actions += "" + me.whatidid[i] + ", ";}
+ txt = txt + "\n[pose]\n" + poses + "\n[actions]\n" + actions + "\n[next]\n;\n";
+ return txt;
+ }// save guard.
+
+ void saveGame() {
+ voice.speak_interrupt("Enter save file name and press enter. Press escape to cancel.");
+ string inp=input_box("Save File Name", "Enter save file name and press enter, or press escape to cancel.");
+ if(inp=="") {voice.speak_interrupt("Canceled."); return;}
+ string txt="[plot]\n" + plot + "\n[mission]\n" + mission + "\n[tick]\n" + tick + "\n[highest]\n" + highestTick + "\n[speed]\n" + tickSpeed + "\n[me]\n" + saveSteve(me) + "\n";
+ for(uint i=0; i<instances.length(); i++) {txt += "\n" + saveSteve(instances[i]);}
+ for(uint i=0; i<gloc.guards.length(); i++) {txt += "\n" + saveGuard(gloc.guards[i]);}
+ file fout; fout.open(inp, "w");
+ fout.write(txt);
+ fout.close();
+ }
+
+ bool loadGame() {
+ voice.speak_interrupt("Enter the file name and press enter, or press escape to cancel.");
+ string inp=input_box("Save File Name", "Enter the name of the file to load from and press enter, or press escape to cancel.");
+ if(inp=="") {voice.speak_interrupt("Canceled"); return false;}
+
+ file fin; fin.open(inp, "r");
+ string txt=fin.read(0);
+ fin.close();
+ string[] lines=string_split(txt, "\n", true);
+ if(lines.length()<10) {voice.speak_interrupt("Invalid file"); return false;}
+ @me=null;
+ instances.resize(0);
+
+
+ for(uint i=0; i<lines.length(); i++) {
+ if(lines[i]=="[mission]") {mission=string_to_number(lines[i+1]); @gloc=loadMap(mission); gloc.guards.resize(0);}
+ else if(lines[i]=="[plot]") plot=string_to_number(lines[i+1]);
+ else if(lines[i]=="[speed]") tickSpeed=string_to_number(lines[i+1]);
+ else if(lines[i]=="[tick]") tick=string_to_number(lines[i+1]);
+ else if(lines[i]=="[highest]") highestTick=string_to_number(lines[i+1]);
+ else if(lines[i]=="[ammo]") ammo=string_to_number(lines[i+1]);
+ else if(lines[i]=="[spotted]") spotted=string_to_number(lines[i+1]);
+ else if(lines[i]=="[instance]") {
+ Steve s;
+ string[] words=string_split(lines[i+2], ", ", true); // Is that safe?
+// clipboard_copy_text(lines[i+2]); // Debug.
+ string[] words2=string_split(lines[i+4], ", ", true);
+ for(uint j=0; j<words.length(); j++) {
+ if(j<s.pose.length()) s.pose[j]=string_to_number(words[j]);
+ else s.pose.insert_last(string_to_number(words[j]));
+}
+ for(uint j=0; j<words2.length(); j++) {
+ if(j<s.whatidid.length()) s.whatidid[j]=string_to_number(words2[j]);
+ else s.whatidid.insert_last(string_to_number(words2[j]));
+}
+ if(@me==null) @me=s; else instances.insert_last(s);
+ i+=4;
+ }// Instances.
+ else if(lines[i]=="[guard]") {
+ Guard s(lines[i+1]);
+ string[] words=string_split(lines[i+3], ", ", true); // Is that safe?
+ string[] words2=string_split(lines[i+5], ", ", true);
+ for(uint j=0; j<words.length(); j++) s.pose.insert_last(string_to_number(words[j]));
+ for(uint j=0; j<words2.length(); j++) s.whatidid.insert_last(string_to_number(words2[j]));
+ gloc.guards.insert_last(s);
+ i+=6;
+
+ }// Guard.
+}// Loop.
+ loc=game;
+ voice.speak_interrupt("Loaded");
+ return true;
+
+}
+
+bool radar_on=false;
+ timer timerRadar; int radarCount;
+ void updateRadar() {
+ if(timerRadar.elapsed>=250) {
+timerRadar.restart(); timerRadar.resume();
+ radarCount++;
+
+}// Radar go.
+}// Update radar.

@@ -1,0 +1,267 @@
+#include "c:\\bgIncludes\\FiniteStateMachine.bgt"
+
+// Map Constants.
+const int grass=0, water=1, deepWater=2, fire=3, tree=4, log=5, boulder=6, hole=7, house=8, castle=9, courtyard=10, garden=11, stable=12, temple=13, bridge=14, campsite=15, dirt=16, sand=17;
+
+class Map {
+int[] map;
+int[] horses;
+int[] boats;
+vector[] birds; sound@[] birdsounds;
+Char@[] chars;
+int[] items; double[] itemPoses;
+string weather="";
+int size=0;
+Map() {reset(500);}
+Map(int size) {reset(size);}
+void reset(int s) {
+size=s;
+map.resize(size);
+int change=random(20, 100);
+int[] defs={grass, dirt, sand, deepWater, tree}; // Meh, went ahead and made forests into their own type.
+int l=defs.length()-1;
+ int cur=defs[random(0, l)];
+
+int[] planes={grass, grass, grass, water, garden, tree, grass, grass, grass};
+int[] mountains={dirt, dirt, dirt, boulder, hole, water, dirt};
+int[] ocean={deepWater, deepWater, deepWater, deepWater, deepWater, water};
+int[] island={sand, sand, sand, sand, grass, garden, water, tree, sand, grass, dirt, sand};
+int[] forest={tree, tree, tree, hole, water, log, boulder, tree, tree, hole, water, log, tree, tree, tree, grass, grass, tree, tree, garden, garden, tree, grass};
+for(uint i=0; i<size; i++) {
+
+int cn=cur;
+switch (cur) {
+case grass : cn=plains[random(0, planes.length()-1)]; break;
+ case dirt : cn=mountains[random(0, mountains.length()-1)]; break;
+case tree : cn=forest[random(0, forest.length()-1)]; break;
+ case sand : cn=island[random(0, island.length()-1)]; break;
+}
+map[i]=cn;
+
+
+change--;
+if(change<=0) {
+
+change=random(20, 100);
+cur=defs[random(0, l)];
+}// change.
+}// loop.
+ void addBirds(int num) {
+for(uint i=0; i<num; i++) {
+vector b(random(0, size-1), random(0, 5));
+// Bird sounds.
+sound snd;
+// snd.load("sfx/bird" + random(1, 3) + ".wav");
+
+// snd.play_looped();
+ birds.insert_last(b);
+ birdsounds.insert_last(snd);
+}// Birds.
+}// Birds.
+bool isClear(int x) {
+return ( ((x>=0)&&(x<size))&&((map[x]==grass)||(map[x]==dirt)||(map[x]==sand)));
+}
+// Something about ambience?
+}
+
+string[] tilenames={
+"grass", "water",
+"deep water", "fire",
+ "tree, "log",
+ "boulder", "hole",
+ "house", "castle", "courtyard", "garden",
+ "stable", "temple", "bridge",
+ "campsite", "dirt", "sand"
+};
+
+// Item constants. This could get kinda ugly.
+const int katana=0, wakazushi=1, tanto=2, yumi=3, kanabo=4, naginata=5, rocketbow=6, bo=7, jo=8, arcbus=9, shuriken=10, arrows=11, kunai=12, blowDart=13, kusurigami=14, ihatsu=15, axe=16, hammer=17, yasai=18, kudamono=19, sushi=20, tori=21, blackEgg=22, shield=23, armor=24, fan=25, lantern=26, net=27, questItem=28;
+string[] itemnames={
+ "katana", "wakazushi", "tanto", "yumi", "kanabo", "naginata",
+ "Rocketbow", "bo staff", "jo staff", "arcbus",
+ "shuriken", "arrows",
+ "kunai", "blow dart", "kusurigami",
+ "ihatsu", "axe", "hammer",
+ "yasai", "kudamono", "sushi", "tori",
+ "black egg", "shield", "armor",
+ "paper fan", "lantern", "net", "mysterious treasure"
+};
+
+// Rank constants.
+const int shogun=0, daimyou=1, samurai=2, ronan=3, civil=4, shinobi=5, monk=6, child=7;
+
+// State constants.
+ const int WAIT=0, preparing=1, attacking=2, walking=3, recovering=-1, crouching=4, jumping=8, sepuku=16; // Umm?
+// Aiming:
+const int up=1, down=2, left=4, right=8, back=16;
+// Properties:
+const int hasShield=1, hasArmor=2, hasBullet=4, riding=8, inside=16, east=32; // And so on?
+// Other possibilities: hiding and climbing, though these seem kinda unnecessary with jumping and crouching.
+Char@[] bridgers; // To speed up walking on bridges, since they're supposed to be narrow.
+// Order constants:
+const int none=0, stay=1, attack=2, follow=3, destroy=4, FOOD=5, recruit=6; // Something's... wrong...?
+
+class Char : FSM {
+string name;
+bool male;
+int rank;
+int x; double y;
+  int[] inv; int[] weapons; int weapon=0;
+ double hp=10.0, fatigue=0.0, food=200;
+int user_id=-1; // Online char?
+Char@ shogun=null, daimyou=null, target=null;
+int orders=0;
+ int base=-1;
+ int arrows=0, ninjaAmmo=0, misc=0;
+Char@ lastKilled=null; // Mostly so ninjas can disguise themselves as their last victim to get into castles, but maybe I'll make revenge a possibility. I don't want to keep track of parents/marriages, though.
+int slot=-1, breath=-1;
+Map@ gloc=null; // Hm.
+int ride=0; // Positive is horses, negative is boats.
+
+Char() {reset(child);}
+ Char(int r) {reset(r);}
+ void buildName() {
+string[] kana= {
+"a", "i", "u", "e", "o",
+"ka", "ki", "ku", "ke", "ko",
+"ga", "gi", "gu", "ge", "go",
+"sa", "shi", "su", "se", "so",
+"ta", "chi", "tsu", "te", "to",
+"ra", "ri", "ru", "re", "ro",
+"za", "ji", "zu", "ze", "zo",
+"da", "ji", "dzu", "de", "do",
+"ha", "hi", "hu", "he", "ho",
+"ba", "bi", "bu", "be", "bo",
+"pa", "pi", "pu", "pe", "po",
+"ma", "mi", "mu", "me", "mo",
+"na", "ni", "nu", "ne", "no",
+"wa", "n\'", "ya", "yu", "yo"
+ };
+string nam="";
+ int size=1+random(0, 3);
+for(int i=0; i<size; i++) {
+ string k=kana[random(0, kana.length()-1)];
+ if((k==("n\'"))&&((i==0)||(string_contains(name, "n\'", 1)>=0))) k=kana[random(0, kana.length()-5)];
+  nam=nam + k;
+}
+
+// if(nam.length()>1) nam=nam.substring(0, 1).toUpperCase() + nam.substring(1, nam.length()); else nam=nam.toUpperCase();
+
+ name=nam;
+
+ }// Build Name.
+
+void reset(int r) {
+rank=r;
+state=WAIT;
+counter=0.0;
+buildName();
+misc=0; ninjaAmmo=0;
+male=(random(1, 10)>5);
+switch (rank) {
+case ::shogun :
+ case ronan : 
+case samurai : {
+int[] sw={katana, wakazushi, yumi, kanabo, naginata};
+weapons=sw;
+ getItem(armor);
+ if((random(0, 10)>=5)||(rank==::shogun)) getItem(shield);
+ if(rank==::shogun) misc|=hasBullet;
+ if(rank!=ronan) food+=100; // You know, because they're busy fighting all the time and should stock up on food from the start.
+arrows=random(0, 16);
+if(rank==ronan) {
+arrows=random(0, 25);
+if(random(0, 10)>=5) weapons.remove_at(random(0, weapons.length()-1));
+if(random(0, 10)>=5) misc=hasBullet;
+if(random(0, 7)==4) weapons.insert_last(arcbus);
+}
+}; break;
+case civil :
+case child : {
+string[] cinv={
+bo, jo, sushi, yasai, kudamono, tori, yumi, tanto, axe, hammer, net, net
+};
+int items=random(-1, 3);
+if(rank==child) items-=random(1, 2);
+for(uint i=0; i<items; i++) getItem(cinv[random(0, cinv.length()-1)]);
+ninjaAmmo=0; misc=0;
+for(uint i=0; i<weapons.length(); i++) {if(weapons[i]==yumi) arrows=random(0, 20);}
+if(rank==child) fatigue=-200;
+}; break;
+case ::daimyou : {
+weapons.insert_last(katana);
+weapons.insert_last(tanto);
+ weapons.insert_last(naginata);
+if(random(0, 7)>4) misc|=hasArmor;
+if(random(0, 7)==4) misc|=hasShield;
+if(random(0, 7)>=4) misc|=hasBullet;
+food+=random(0, 100); // Because power probably implies access to the most food.
+if(random(0, 7)==4) weapons.insert_last(arcbus);
+}; break;
+case shinobi : {
+weapons.insert_last(katana);
+ weapons.insert_last(kunai);
+ weapons.insert_last(shuriken);
+ weapons.insert_last(blowDart);
+ weapons.insert_last(rocketbow);
+ weapons.insert_last(blackEgg);
+if(random(0, 7)==4) weapons[random(0, weapons.length()-1)]=kusurigami;
+ misc=hasBullet;
+ninjaAmmo=0x2888;
+}; break;
+case monk : {
+weapons.insert_last(ihatsu);
+misc=0; ninjaAmmo=0;
+if(random(0, 10)==4) weapons.insert_last(jo);
+ if(random(0, 10)==4) weapons.insert_last(bo);
+weapon=0;
+inv.insert_last(yasai);
+inv.insert_last(yasai);
+}; break;
+}// Rank switch.
+
+}// reset.
+
+bool setState(int s) {
+if(state==recovering) return false;
+if(state==s) return true;
+// GAAAAAAAh!
+
+switch (s) {
+case preparing : {
+if((state&(WAIT|jumping|crouching))==state) {state|=s;
+
+// Shinobi should not make sound under most situations.
+// Unless they're disguised as someone else?
+ bool kiai=true;
+if(rank==shinobi) {
+ kiai=false;
+}// Shinobi.
+
+ string gen=(rank==child) ? (male) ? "b" : "g" : (male) ? "m" : "f";
+ if(kiai) addSound("voice/kiai_" + gen + random(0, 8) + ".wav");
+counter=1.0; if(rank==child) counter=1.3;
+}
+}; break;
+case walking : {
+ // Uh, is this allowed?
+ if((state&(WAIT|jumping|crouching|preparing))==state) {
+state|=s;
+counter=0.32;
+if((misc&riding)==riding) counter=0.2;
+// Do we make sounds when you start, or when you stop? Guh.
+
+}// Hmm.
+}; break;
+case attacking : {
+// Attacking is kinda kraji.
+// Should probably copy-edit from Sengoku Jidai, really.
+
+}; break;
+}// Stateswitch in set state.
+return state==s;
+}// set State.
+int aim=0;
+
+}// char.
+

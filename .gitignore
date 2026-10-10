@@ -1,0 +1,22 @@
+# BGT build output and bundles (false-flagged by malware scanners)
+*.exe
+*.zip
+
+# Logs and local state
+debuglog.txt
+laglog.txt
+progress*.ini
+
+# SengokuJidai: player accounts, saves and server login
+SengokuJidai/sjaccounts.dat
+SengokuJidai/user*.dat
+SengokuJidai/online.ini
+SengokuJidai/sjsave*.dat
+SengokuJidai/sounds.dat
+SengokuJidai/backups/
+
+# JLA: licensed music and voices are not redistributable
+JLA/**/*.wav
+JLA/**/*.WAV
+JLA/**/*.ogg
+JLA/*.dat

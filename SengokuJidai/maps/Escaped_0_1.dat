@@ -1,0 +1,2402 @@
+[type]
+ocean
+[weather]
+snow
+[size]
+50, 50
+[map]
+000000F000C333333333333333333333333333333333333333
+0E00EE00FFC333333333333333333333333333333333333333
+EF0E0000003333333333333333333333333333333333333333
+000E0000003333333333333333333333333333333333333333
+F0E00F00FE3333333333333333333333333333333333333333
+000E00000E3333333333333333333333333333333333333333
+0EF00E0F003333333333333333333333333333333333333333
+0000E000E03333333333333333333333333333333333333333
+0E0E0E000C3333333333333333333333333333333333333333
+0F0F00C0E0C33333333C333333333333333333333333333333
+333333333CC999999999999999C3337C777777773333333333
+333333333339999999999999993333C6666666693333333333
+333333333339977777777799993333766666666C3333333333
+33333333333997A7EE7FF79999C33377777777773333333333
+3333333333399797EE7FF79999333377777777773333333333
+33333333333997966776699999333377776777773333333333
+33333333333997976666699999333377776777773333333333
+33333333333997777777779999C33377776777773333333333
+333333333339999999999999993333777766666C3333333333
+3333333333399999999999999933337777C777773333333333
+EF0000000033333333330000E0C000333333333377C7777777
+000E00000C3333333333000000000033333333337797999967
+0F000F0E0E3333333333FF000E000033333333337797F77767
+000E0000EE33333333330F0E0E000E33333333337797FFF767
+0000E0000033333333330F0000000E33333333337797F2F767
+00F0E0F00033333333330000000E0033333333337797F2F767
+F0E000E0F03333333333F0E000E00033333333337797FFF767
+F000E00E003333333333C0EE0E000E33333333337797777767
+0000E000EF33333333330000000E003333333333C99999999C
+0C0000CFFE3333333333F0C0EE000EC33333333377C7777779
+33333333333333333333333333333C33333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+33333333333333333333333333333333333333333333333333
+777777777733333333337777777C7733333333333333333333
+C66666666C33333333337FEE7E767733333333333333333333
+C66666677733333333337FFF9996E733333333333333333333
+777677777733333333337F7777767733333333333333333333
+777677777733333333337FFF7876E733333333333333333333
+777677777733333333337F2F78867733333333333333333333
+777677777733333333337FFF7776E733333333333333333333
+7776777777333333333377777E767733333333333333333333
+77767777773333333333C66666666C33333333333333333333
+777C7777773333333333777777777733333333333333333333
+[item]
+arcbus, 28, 10
+[item]
+arcbus, 14, 14
+[item]
+wakazushi, 18, 37
+[item]
+kanabo, 18, 37
+[item]
+shield, 18, 37
+[item]
+wakazushi, 11, 31
+[item]
+kanabo, 11, 31
+[item]
+shield, 11, 31
+[item]
+katana, 12, 34
+[item]
+wakazushi, 12, 34
+[item]
+yumi, 12, 34
+[item]
+kanabo, 12, 34
+[item]
+naginata, 12, 34
+[item]
+shield, 12, 34
+[item]
+5arrows, 12, 34
+[item]
+kudamono, 11, 31
+[item]
+bo, 11, 31
+[item]
+katana, 42, 6
+[item]
+tanto, 42, 6
+[item]
+naginata, 42, 6
+[item]
+katana, 41, 2
+[item]
+wakazushi, 41, 2
+[item]
+yumi, 41, 2
+[item]
+kanabo, 41, 2
+[item]
+naginata, 41, 2
+[item]
+20arrows, 41, 2
+[item]
+Guard's Lantern, 45, 25
+[item]
+Daimyou's message, 27, 28
+[item]
+net, 41, 25
+[item]
+Cherry blossom, 19, 25
+[item]
+Cherry blossom, 10, 25
+[item]
+Cherry blossom, 10, 11
+[item]
+Cherry blossom, 19, 11
+[item]
+Tome of Love, 14, 17
+[item]
+ihatsu, 16, 20
+[item]
+Incense, 14, 14
+|
+biyuge
+1
+[pose]
+44, 25
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+1
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+7.36129999999999
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+8
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+ku
+0
+[pose]
+18, 34
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.00400000000000024
+[arrows]
+12
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+jo, katana, yumi, naginata
+[face]
+e
+[charged]
+0
+[destination]
+10, 31
+[base]
+17, 34
+|
+zo
+1
+[pose]
+11, 30
+[orders]
+none
+[state]
+5
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0.28684
+[hp]
+10
+[fatigue]
+13.228
+[armor]
+[arrows]
+16
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+s
+[charged]
+0
+[base]
+11, 30
+|
+inozun'
+1
+[pose]
+12, 31
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0300000000000001
+[arrows]
+19
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+jo, katana, yumi, naginata
+[face]
+e
+[charged]
+0
+[base]
+11, 31
+|
+zehu
+1
+[pose]
+18, 36
+[orders]
+none
+[state]
+5
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0.37782
+[hp]
+10
+[fatigue]
+3.79400000000001
+[armor]
+[arrows]
+2
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+nw
+[charged]
+0
+[base]
+18, 36
+|
+hute
+1
+[pose]
+10, 31
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+s
+[charged]
+0
+[base]
+10, 31
+|
+pihepumu
+1
+[pose]
+28, 47
+[orders]
+none
+[state]
+0
+[rank]
+2
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[armor]
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, tanto, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+mozanipi
+1
+[pose]
+28, 44
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+6
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+28, 44
+[daimyou]
+0, 1, 6
+|
+perue
+1
+[pose]
+25, 42
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+25, 42
+[daimyou]
+0, 1, 6
+|
+yahochi
+1
+[pose]
+28, 42
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[armor]
+[arrows]
+12
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+28, 42
+[daimyou]
+0, 1, 6
+|
+toazugu
+0
+[pose]
+30, 49
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0.767999999999999
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+e
+[charged]
+0
+[base]
+29, 49
+[daimyou]
+0, 1, 6
+|
+gigomu
+1
+[pose]
+22, 42
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+19
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+22, 42
+[daimyou]
+0, 1, 6
+|
+pobee
+1
+[pose]
+28, 44
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[armor]
+[arrows]
+7
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+28, 44
+[daimyou]
+0, 1, 6
+|
+osatsu
+1
+[pose]
+28, 40
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+12
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+28, 40
+[daimyou]
+0, 1, 6
+|
+yo
+1
+[pose]
+28, 40
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[armor]
+[arrows]
+18
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+28, 40
+[daimyou]
+0, 1, 6
+|
+kuza
+1
+[pose]
+25, 42
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+19
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+25, 42
+[daimyou]
+0, 1, 6
+|
+hozaota
+0
+[pose]
+8, 5
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0100000000000001
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+birizobi
+0
+[pose]
+5, 8
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0140000000000004
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo
+[face]
+s
+[charged]
+0
+[base]
+0, 0
+|
+yudehu
+1
+[pose]
+4, 3
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0100000000000003
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+jo, bo
+[face]
+w
+[charged]
+0
+[destination]
+1, 1
+[base]
+0, 0
+|
+pusupeji
+0
+[pose]
+3, 4
+[orders]
+none
+[state]
+0
+[rank]
+4
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+8.46400000000002
+[arrows]
+8
+[food]
+94.9785999999998
+[ninjaAmmo]
+10376
+[weapons]
+katana, kunai, shuriken, blow-dart, rocket-bow, black-egg
+[face]
+nw
+[charged]
+0
+[base]
+0, 0
+|
+ruzenedo
+1
+[pose]
+0, 0
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto, bo
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+pu
+1
+[pose]
+1, 6
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0100000000000005
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo
+[face]
+s
+[charged]
+0
+[base]
+0, 0
+|
+zu
+0
+[pose]
+6, 1
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0180000000000004
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+ha
+1
+[pose]
+1, 3
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+9.58259999999998
+[fatigue]
+-0.12
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+w
+[charged]
+0
+[base]
+0, 0
+|
+yo
+0
+[pose]
+6, 3
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0180000000000005
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+n
+[charged]
+0
+[base]
+0, 0
+|
+zeni
+1
+[pose]
+22, 5
+[orders]
+none
+[state]
+0
+[rank]
+4
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0.164
+[arrows]
+19
+[food]
+94.9785999999998
+[ninjaAmmo]
+10376
+[weapons]
+katana, kunai, shuriken, blow-dart, rocket-bow, black-egg
+[face]
+nw
+[charged]
+0
+[destination]
+20, 0
+[base]
+0, 0
+|
+po
+0
+[pose]
+24, 4
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-2.32
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto, jo
+[face]
+w
+[charged]
+0
+[base]
+0, 0
+|
+u
+1
+[pose]
+24, 4
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-2.668
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+w
+[charged]
+0
+[base]
+0, 0
+|
+go
+0
+[pose]
+25, 4
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0720000000000003
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo, tanto
+[face]
+n
+[charged]
+0
+[base]
+0, 0
+|
+maaa
+1
+[pose]
+21, 8
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+dasehoni
+1
+[pose]
+23, 1
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0.222
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+jo
+[face]
+w
+[charged]
+0
+[destination]
+8, 1
+[base]
+0, 0
+|
+hagetsu
+0
+[pose]
+23, 7
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0160000000000001
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+w
+[charged]
+0
+[base]
+0, 0
+|
+tamechi
+0
+[pose]
+23, 1
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+yasai
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0080000000000004
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+nw
+[charged]
+0
+[base]
+0, 0
+|
+rigepa
+0
+[pose]
+18, 1
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+1.836
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+w
+[charged]
+0
+[destination]
+8, 1
+[base]
+0, 0
+|
+su
+0
+[pose]
+25, 3
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0180000000000001
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto
+[face]
+s
+[charged]
+0
+[base]
+0, 0
+|
+bona
+1
+[pose]
+20, 28
+[orders]
+none
+[state]
+10
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+1.92
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo, jo
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+zuko
+1
+[pose]
+27, 25
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+deza
+0
+[pose]
+20, 24
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-2.44
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+n
+[charged]
+0
+[base]
+0, 0
+|
+sotodzu
+0
+[pose]
+29, 29
+[orders]
+none
+[state]
+0
+[rank]
+4
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+12
+[food]
+94.9785999999998
+[ninjaAmmo]
+10376
+[weapons]
+katana, kunai, shuriken, blow-dart, rocket-bow, black-egg
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+ridagizu
+1
+[pose]
+28, 29
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo, tanto
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+zateso
+0
+[pose]
+23, 26
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+nuhike
+0
+[pose]
+22, 21
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0160000000000001
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+sw
+[charged]
+0
+[base]
+0, 0
+|
+haka
+1
+[pose]
+21, 26
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.00600000000000014
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+w
+[charged]
+0
+[base]
+0, 0
+|
+zaze
+1
+[pose]
+22, 23
+[orders]
+none
+[state]
+0
+[rank]
+4
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+-0.0160000000000002
+[arrows]
+10
+[food]
+94.9785999999998
+[ninjaAmmo]
+10376
+[weapons]
+katana, kunai, shuriken, blow-dart, rocket-bow, black-egg
+[face]
+sw
+[charged]
+0
+[base]
+0, 0
+|
+zasuya
+1
+[pose]
+20, 21
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+tanto, jo
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+|
+keki
+0
+[pose]
+41, 2
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+jo
+[face]
+e
+[charged]
+0
+[base]
+41, 2
+[daimyou]
+0, 1, |
+gi
+1
+[pose]
+44, 3
+[orders]
+none
+[state]
+10
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+1.15
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo
+[face]
+e
+[charged]
+0
+[base]
+44, 3
+[daimyou]
+0, 1, |
+hujige
+0
+[pose]
+42, 3
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo
+[face]
+e
+[charged]
+0
+[base]
+42, 3
+[daimyou]
+0, 1, |
+ku
+1
+[pose]
+41, 6
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+1.26400000000002
+[shield]
+[armor]
+[arrows]
+5
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+41, 6
+[daimyou]
+0, 1, |
+gi
+1
+[pose]
+48, 3
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+bo
+[face]
+e
+[charged]
+0
+[base]
+48, 3
+|
+pi
+1
+[pose]
+41, 9
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+7
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+41, 9
+[daimyou]
+0, 1, |
+rigo
+0
+[pose]
+42, 0
+[orders]
+none
+[state]
+0
+[rank]
+5
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[arrows]
+0
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+42, 0
+[daimyou]
+0, 1, |
+gitapuji
+1
+[pose]
+41, 1
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+15
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+41, 1
+[daimyou]
+0, 1, |
+chinapachi
+1
+[pose]
+48, 26
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+11
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+tazearo
+1
+[pose]
+48, 26
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[armor]
+[arrows]
+15
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+po
+1
+[pose]
+48, 21
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+3
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+tepe
+1
+[pose]
+47, 27
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[armor]
+[arrows]
+12
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+gi
+1
+[pose]
+48, 20
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+10
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+negi
+1
+[pose]
+48, 28
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+20
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+rogi
+1
+[pose]
+47, 27
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+9
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+begu
+1
+[pose]
+43, 27
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+9
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0
+|
+bata
+1
+[pose]
+48, 21
+[army]
+[orders]
+none
+[state]
+0
+[rank]
+3
+[weapon]
+0
+[inv]
+[counter]
+[counter]
+0
+[hp]
+10
+[fatigue]
+0
+[shield]
+[armor]
+[arrows]
+4
+[food]
+94.9785999999998
+[ninjaAmmo]
+0
+[weapons]
+katana, wakazushi, yumi, kanabo, naginata
+[face]
+e
+[charged]
+0
+[base]
+0, 0
+[shogun]
+0, 1, 0

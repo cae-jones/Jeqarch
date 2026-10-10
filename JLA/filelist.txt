@@ -1,0 +1,252 @@
+
+Something vaguely resembling what the final file structure should look like.
+
+
+music {
+<honestly no idea, but here are some suggestions>
+ justiceLeague.ogg
+ batMan.ogg
+ superman.ogg
+ phantasm.ogg
+ wonderwoman.ogg
+ greenlantern.ogg
+<-- Update: I couldn't find a good WonderWoman song, but I supplemented the above with various themes from the DCAU, so all's well. -->
+}
+sounds {
+ steps {
+ concrete {run*.wav}
+ roof{run*.wav}
+ steel{run*.wav}
+ pipe{run*.wav}
+ sewer{run*.wav}
+ swamp{run*.wav}
+ water{run*.wav}
+ dirt{run*.wav}
+ glass{run*.wav}
+ grass{run*.wav}
+ carpet{run*.wav}
+ wood{run*.wav}
+ mud{run*.wav}
+ leaves{run*.wav}
+ // And so on?
+<-- Using sounds from swamp for testing purposes, but will need to replace them if Kai doesn't approve of such for the release. -->
+ }// steps
+ menu {
+ select.wav
+ activate.wav
+ cancel.wav
+ error.wav
+ submenu.wav
+ }// Menu.
+ pistol.wav
+ pistolempty.wav
+ uzi.wav
+ uziempty.wav
+ pipe.wav
+ bullet.wav // bullets wizzing by
+ hit*.wav
+ fallConcrete*.wav
+ fallWood*.wav
+ fallCarpet*.wav
+ fallWater*.wav
+ fallMetal*.wav
+ fallLarge*.wav
+ explosion*.wav
+ shatter*.wav
+ buildingfall*.wav
+ hitWall*.wav
+ breakWall*.wav
+ crash*.wav
+ giantMetalCrash*.wav
+ car.wav
+ bike.wav
+ motorcycle.wav
+ plane.wav
+ helicopter.wav
+ tank.wav
+ submarine.wav
+ boat.wav
+ alley.wav
+ bigbuilding.wav
+ smallbuilding.wav
+ grill.wav
+ eat*.wav
+ livingPlants*.wav
+ vines*.wav
+ swim*.wav
+ fish*.wav
+ chomp*.wav
+ whale*.wav
+ dolphin*.wav
+ rocket*.wav
+ rocketExplode*.wav
+ batarang*.wav
+ grenade.wav // rolling
+ grenadeEmpty.wav
+ grenadeExplode.wav
+ smokescreen.wav
+ batclaw.wav
+ batclawPull.wav
+ smokescreenEmpty.wav
+ batarangEmpty.wav
+ block*.wav
+ fists.wav // swinging
+ lasso.wav
+ lassograb.wav
+ hephaestus.wav // Sword strike
+ cut*.wav
+ heatVision.wav
+ burn*.wav
+ knife.wav
+ freezeBreath.wav
+ freeze.wav
+ smallQuake.wav // I.E, superman punches the ground and there's a shockwave for a short distance.
+ laser.wav
+ laserEmpty.wav
+ grapplinghook.wav
+ hookledge.wav // Not necessarily a grappling hook, but a large hook in general catching on a ledge.
+ grab.wav
+ heft.wav
+ throw.wav // I.E, body flying through the air, in a painful way.
+ jump*.wav
+ fly*.wav // subtle "start flying" sound.
+ flyFast*.wav
+ turn.wav
+ GLCharge.wav
+ GLEmpty.wav
+ GLConstructBroken.wav
+ GLConstruct.wav // generic
+ GLTrap.wav
+ GLShield.wav
+ teleportAway.wav
+ teleportArrive.wav
+ GLHand.wav
+ GLHandGrab.wav
+ GLHammer.wav
+ GLArmor.wav
+ GLFist.wav
+ acidburn.wav
+ acidspray.wav
+ electricution.wav
+ electricity.wav
+ highVoltage.wav
+ lightning*.wav // As in used for attacks.
+ underwater*.wav // what one might hear while under water?
+ river*.wav
+ hydrant.wav
+ hydrantStart.wav
+ light*.wav // hum from artificial lighting.
+ computer.wav
+ carhorn*.wav
+ policeSirens*.wav 
+ alarm*.wav
+ telepathy.wav
+ fire*.wav
+ mace.wav // As in the giant spiked club-type thing.
+ bigHit*.wav
+ arrowEmpty.wav
+ arrow.wav // as in, shooting an arrow
+ arrowfly.wav
+ kryptonite.wav
+ robotwalk*.wav
+ robotstrike*.wav
+ machineEngage*.wav
+ doorAjar.wav
+ doorOpen.wav
+ doorClose.wav
+ doorLocked.wav
+ doorBreak.wav
+ mechanicalDoorOpen.wav
+ mechanicalDoorClose.wav
+ keycard.wav
+ useKeycard.wav
+ accessDenied.wav
+ accessGranted.wav
+ }// Sounds.
+voices {
+ // Each voice should follow this model, possibly with a few exceptions.
+ hit*.wav
+ attack*.wav
+ struggle*.wav
+ daze*.wav
+ die.wav
+ taunt*.wav // though they need not be taunts; civilians might call for help or just talk casually.
+// Subfolders are probably:
+ Amazon
+ Aquaman
+ Arcane
+ Artimus
+ Atrocitus
+ Bane
+ Batman
+ Beastboy
+ BillyBatson
+ Bizarro
+ BlackAdam
+ BlackLantern
+ BlackManta
+ boy
+ Brainiac
+ CaptainBoomarang
+ CaptainCold
+ CaptainMarvel
+ Catwoman
+ Cheeta
+ Cyborg
+ Darksied
+ Deadman
+ Deathstroke
+ Deemo
+ Dexstar
+ DoctorLight
+ Flash
+ girl
+ GreenArrow
+ GreenLantern
+ Grod
+ Hawkgirl
+ Heatwave
+ Impulse
+ Indigo1
+ JimmyOllson
+ Joker
+ KidFlash
+ KillerCroc
+ Larfleeze
+ LexLuthor
+ Livewire
+ Lobo
+ LoisLane
+ man
+ Manhunter
+ MartianManhunter
+ mercinary
+ metallo
+ mobster
+ Nightwing
+ octapus
+ OrangeLanternConstruct
+ Parasite
+ Perilax
+ police
+ Raven
+ SaintWalker
+ shark
+ Sinestro
+ Skinman
+ SolemonGrundy
+ Starfire
+ StarSapphire
+ Static
+ Supergirl
+ Superman
+ SwampThing
+ teenagers
+ tweens
+ Weedkiller
+ whale
+ woman
+ WonderWoman
+ Zod
+ Zoom
+ }// voices

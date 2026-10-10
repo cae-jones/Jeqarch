@@ -1,0 +1,24 @@
+#include "sound_pool.bgt"
+
+void main() {
+ show_game_window("Sound range test.");
+ sound_pool pool;
+ pool.behind_pitch_decrease=10;
+ int x=5; int y=0;
+ pool.play_extended_2d("sounds/steps/grass/run" + random(1, 9) + ".wav", 
+ x, y,
+ 10, 10,
+ 3, 5, 5, 1,
+ true, 0,
+ 0, 0, 100);
+ while(!key_pressed(KEY_F4)) {
+
+if(key_pressed(KEY_C)) show_game_window("X " + x + ", Y " + y);
+ else if(key_pressed(KEY_LEFT)) x--;
+ else if(key_pressed(KEY_RIGHT)) x++;
+ else if(key_pressed(KEY_UP)) y++;
+ else if(key_pressed(KEY_DOWN)) y--;
+ pool.update_listener_2d(x, y);
+ wait(5);
+ }
+}

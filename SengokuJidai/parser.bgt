@@ -1,0 +1,194 @@
+int[] numsplit(string params) {
+string[] vals=string_split(params, ",", true);
+int[] ret(vals.length());
+for(uint i=0; i<vals.length(); i++) {ret[i]=string_to_number(vals[i]);}
+return ret;
+}
+
+string[] spliEq(string str) {return string_split(str, "=", true);}
+
+int tileFromString(string str) {
+if(str=="clear") return clear;
+else if(str=="fire") return fire;
+else if((str=="water")||(str=="pond")) return water;
+else if((str=="deepwater")||(str=="ocean")||(str=="deep_water")||(str=="deep")) return deepWater;
+ else if(str=="tree") return tree;
+ else if(str=="boulder") return boulder;
+else if(str=="house") return house;
+ else if(str=="boat") return boat;
+ else if(str=="horse") return horse;
+ else if((str=="castle_wall")||(str=="castlewall")||(str=="castle")||(str=="wall")) return castle_wall;
+ else if((str=="brokenwall")||(str=="broken")||(str=="broken_wall")) return broken_wall;
+ else if((str=="room")||(str=="castleroom")||(str=="castle_room")) return castle_room;
+ else if((str=="courtyard")||(str=="court")||(str=="court_yard")) return courtyard;
+ else if(str=="hole") return hole;
+ else if(str=="garden") return garden;
+ else if((str=="campsite")||(str=="camp")||(str=="camp_site")) return campsite;
+
+return clear;
+}
+
+bool parse(string statement) {
+Char@ me=((ychar>=0)&&(ychar<myArmy.length())) ? myArmy[ychar] : null;
+string[] words=string_split(statement, " ", true);
+string lc=string_to_lower_case(statement);
+if(words[0]=="if") {
+
+}// Ifs are weird.
+else if(string_left(lc, 4)=="map=") {loadGame(-1, string_right(statement, statement.length()-4); @(me.gloc)=map[0][0];}
+else if(string_left(lc, 2)=="x=") me.x=string_to_number(string_right(lc, lc.length()-2));
+else if(string_left(lc, 2)=="y=") me.x=string_to_number(string_right(lc, lc.length()-2));
+else if(string_left(lc, 2)=="d=") me.face=string_right(lc, lc.length()-2);
+else if(words[0]=="jump") {
+int[] coords=numsplit(words[2]);
+ me.x=coords[0]; me.y=words[1];
+}
+ else if(string_left(lc, 6)=="quest=") quest=string_right(statement, statement.length()-6);
+ else if(string_left(lc, 4)=="say=") voice.speak(string_right(statement, statement.length()-4);
+else if(string_left(lc, 6)=="radio=") {
+if(@uac==null) {Account ac; @uac=ac;}
+string msg=string_right(statement, statement.length()-6);
+ uac.inbox.insert_last(msg);
+ pool.play_stationary("sfx/takeBalance.ogg", false);
+ if(view_all_chat) voice.speak(msg);
+if(chatx>=uac.inbox.length()-2)  chatx=uac.inbox.length()-1;
+}// Radio messages.
+else if(words[0]=="story") {
+int index=string_to_number(words[1]);
+ if(index>campaign_story.length()) campaign_story.resize(index+1);
+string[] parts=splitEq(statement);
+campaign_story[index]=parts[1];
+}
+else if(lc=="read story") cutscene(campaign_story);
+ else if(string_left(lc, 8)=="add item") {
+bool many=(words[1]=="items");
+int loopCount=(many) ? string_to_number(words[2]) : 1;
+int total=string_to_number((many) ? words[2] : words[1]);
+int[] coords=numsplit((many) ? words[3] : words[2] );
+string name=words[(many) ? 4 : 3);
+for(uint i=((many) ? 5 : 4); i<words.length(); i++) name += " " + words[i];
+int x1=coords[0]; int x2=coords[2]; if(x2<x1) {x1=x2; x2=coords[0];}
+int y1=coords[1]; int y2=coords[3]; if(y2<y1) {y1=y2; y2=coords[1];}
+ if((name=="arrows")||(name=="Arrows")) name="" + total + "arrows";
+
+
+for(uint i=0; i<loopCount; i++) {
+Point p=newPoint(
+(x1==x2) ? x1 : random(x1, x2),
+ (y1==y2) ? y1 : random(y1, y2)
+);
+me.gloc.addItem(name, p);
+}// Loop.
+
+}// adding items.
+ else if(string_left(lc, 9)=="district=") {
+ int dx=-1;
+for(uint i=0; i<10; i++) {
+if(string_to_lower_case(coords[i])==lc[lc.length()-2]) dx=i;
+}
+ if((dx<0)||(dx>=map.length())) alert("Index Out of Bounds", "" + dx + " is out of range (0, " + (map.length()-1) + ". ");
+int dy=string_to_number(lc[lc.length()-1]);
+
+if((@me!=null)&&(@(me.gloc)!=null)) {for(uint i=0; i<me.gloc.chars.length(); i++) {if(@(me.gloc.chars[i])==@me) me.gloc.chars.remove_at(i);}}
+ @(me.gloc)=map[dx][dy]; map[dx][dy].chars.insert_last(me);
+}
+else if(words[0]=="resize") {
+int[] dims=numsplit(words[2]);
+int ow=map.length();
+int oh=0; if(ow>0) oh=map[0].length();
+map.resize(dims[0]);
+for(uint xx=0; xx<map.length(); xx++) {
+ map[xx].resize(dims[1]);
+ for(int yy=oh, yy<dims[1], yy++) @(map[xx][yy])=newMap(50, 50, (random(0, 10)>6) ? "mountains" : (random(0, 10) >=4) ? "planes" : "ocean");
+
+if(xx>=ow) {for(uint yy=0; yy<map[xx].length(); yy++) @(map[xx][yy])=newMap(50, 50, (random(0, 10)>6) ? "mountains" : (random(0, 10) >=4) ? "planes" : "ocean"); }
+
+}// Resizing map.
+
+}// resize map.
+else if(words[0]=="play") {
+ pool.play_stationary(string_right(statement, statement.length()-11), false);
+}
+else if(words[0]=="put") {
+int[] coords=numsplit(words[2]);
+string head=words[0] + " " + words[1] + " " + words[2] + " ";
+pool.play_2d(string_right(statement, statement.length()-head.length()),  me.x, me.y, coords[0], coords[1], false);
+}
+else if((string_left(lc, 10)=="add random")||(words[1]=="spot")||(string_left(lc, 8)=="add tile")) {
+string[] parts=splitEq(words[(words[1]=="spot") ? 3 : 2]);
+ int count=string_to_number(parts[1]);
+ int r=CIVIL;
+ if(parts[0]=="samurai") r=SAMURAI;
+ else if(parts[0]=="shogun") r=SHOGUN;
+ else if(parts[0]=="daimyou") r=DAIMYOU;
+ else if((parts[0]=="shinobi")||(parts[0]=="ninja")||(parts[0]=="kanoichi")||(parts[0]=="Konoichi")) r=SHINOBI;
+ else if(parts[0]=="ronan") r=RONAN;
+ else if(parts[0]=="daimyo") r=DAIMYOU;
+for(uint i=0; i<count; i++) {
+ Char@ you=newChar(r);
+ if((parts[0]=="man")||(parts[0]=="male")||(parts[0]=="boy")||(parts[0]=="guy")) you.male=true;
+ else if((parts[0]=="woman")||(parts[0]=="women")||(parts[0]=="girl")||(parts[0]=="kanoichi")||(parts[0]=="konoichi")) you.male=false;
+ else if(parts[0]=="monk") {you.weapons.resize(0); you.weapons.insert_last("ihatsu"); you.weapon=0; you.getItem("yasai"); you.getItem("kudamono");}
+ me.gloc.chars.insert_last(you); @(you.gloc)=me.gloc;
+you.x=random(0, you.gloc.map.length()-1);
+ you.y=random(0, you.gloc.map[0].length()-1);
+Point@[] points;
+if(words[1]=="tile") {
+int type=tileFromString(words[3]);
+for(uint xx=0; xx<you.gloc.map.length(); xx++) {for(uint yy=0; yy<you.gloc.map[xx].length(); yy++) {
+if(you.gloc.map[xx][yy]==type) points.insert_last(newPoint(xx, yy));
+}}// I hope that doesn't take too long.
+}
+if(words[1]=="spot") {
+int[] coords=numsplit(words[2]);
+int x1=coords[0]; int x2=coords[2]; if(x2<x1) {x2=x1; x1=coords[3];}
+ int y1=coords[1]; int y2=coords[3]; if(y2<y1) {y2=y1; y1=coords[3];}
+you.x=random(x1, x2);
+you.y=random(y1, y2);
+}// Add spot.
+else if(words[1]=="tile") {
+Point@ p=points[random(0, points.length()-1)];
+you.x=p.x; you.y=p.y;
+}
+else {
+int tries=0;
+while((you.gloc.map[you.x][you.y]==castle_wall)&&(tries<100)) {
+ if(you.x>25) you.x--;
+else if(you.x<25) you.x++;
+ if(you.y>25) you.x--;
+else if(you.y<25) you.y--;
+ else {you.x=random(0, 49); you.y=random(0, 49);}
+tries++;
+}// Escape castles.
+}
+}// count loop, which I nearly forgot!
+}// Random enemies.
+
+// SJ specific statements:
+
+// Resize the map (districts)
+// Set player district
+// Set district type (mountains, planes, ocean)
+// Set tiles (x,y,x,y type)
+
+// Donation events: rank, name, and affiliation are all parameters.
+
+// For all characters. Need a way to simplify this (people on the map? People by name and rank? People in your army? People under a certain leader? The player?)
+// Set district
+// jump to (x,y)
+// hp
+// fatigue
+// food
+// Most of the player/ally commands in SCS.
+// set orders
+// set base
+// set target (to attack)
+// set destination
+// set state/scounter? Seems... dangerous, but why not?
+// Set weapon
+// set direction
+// I guess that's it.
+
+}
+
+string[] campaign_story;

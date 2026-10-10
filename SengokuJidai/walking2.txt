@@ -1,0 +1,26 @@
+// Ok, let's try harder to figure out the movement part. 10:03 AM 9/17/2013
+
+int cur=grass;
+int next=cur;
+if(@gloc!=null) {
+bool move=true;
+if((x>=0)&&(x<gloc.map.length())) cur=gloc.map[x];
+if((misc&east)==0) next=(x>0) ? gloc.map[x-1] : cur;
+else next=(x<gloc.map.length()-1) ? gloc.map[x+1] : cur;
+
+float ty=0.0;
+if((misc&riding)!=0) {
+
+}// Riding.
+else if(next==boulder) {ty=1.0;
+
+}// Boulders.
+else if(next==hole) {ty=-1.0;
+}// Into a hole.
+ else if(enxt==log) {ty=0.5;
+
+}// Logs.
+
+}// Non-null gloc.
+else {move=true; addSound("sfx/grasssteps4.wav"); }
+if(move) {state|=s; counter=((misc&riding)==0) ? 0.33 : 0.2;

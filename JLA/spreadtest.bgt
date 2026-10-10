@@ -1,0 +1,12 @@
+
+void main() {
+ int s=4;
+ int total=0;
+ int matches=0;
+ for(uint i=0; i<1000; i++) {
+ for(uint j=0; j<1000; j++) {
+ total++;
+ if(i%s==j%s) matches++;
+ }}// Loops.
+ alert("Results", "There were " + total + " iterations total, " + matches + " of which were completed.");
+}

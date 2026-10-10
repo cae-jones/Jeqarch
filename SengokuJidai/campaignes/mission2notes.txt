@@ -1,0 +1,77 @@
+Trying to cram the rest of Nobunaga's campaignes into one mission is a bit insane. So I'm takin' notes.
+
+1. The battle of Okehizama.
+- Imagawa Yoshimoto gathers an army a little more than 8 times your starting army, with further reenforcements from the matsudaira clan.
+- Imagawa's army camps in a narrow gorge. This is a good position for a surprise attack, but keep in mind that rushing a pincushion still hurts.
+- Historically, Nobunaga created an illusion here by putting up enough dummies to convince Imagawa that his people were camped on one side of the gorge, while his actual samurai entered from the other direction in the middle of a storm while IMagawa's army was celebrating. Imagawa didn't realize it was an attack and not a drunken brawl among his own people until two samurai jumped out and assassinated him.
+- Hideyoshi is among Nobunaga's army at this point. Do us a favor and give him unfair stats to start with, just so he isn't likely to die too early. However, give him terrible equipment, so as not to make playing as him the obvious solution.
+- After Imagawa's defeat, the Matsudaira clan becomes more independent. Nobunaga makes an alliance with Matsudaira Ieyasu. This is highly important to the course of history, perhaps for the world, so do not screw this up. Oh, and be sure to heal or resurrect Hideyoshi once this alliance is forged.
+2. Tenka fubu
+- Tatsuoki takes over the Saito clan, but is a terrible leader compared to his father. Build up your forces by recruiting minor Saito lords, then just straight-up crush what's left.
+- Nobunaga has his sister Oichi mary Azai Nagamasa, a daimyou, who controls a strategic region on the path to Kyoto. I will, therefore, modify the conditions for daimyou recruitment to include marriage as a possible demand, and make it the only demand for this particular daimyou. Then try to find a way to make it bug-free.
+- Ashikaga Yoshiaki, the brother of the murdered 13th shogun of the Ashikaga Shogunate, comes to Nobunaga for aid. He wants revenge for his brother's murder, and to replace the puppet shogun that the murderers put in his place. Seeing as the Ashikaga shogunate is the official authority over all of Japan, Yoshiaki's support is well worth such a bold coup, what with his claim to power being pretty rock-solid. So, go conquer Kyoto and kill Ashikaga Yoshihide.
+- The Rokkaku clan in southern Omi province (the province  whose northern half is controlled by Azai Nagamasa) is a serious obstacle. Also, they have multiple castles. You'll have to force them out in order to overcome their attempt at reaching Kyoto.
+- Yoshiaki does not want to be Nobunaga's puppet, however, and conspires with other powerful Daimyou for protection. The Asakura clan gets in on the anti-Oda alliance, seeing as Oda was traditionally subordinate to Asakura. Azai nagamasa breaks from Nobunaga to honor the traditional Azai-asakura alliance. Throw in some Ikko rebels, and you have a full-fledged attempt to crush the Oda clan. That alliance with Matsudaira Ieyasu (who we'll just call Tokugawa from this point) is a necessary element of surviving this war.
+- A group of warrior monks supports the anti-Oda alliance. This has the nasty sideeffect of making it strategicly necessary to go burn down their temples and slaughter people. 
+- Also, deal with those Ikko rebels and their impregnable stronghold. Might want to surround and burn it.
+- Takeda shingen is the most powerful remaining member of the anti-Oda alliance, though he originally supported Nobunaga strongly. Yoshiaki finally convinces him to try and break Nobunaga's forces, starting by invading Tokugawa's territory. Tokugawa uses night-raids and bluffs a sneak attack to convince Shingen to back down. Good luck figuring out a way to do this with the existing game mechanics.
+- Nobunaga can no longer put up with Yoshiaki's hostilities. Get rid of him, and officially put an end to the Ashikaga shogunate. Oh snap, the already pathetically weak central authority has been deposed. It's warlord time.
+- Now just destroy those remaining clans. Asakura, Azai, and Takeda. Had better save Takeda for last. Also, this is the big opportunity to provide arcbusses to your army. Figure out how to compensate for their lengthy reload time (and convince your army to actually reload the things...). Notice, destroying Azai gets Oichi sent home to commit suicide.
+3. And...
+- Keep expanding. Akechi mitsuhide is in here somewhere as one of your vassle daimyou.
+- Make a naval blockade to restrict supplies to one of the regions you're attacking. Then deal with the Mori clan when they break it. Solution: Upgrade Hideyoshi to a Daimyou and send him to attack.
+- Uesugi's army can attack. Except Kenshin dies of natural causes, so there's not much to do other than defend yourself for a while.
+4. Incident at Honno-ji
+- Hideyoshi's invasion of the Mori territory gets harder when Mori reenforcements appear. Hideyoshi asks for reenforcements, though he doesn't really need them.
+- Move your army to that region. An item will appear in a temple on the way (in Kyoto?). Let's make matters more interesting and put it in a block of castle walls, tell you about it in your quest, and have you break the walls to retrieve it. This is so that no one will take it before you get there.
+- Surprise! Akechi Mitsuhide is a traitor! Everyone under his command (and probably others just to be safe) surrounds the temple and attacks you. You must commit sepuku to win. ... That's how the honor system works. However, I want to add more conditions to prevent this from working if you do it as soon as you get the item from the temple. Either that, or just have the item trigger it.
+
+Maps:
+- Nobunaga's initial territory.
+- Omi Province.
+- Kyoto gets its own map, because it's Kyoto.
+- Mori territory is in the northwest
+- There must therefore be stuff south of Kyoto in order to justify Nobunaga passing through it on his way to help Hideyoshi.
+- Be sure to keep honno-ji intact when the last quest is assigned.
+
+
+Eh, let's move on to mission 3. Why not...
+
+1. Of Succession
+- Akechi Mitsuhide betrayed Oda Nobunaga. Kill him.
+- Hideyoshi gains support in the Oda clan by pointing out the best successor to Nobunaga. They don't get along, a battle happens. Win and Hideyoshi rules Oda.
+- Nobunaga's other son, Nobukatsu, does not like Hideyoshi and joins with Tokugawa Ieyasu. A battle happens, but that's not the important part. Instead, give Nobukatsu and Ieyasu lots and lots of stuff (like relatives as hostages) until they yield.
+- Build a castle awesome enough to entertain the emperor. With how pathetic the emperor has been for a while now, I forgot there even was one. Considering how irradic castle-building is, good luck. :P.
+- Hideyoshi codifies the class system. Enforce this by seizing weapons from non-samurai. You only need to do this in one district, because who is going to try this for the entire map? Seeing as the most stable means of doing this are either killing, stealing or disarming in battle. Anyway, this quest is completed when no civilians have weapons (outside of your army). Use Toyotomi's records (an item you get at this point) to check the number of weapons you need to seize.
+- End the Sengoku Period by defeating the Hojo clan! They are in the kanto region, to the east.
+
+
+Maps:
+- I'd rather not have too many. Such is the style of this campaigne. How's 2 by 3 sound?
+
+Clashing Dragons: Hideyoshi's attempt to secure his legacy by conquering China. Oopse.
+
+- This is a straight-up war campaigne. The map will try to loosely resemble the northwest of Japan, the east China sea and Korea.
+The Sino-Korean forces will be organized differently from the classes we've used thus far. Specifically, no Samurai, though Daimyou and Shoguns will remain to represent military officers. Rocket-bows and arcbusses will be widely distributed.
+- Also, gurrilla warfare. Korean soldiers will be scattered from the beginning and ordered to attack.
+- Killing enough enemy shogun will result in Ming reenforcements entering the map.
+- Technically, conquering the map is possible, but... good luck. :P
+
+Final Unity:
+
+Reading up on Tokugawa's activities toward the end of Hideyoshi's life leaves me incapable of resisting adapting this forgotten bit of political history:
+Tokugawa's political relations with Mexico.
+Because Samurai and Mexicans cannot possibly end in anything non-awesome.
+Note: Tokugawa's attempts at establishing relations with Mexico did not work out as planned.
+
+- Hideyoshi establishes the counsel of five, with Tokugawa as the most powerful member.
+- When Hideyoshi dies, his heirs are too young to take power. Though most powerful militarily, Tokugawa is not the one of the five to exercise authority. When that one dies, Tokugawa swoops in to take over his territory.
+- The remaining three regents do not like this, and retaliate in force.
+- Ishida mitsunari was at the center of the plans against Tokugawa, but not one of the regents. News of this reaches Tokugawa, but he protects Mitsunari rather than letting his men kill him. (Perhaps safer, since the regents would have more legitimacy?)
+- At this point it's basically just an all-out war between the two factions. Culminating in one big battle where Mitsunari and his supporting nobles must be destroyed.
+- Tokugawa is shogun. Build Edo castle.
+- 1609, Tokugawa is firmly in control, and Japanese-Mexican relations get started when a ship on route to Acapulco from the Philippines wrecked near Tokyo, and Tokugawa  helped rebuild the ship and get the crew on their way.
+- Toyotomi Hideyori is all grown up, and has supporters who think he should be the ruler. Osaka castle is difficult to seige without first using negotiations to get close enough to disable some defenses.
+-- Quest 1: establish said negotiations so that the mote can be filled.
+-- Quest 2: Conquer.
+- Congratulations, you have brought peace that will last for 250 years.

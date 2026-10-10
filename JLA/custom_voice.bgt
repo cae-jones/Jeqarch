@@ -1,0 +1,167 @@
+
+class custom_voice {
+
+ bool sapi;
+ bool braille;
+ tts_voice voice;
+ double screen_reader_wait_factor;
+ bool sr_speaking;
+ double sr_time;
+ int pitch;
+ string config_path;
+ timer sr_timer;
+ custom_voice() {sapi=true; braille=false; screen_reader_wait_factor=10.0; sr_speaking=false; pitch=0; config_path="";}
+ custom_voice(string cp) {config_path=cp; load_config();}
+ string getSML() {
+ if(pitch==0) return "";
+ else if(pitch<0) {
+ return "<voice/><pitch middle=\"" + pitch + "\"/>";
+}
+ return "<voice/><pitch middle=\"+" + pitch + "\"/>";
+ }
+ void options_menu() {
+ speak_interrupt("Voice options. Use up and down to select sapi voice or screen reader. Use left and right to adjust the speaking rate. Use page up, or page down, to adjust pitch. Press enter to save changes, or escape to cancel.");
+ voice.refresh_voice_list();
+ string[] vn=voice.get_voice_names();
+ tts_voice v2; // So changes to voice aren't permanent.
+ v2.rate=voice.rate;
+  bool save_changes=false;
+ int options_x=0;
+ if(!sapi) options_x=-1;
+ bool cont=true;
+ double srwf=screen_reader_wait_factor;
+ int bup=pitch;
+ while(cont) {
+ if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) {stop(); v2.stop();}
+ bool speakme=true;
+ if(key_pressed(KEY_UP)) options_x--;
+ else if(key_pressed(KEY_DOWN)) options_x++;
+ else if(key_pressed(KEY_LEFT)) {
+ if(options_x>=0) {v2.rate=v2.rate-1; v2.speak_interrupt(getSML() + "Slower. Rate is " + v2.rate + ". ");}
+ else {screen_reader_wait_factor--; bool backupSapi=sapi; sapi=false; speak_interrupt("Screen reader rate facter decreased to " + screen_reader_wait_factor + ". "); sapi=backupSapi;}
+ speakme=false;
+ }// Left.
+ else if(key_pressed(KEY_RIGHT)) {
+ if(options_x>=0) {v2.rate=v2.rate+1; v2.speak_interrupt(getSML() + "Faster. Rate is " + v2.rate + ". ");}
+ else {screen_reader_wait_factor++; bool backupSapi=sapi; sapi=false; speak_interrupt("Screen reader rate facter increased to " + screen_reader_wait_factor + ". "); sapi=backupSapi;}
+ speakme=false;
+ }// Right.
+ else if(key_pressed(KEY_PRIOR)) {pitch++; if(options_x>=0) v2.speak_interrupt(getSML() + "Pitch increased to " + pitch + "."); else {bool backupSapi=sapi; sapi=false; speak_interrupt("Pitch increased to " + pitch + "."); sapi=backupSapi;} speakme=false;}
+ else if(key_pressed(KEY_NEXT)) {pitch--; speakme=false; if(options_x>=0) v2.speak_interrupt(getSML() + " pitch decreased to " + pitch + ". "); else {bool backupSapi=sapi; sapi=false; speak_interrupt("Pitch decreased to " + pitch + ". "); sapi=backupSapi;}}
+ else if(key_pressed(KEY_RETURN)) {save_changes=true; speakme=false; cont=false;}
+ else if((key_pressed(KEY_ESCAPE))||((key_down(KEY_LMENU))&&(key_down(KEY_F4)))) {cont=false; save_changes=false; speakme=false;}
+ else speakme=false;
+ if(options_x>=vn.length()) options_x=-1; else if(options_x<-1) options_x=vn.length()-1;
+ if(speakme) {
+ if(options_x<0) {
+ bool backupSapi=sapi;
+ sapi=false;
+ speak_interrupt("Screen reader.");
+ sapi=backupSapi;
+}
+ else {v2.stop(); v2.set_current_voice(options_x); v2.speak_interrupt(getSML() + "" + vn[options_x] + ". ");}
+ }
+wait(5);}// Loop
+ if(save_changes) {
+ voice.rate=v2.rate;
+ if(options_x<0) sapi=false;
+ else {sapi=true; voice.set_current_voice(options_x);}
+ if(config_path!="") save_config(options_x);
+ speak_interrupt_wait("Changes saved.");
+ }
+ else {
+ screen_reader_wait_factor=srwf;
+ pitch=bup;
+ speak_interrupt_wait("Canceled.");
+}
+ }// Options.
+
+ void speak(string text) {
+ if(sapi) voice.speak(getSML() + text);
+ else {
+ if(screen_reader_is_running(JAWS)) screen_reader_speak(JAWS, text);
+ else if(screen_reader_is_running(WINDOW_EYES)) screen_reader_speak(WINDOW_EYES, text);
+ else if(screen_reader_is_running(SYSTEM_ACCESS)) screen_reader_speak(SYSTEM_ACCESS, text);
+ else if(screen_reader_is_running(NVDA)) screen_reader_speak(NVDA, text);
+ else show_game_window(text);
+ sr_speaking=true;
+ sr_time=(screen_reader_wait_factor*text.length()); sr_timer.restart(); sr_timer.resume();
+ }
+}// Speak.
+ void speak_interrupt(string text) {
+ if(sapi) voice.speak_interrupt(getSML() + text);
+ else {
+ if(screen_reader_is_running(JAWS)) screen_reader_speak_interrupt(JAWS, text);
+ else if(screen_reader_is_running(WINDOW_EYES)) screen_reader_speak_interrupt(WINDOW_EYES, text);
+ else if(screen_reader_is_running(SYSTEM_ACCESS)) screen_reader_speak_interrupt(SYSTEM_ACCESS, text);
+ else if(screen_reader_is_running(NVDA)) screen_reader_speak_interrupt(NVDA, text);
+ else show_game_window(text);
+ sr_speaking=true;
+ sr_time=(screen_reader_wait_factor*text.length()); sr_timer.restart(); sr_timer.resume();
+ }// Screen readers.
+ }
+ void speak_wait(string text) {
+ if(sapi) voice.speak_wait(getSML() + text);
+ else {
+ speak(text);
+ wait(screen_reader_wait_factor*text.length());
+ sr_speaking=false;
+ }// Screen reader.
+ }
+void speak_interrupt_wait(string text) {
+ if(sapi) voice.speak_interrupt_wait(getSML() + text);
+ else {
+ speak_interrupt(text);
+ wait(screen_reader_wait_factor*text.length());
+ sr_speaking=false;
+}
+}
+ void stop() {
+ if(sapi) voice.stop();
+ else {
+ for(uint i=1; i<5; i++) {if(screen_reader_is_running(i)) screen_reader_stop_speech(i);}
+ sr_speaking=false;
+ }
+}
+
+ bool speaking() {
+ if(sapi) return voice.speaking;
+ else {
+ if((sr_speaking)&&(sr_timer.elapsed>=sr_time)) sr_speaking=false;
+return sr_speaking;} // Because there's no way to tell.
+ }
+ void set_rate(double r) {
+ if(sapi) voice.rate=r;
+ else screen_reader_wait_factor=r;
+}// Set Rate.
+
+ bool load_config() {
+ return load_config(config_path);
+ }
+  bool load_config(string cp) {
+ file fin; if(!fin.open(cp, "r")) return false;
+ string text=fin.read(0);
+ string[] lines=string_split(text, "\n", true);
+ double[] vals;
+ for(uint i=0; i<lines.length(); i++) {
+  vals.insert_last(string_to_number(lines[i]));
+ }// Loop.
+ if(vals.length()<4) return false;
+ if(vals[0]<0) sapi=false; else {
+// voice.refresh_voice_list();
+// string[] names=voice.get_voice_names();
+ voice.set_current_voice(vals[0]);
+ }
+ voice.rate=vals[1];
+ screen_reader_wait_factor=vals[2];
+ pitch=vals[3];
+ return true;
+ }// Load.
+ void save_config(int x) {save_config(config_path, x);}
+ void save_config(string cp, int x) {
+ string text="" + x + "\n" + voice.rate + "\n" + screen_reader_wait_factor + "\n" + pitch;
+ file fout; fout.open(cp, "w");
+ fout.write(text);
+
+ }// Save config.
+}// Custom_voice.

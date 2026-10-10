@@ -1,0 +1,224 @@
+#include "classes.bgt"
+
+// For starters, let's save and load from the accounts file.
+ int create_account(string n, string p) {
+ file alist;
+ if(!file_exists("sjaccounts.dat")) {
+ alist.open("sjaccounts.dat", "w");
+ alist.write("[user accounts]\n");
+ alist.close();
+}// Create accounts file.
+
+ alist.open("sjaccounts.dat", "r");
+ string txt=alist.read(0);
+ alist.close();
+ int index=string_contains(txt, "\n" + n + "|`", 1);
+ if((index<0)||(index==txt.length()-1)) {
+ string[] lines=string_split(txt, "\n", true);
+ int id=lines.length();
+ string newc="\n" + n + "|`" + p + "|`" + id;
+ alist.open("sjaccounts.dat", "a");
+ alist.write(newc);
+ alist.close();
+ return id;
+ }// account does not already exist.
+else {
+ // Check to see if the password matches.
+ string[] lines=string_split(txt, "\n", true);
+ for(uint i=0; i<lines.length(); i++) {
+ if(string_contains(lines[i], n, 1)==0) {
+ string line=lines[i];
+ i=lines.length();
+ string[] words=string_split(line, "|`", true);
+ if(p!=words[1]) return invalid_password;
+ else {
+ if(words.length()>2) return string_to_number(words[2]);
+}
+ }
+ }// Find it.
+}// Account exists.
+
+ return cannot_create;
+}// Create account.
+
+
+
+ int[] players; // These are the active ones.
+ int[] peers; // Parallel to players.
+// Create a server that listens on port 10000, and sends back any messages it receives.
+
+network host;
+
+void main()
+{
+show_game_window("Game Server");
+tts_voice voice;
+ voice.rate=5;
+if(host.setup_server(10000, 3, 100)==false)
+{
+voice.speak_wait("Error. The server could not be set up.");
+exit();
+}
+ voice.speak("Sengoku Jidai server started. Press tab to toggle spoken messages.");
+network_event event;
+ bool speakAll=true;
+while(true)
+{
+ if(key_pressed(KEY_TAB)) {speakAll=!speakAll; if(speakAll) voice.speak_interrupt("Speak messages"); else voice.speak("Do not speak messages");}
+event=host.request();
+if(event.type==event_connect)
+{
+if(speakAll) {voice.speak_interrupt("Peer number " + event.peer_id + " connected from " + host.get_peer_address(event.peer_id) + ".");
+voice.speak("Peers now connected: " + host.connected_peers + ".");}
+ peers.insert_last(event.peer_id); players.insert_last(-1);
+}
+if(event.type==event_receive)
+{
+ // Catch special requests from individual clients.
+ if(event.channel==1) {
+ string msg=event.message;
+ if(string_contains(msg, "|`", 1)>0) {
+  string[] words=string_split(msg, "|`", true);
+ if(words[0]=="create") {
+ int ret=create_account(words[1], words[2]);
+ host.send_reliable(event.peer_id, "" + ret + "", 1);
+ }// Create.
+ }// A message that requires processing.
+ else {
+ if(msg=="onlines") {
+ // Reply with a list of all of the online accounts.
+ string ret="_ ";
+ for(uint i=0; i<players.length(); i++) {
+  if(players[i]>=0) ret += "" + players[i] + " ";
+}
+ host.send_reliable(event.peer_id, ret, 1);
+ }// Onlines.
+ else {
+uint[] peer_list=host.get_peer_list();
+ for(uint i=0; i<peer_list.length(); i++) {
+ // Uncomment this later.
+ if(peer_list[i]==event.peer_id) continue; // Yes?
+host.send_unreliable(peer_list[i], event.message, event.channel);
+}
+
+ }// Chat messages.
+ }// Chat, probably.
+ }// Channel 1, special requests.
+ else if(event.channel==2) {
+ // Mostly for requesting and sending character data.
+ if(string_contains(event.message, ", ", 1)>0) {
+ string[] words=string_split(event.message, ", ", true);
+ if(words[0]=="load") {
+ if(file_exists("user" + words[1] + ".dat")) {
+ file fin; fin.open("user" + words[1] + ".dat", "r");
+ host.send_unreliable(event.peer_id, fin.read(0), 2);
+ }// Load and send.
+ else host.send_reliable(event.peer_id, "not found", 2);
+ }// Load character.
+ else if(words[0]=="join") {
+ // I'm assuming the message contains all of the data that will be needed? No? Ok, then.
+ file fin; fin.open("user" + words[1] + ".dat", "r");
+ string sendd="join, " + fin.read(0);
+ uint[] peer_list=host.get_peer_list();
+ for(uint i=0; i<peer_list.length(); i++) {
+ if(peer_list[i]==event.peer_id) continue; // Yes?
+host.send_unreliable(peer_list[i], sendd, event.channel);
+}
+ // Set the entry in players that corresponds to this peer to words[1];
+ for(uint i=0; i<peers.length(); i++) {
+ if(peers[i]==event.peer_id) {
+ players[i]=string_to_number(words[1]);
+ i=peers.length();
+}
+}
+
+ }// Joining.
+ else if(words[0]=="quit") {
+ // In this case, we just need to send the quit message to all players.
+uint[] peer_list=host.get_peer_list();
+ for(uint i=0; i<peer_list.length(); i++) {
+// if(peer_list[i]==event.peer_id) continue; // Yes?
+host.send_unreliable(peer_list[i], event.message, event.channel);
+}
+
+ // And we need to remove this player from our list!
+ for(uint i=0; i<peers.length(); i++) {
+ if(peers[i]==event.peer_id) {peers.remove_at(i); players.remove_at(i);}
+}
+ }// Quitting.
+ else if(words[0]=="save") {
+ // Save to this file?
+ file fout; fout.open("user" + words[1] + ".dat", "w");
+ // Clip the first line? Not really important.
+ fout.write(event.message);
+ fout.close();
+ host.send_unreliable(event.peer_id, "data saved", 2);
+ }// Save data.
+ }// Process.
+ }// Channel 2, large packets.
+ else {
+uint[] peer_list=host.get_peer_list();
+ for(uint i=0; i<peer_list.length(); i++) {
+ if(peer_list[i]==event.peer_id) continue; // Yes?
+host.send_unreliable(peer_list[i], event.message, event.channel);
+}
+}// Everything else.
+}
+if(event.type==event_disconnect)
+{
+if(speakAll) {voice.speak_interrupt("Peer number " + event.peer_id + " just disconnected.");
+voice.speak("Peers now connected: " + host.connected_peers + ".");}
+ // 10:13 AM 6/29/2012: Anything other than the correct "quit" message fails to remove players from the list. Let's fix that:
+ for(uint i=0; i<peers.length(); i++) {
+ if(peers[i]==event.peer_id) {peers.remove_at(i); players.remove_at(i);}
+}
+
+}
+if(key_down(KEY_LMENU) and key_pressed(KEY_F4))
+{
+voice.speak_interrupt("Exiting.");
+disconnect_everyone();
+// Just in case the voice hasn't finished speaking when this function returns, we wait for it to finish before actually exiting.
+while(voice.speaking==true)
+{
+wait(5);
+}
+exit();
+}
+wait(5);
+}
+}
+
+void disconnect_everyone()
+{
+
+/*
+This function first gets a list of all connected peers and disconnects them. Then it waits until it has received the same number of disconnect notifications as it sent out disconnect requests, and then returns. This may take some time, however, so we set up a timeout after which we return anyway.
+
+Note that we are not processing messages in this event loop. You will obviously want to do this if you have other connections to manage at the same time.
+*/
+
+timer timeout;
+uint[] peer_list=host.get_peer_list();
+int expected_disconnects=peer_list.length();
+for(uint i=0;i < peer_list.length();i++)
+{
+host.disconnect_peer(peer_list[i]);
+}
+network_event event;
+while(expected_disconnects>0)
+{
+event=host.request();
+if(event.type==event_disconnect)
+{
+expected_disconnects-=1;
+}
+if(timeout.elapsed>=1000)
+{
+break;
+}
+wait(5);
+}
+}
+
+

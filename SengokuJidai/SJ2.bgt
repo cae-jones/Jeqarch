@@ -1,0 +1,76 @@
+#include "c:\\bgIncludes\\custom_menu.bgt"
+#include "sounds.dat"
+#include "c:\\bgIncludes\\FiniteStateMachine.bgt"
+
+custom_voice voice;
+sound_pool pool(200);
+
+void systemKeys() {
+if(key_pressed(KEY_F4)) {save_settings(); exit();}
+if(key_pressed(KEY_F5)) voice.options_menu();
+if((key_pressed(KEY_LCONTROL))||(key_pressed(KEY_RCONTROL))) voice.stop();
+// BGMVolume.
+ if(key_pressed(KEY_PRIOR)) {BGMVolume+=5; if(BGMVolume>=0) BGMVolume=0; bgm.volume=BGMVolume;}
+ else if(key_pressed(KEY_NEXT)) {BGMVolume-=5; if(BGMVolume<=-50) BGMVolume=-50; bgm.volume=BGMVolume;}
+
+}
+
+sound bgm; string curbgm="";
+void playsong(string fn) {
+if(curbgm==fn) {
+bgm.volume=getBGMVolume();
+bgm.play();
+}
+else {
+bgm.stop();
+ bgm.load(fn);
+curbgm=fn;
+bgm.volume=getBGMVolume();
+bgm.play();
+}
+}
+
+void fade() {
+while(bgm.playing) {bgm.volume=bgm.volume-1; wait(20); if(bgm.volume<=-50) bgm.stop();}
+}
+
+float getBGMVolume() {return BGMVolume;}
+void save_settings() {
+string ret="v" + BGMVolume + "\n";
+file fout; fout.open("settings.cfg", "w"); fout.write(ret); fout.close();
+}
+void load_settings() {
+if(file_exists("settings.cfg")) {
+file fin; fin.open("settings.cfg", "r");
+string txt=fin.read(0); fin.close();
+string[] lines=string_split(txt, "\n", true);
+ for(uint i=0; i<lines.length(); i++) {
+if(lines[i][0]=="v") BGMVolume=string_to_number(string_right(lines[i], lines[i].length()-1));
+}
+}}
+
+// Gah!
+float BGMVolume=-10;
+
+class Item : FSM {
+double x=0.0, y=0.0;
+string name;
+int slot=-1;
+Item() {}
+Item(string n) {name=n;}
+Item(string n, double xx) {name=n; x=xx;}
+Item(string n, double xx, double yy) {name=n; x=xx; y=yy;}
+void clearSlot() {if(slot>=0) pool.destroy_sound(slot); slot=-1;}
+bool is_char() {return false;}
+}
+class Char : Item {
+double hp=10;
+string[] inv, weapons;
+int weapon=0;
+double speed=1.0, agility=1.0;
+bool male;
+Char() {}
+bool is_char() {return true;}
+}
+
+Item@[] items;

@@ -1,0 +1,142 @@
+
+ const int wait=0, north=1, south=2, east=3, west=4, up=5, down=6, talk=7, attack=8, get_item=9, drop_item=10, use_item=11;
+
+ class Char {
+ string name;
+ Room@ gloc;
+ int state;
+ string skill;
+ bool alive;
+ bool male;
+
+ Char() {
+ buildName();
+
+ state=wait;
+ // initialize skills.
+ alive=true;
+ male=(random(0, 1)==1);
+ item="";
+
+}
+ // Constructs a name from random kana / kanji.
+ // These are not meant to represent realistic Japanese names accurately, just get vaguely close.
+ void buildName() {
+string[] kana= {
+"a", "i", "u", "e", "o",
+"ka", "ki", "ku", "ke", "ko",
+"ga", "gi", "gu", "ge", "go",
+"sa", "shi", "su", "se", "so",
+"ta", "chi", "tsu", "te", "to",
+"ra", "ri", "ru", "re", "ro",
+"za", "ji", "zu", "ze", "zo",
+"da", "ji", "dzu", "de", "do",
+"ha", "hi", "hu", "he", "ho",
+"ba", "bi", "bu", "be", "bo",
+"pa", "pi", "pu", "pe", "po",
+"ma", "mi", "mu", "me", "mo",
+"na", "ni", "nu", "ne", "no",
+"wa", "n\'", "ya", "yu", "yo"
+ };
+string nam="";
+ int size=1+random(0, 3);
+for(int i=0; i<size; i++) {
+ string k=kana[random(0, kana.length()-1)];
+ if((k==("n\'"))&&((i==0)||(string_contains(name, "n\'", 1)>=0))) k=kana[random(0, kana.length()-5)];
+  nam=nam + k;
+}
+
+// if(nam.length()>1) nam=nam.substring(0, 1).toUpperCase() + nam.substring(1, nam.length()); else nam=nam.toUpperCase();
+
+ name=nam;
+
+ }// Build Name.
+
+string item;
+ void setGloc(Room@ r) {
+ if(@gloc!=null) gloc.remove(this);
+ @gloc=r;
+ if(@gloc!=null) gloc.add(this);
+ }
+
+ void step() {
+
+ switch (state) {
+ case north :
+ case south :
+ case east :
+ case west :
+ case up :
+ case down : {
+ if((@gloc!=null)&&(gloc.hasExit(state))) {
+ gloc.addSound(gloc.steps, state);
+setGloc(gloc.getExit(state));
+ gloc.addSound(gloc.steps, -state);
+ }
+ }; break;
+ default : {
+ ; // Um.
+ }
+ }// Meh.
+
+ }// A single tick.
+
+ }// Eh.
+
+ class Room {
+ string steps;
+ string name;
+ string desc;
+ string[] items;
+ Char@[] people;
+ Room@[] exits;
+ string[] sounds;
+ int[] soundPoints;
+ int decay; // How much sound can filter out of this room into neighboring rooms.
+
+ Room(string n, string d) {
+name=n;
+ desc=d;
+ steps="sfx/carpetstep3.wav";
+ decay=-15;
+}
+
+ void add(Char@ me) {people.insert_last(me);}
+ void addItem(string it) {items.insert_last(it);}
+ void remove(Char@ me) {
+ for(uint i=0; i<people.length(); i++) {if(@people[i]==@me) people.remove_at(i);}
+}
+ void addSound(string snd, int pnt) {
+ sounds.insert_last(snd); soundPoints.insert_last(pnt);
+ }
+ bool hasExit(int ex) {
+ uint ch=0; ch+=ex-1;
+ if((ex<0)||(ch>=exits.length())||(@exits[ch]==null)) return false;
+ return true;
+ }
+ Room@ getExit(int ex) {
+ uint ch=0; ch+=ex-1;
+ return exits[ch];
+ }// GetExit.
+
+ }
+
+ void addNorthsouth(Room@ onnorth, Room@ onsouth) {
+ if(onnorth.exits.length()<south) onnorth.exits.resize(south);
+ @(onnorth.exits[south-1])=onsouth;
+ if(onsouth.exits.length()<north) onsouth.exits.resize(north);
+ @(onsouth.exits[north-1])=onnorth;
+ }
+
+ void addEastwest(Room@ onnorth, Room@ onsouth) {
+ if(onnorth.exits.length()<east) onnorth.exits.resize(east);
+ @(onnorth.exits[east-1])=onsouth;
+ if(onsouth.exits.length()<west) onsouth.exits.resize(west);
+ @(onsouth.exits[west-1])=onnorth;
+ }
+ void addUpdown(Room@ onnorth, Room@ onsouth) {
+ if(onnorth.exits.length()<down) onnorth.exits.resize(down);
+ @(onnorth.exits[down-1])=onsouth;
+ if(onsouth.exits.length()<up) onsouth.exits.resize(up);
+ @(onsouth.exits[up-1])=onnorth;
+ }

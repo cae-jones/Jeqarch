@@ -1,0 +1,738 @@
+#include "sound_pool.bgt";
+
+ // Constants for maps:
+ const int clear=0, tree=1, water=2, deepWater=3, fire=4, campsite=5, castle_room=6, castle_wall=7, broken_wall=8, courtyard=9, boulder=10, hole=11, boat=12, horse=13, house=14, garden=15;
+
+ // State constants:
+ const int standing=0, attacking=1, preparing=2, walking=3, sepuku=4, recovering=5, greeting=8, rejecting=9, talking=10, agreeing=11, requesting=12;
+
+ // Rank constants:
+ const int SHOGUN=1, DAIMYOU=2, SAMURAI=3, SHINOBI=4, CIVIL=5, RONAN=6;
+
+ class Point {
+ int x; int y;
+ Point() {x=0; y=0;}
+ Point(int xx, int yy) {x=xx; y=yy;}
+ }// Point.
+
+
+ class Map {
+
+// string[][] map; // Specific tyle definitions.
+ int[][] map;
+ string type; // Type of terrain. Legal values are "mountains", "planes", and "ocean".
+
+ string[] items; Point@[] itemPositions;
+ Char@[] chars; // All people on this map.
+
+ int width; int height; // Dimentions of this map.
+ Map() {}
+ Map(uint w, uint h, string ter) {type=ter;
+ width=w; height=h;
+ map.resize(w);
+ for(uint i=0; i<w; i++) {map[i].resize(h);
+ for(uint j=0; j<h; j++) {
+ map[i][j]=clear; // Default, empty space.
+ // The types of tyles we are randomly to find vary based on terrain.
+ // First thing's first:
+ if(type=="ocean") map[i][j]=deepWater;
+ else {
+ // Add random natural elements. Human construction can build over these if necessary.
+
+
+ // Mountains will have more obstructing elements, such as holes and boulders.
+ // Planes will generally have less scenery by default, but mostly trees, ponds and wild vegetables.
+ int rand=random(0, 15);
+ switch (rand) {
+ case 12 :
+ case 2 : map[i][j]=tree; break;
+ case 9 :
+ case 6 : {
+ if(type=="mountains") map[i][j]=boulder;
+ else map[i][j]=water;
+ }; break;
+ case 8 :
+ case 4 : {
+ if(type=="mountains") map[i][j]=hole;
+ else map[i][j]=garden;
+ }; break;
+ case 3 : {if(type=="mountains") map[i][j]=water;}; break;
+
+ }// Switch.
+ } // Planes or mountains.
+ }// Initializing individual spaces.
+ }// Initialize map.
+}
+
+ void addItem(string it, Point@ p ) {
+ items.insert_last(it); itemPositions.insert_last(p);
+ }// Add Item.
+
+ void add(Char@ me) {chars.insert_last(me);}
+ int indexOf(Char@ me) {
+ int ret=-1;
+ for(uint i=0; i<chars.length(); i++) {
+ if(@(chars[i])==@me) {ret=i; i=chars.length();}
+ }//
+ return ret;
+ } // Finding characters in a map.
+ void remove(Char@ me) {
+ int index=indexOf(me);
+ if(index>=0) chars.remove_at(index);
+ }// Removing a character from a map.
+ string weather;
+
+ // 3:39 AM 6/17/2011: Environmental sounds aren't working right.
+ // Instead of playing them as needed, I'll set them to play looped, but something has to keep track of them.
+ // This is the best way I can come up with.
+ Point@[] envpoints;
+ int[] envslots;
+ void destroyEnvSound(sound_pool@ pool, int slot) {
+ pool.destroy_sound(envslots[slot]);
+ envslots.remove_at(slot); envpoints.remove_at(slot);
+}
+ void destroyEnvSound(sound_pool@ pool, int x, int y) {
+ for(uint i=0; i<envpoints.length(); i++) {if((envpoints[i].x==x)&&(envpoints[i].y==y)) destroyEnvSound(pool, i);}
+
+ }
+ void playEnvSound(sound_pool@ pool, string fn, int camX, int camY, int x, int y, bool looping) {
+ Point p(x, y);
+ int slot=-1;
+ for(uint i=0; i<envpoints.length(); i++) {
+ if((envpoints[i].x==x)&&(envpoints[i].y==y)) {slot=envslots[i]; i=envpoints.length();}
+}
+ if(slot<0) {
+ slot=pool.play_2d(fn, camX, camY, x, y, looping);
+ if(slot==-1) return; // Don't even bother with a broken sound.
+// if(envpoints.length()>10) alert("Error", "Too many envsounds at once. Slot is " + slot + " after trying to play " + fn + ".");
+ if(envpoints.length()>=32) {
+ for(uint i=0; i<envpoints.length(); i++) {
+ if((absolute(envpoints[i].x-x)>=6)||(absolute(envpoints[i].y-y)>=6)) {
+ destroyEnvSound(pool, i); i--; continue;
+ }// Out of range, kill it to avoid lag.
+ }// Find obsolete sounds and destroy them.
+ }// Trying to cut down on how many of these can play at once.
+ envpoints.insert_last(p); envslots.insert_last(slot);
+ }// Need to add it.
+ else {
+
+ }// Make sure it's still playing...?
+ }// Ouch.
+ }
+
+
+ class Char {
+
+ int fatigue_sound;
+
+ string name; // Used only to help players identify specific characters.
+ Char@ shogun; // The shogun to whom this character is loyal.
+ Char@ daimyou; // the daimyou to whom this character is loyal.
+ int x; int y;
+ string orders;
+ int state;
+ int rank; // Legal values are shogun, daimyou, samurai, shinobi, ronan, or civilian.
+ uint weapon;
+ string[] inv; // For additional items. Items that can replace default equipment automatically do so and are not included in inventory.
+ double counter;
+
+ double hp; // We generally expect one-hit kills, but that isn't always going to be the case. HP can help simulate armor or shields as well.
+ bool hasShield;
+ bool hasArmor;
+ int arrows; // For both yumi and rocket-arrows.
+ double food; // People can starve.
+ // I feel like it's a waste to include more variables for weapons specific to Shinobi, so I'll limit your ammo for each:
+ int ninjaAmmo; // Max of 16 for each weapon, so I can specify it with hexadecimal.
+
+ double fatigue; // Increases with energetic activity, such as traveling, building or fighting.
+ Map@ gloc;
+ string[] weapons; // -_-
+ string face;
+ bool male;
+
+ Char(int r) {rank=r;
+ buildName();
+ // Initialize variables:
+ x=0; y=0;
+ orders="none";
+ state=standing;
+ weapon=0;
+ counter=0.0;
+ hp=10.0;
+ hasShield=((rank==SHOGUN)||((random(0, 8)>=4)&&(rank==SAMURAI)));
+ hasArmor=((rank==SAMURAI)||(rank==SHOGUN)||((random(0, 10)>5)&&((rank==DAIMYOU)||(rank==RONAN))));
+ if((rank!=CIVIL)&&(rank!=DAIMYOU)) arrows=random(2, 20);
+ else arrows=0;
+ food=100.0; // To make things easier, let's have everyone start out full.
+ ninjaAmmo=0; if(rank==SHINOBI) ninjaAmmo=0x2888;
+ riding=false; hiding=false; climbing=false;
+ fatigue=0.0;
+ face="e";
+ if(rank!=CIVIL) weapons.insert_last("katana");
+ if(rank==DAIMYOU) weapons.insert_last("tanto");
+ else if(rank==CIVIL) {
+ string[] items={"tanto", "jo", "bo", "net", "sushi", "yasai", "kudamono", "ihatsu", "woodaxe", "Hammer"};
+ int inum=random(0, 3);
+ for(int ix=0; ix<inum; ix++) getItem(items[random(0, items.length()-1)]);
+ }// Civilians.
+ else if(rank!=SHINOBI) {
+ weapons.insert_last("wakazushi");
+ weapons.insert_last("yumi");
+ weapons.insert_last("kanabo");
+ }
+ else {
+ weapons.insert_last("kunai");
+ weapons.insert_last("shuriken");
+ weapons.insert_last("blow-dart");
+ weapons.insert_last("rocket-bow");
+ weapons.insert_last("black-egg");
+ }// Shinobi weapons.
+ if((rank!=CIVIL)&&(rank!=SHINOBI)) weapons.insert_last("naginata");
+
+ if((rank==CIVIL)||(rank==SHINOBI)||(rank==DAIMYOU)) male=(random(0, 10)>=5);
+ else male=(random(0, 20)!=9);
+ charged=0.0;
+ blocked=false;
+ fatigue_sound=-1;
+ @target=null;
+ @destination=null;
+ @love=null;
+ }// Constructor.
+ double charged;
+ Point base;
+ // Constructs a name from random kana / kanji.
+ // These are not meant to represent realistic Japanese names accurately, just get vaguely close.
+ void buildName() {
+string[] kana= {
+"a", "i", "u", "e", "o",
+"ka", "ki", "ku", "ke", "ko",
+"ga", "gi", "gu", "ge", "go",
+"sa", "shi", "su", "se", "so",
+"ta", "chi", "tsu", "te", "to",
+"ra", "ri", "ru", "re", "ro",
+"za", "ji", "zu", "ze", "zo",
+"da", "ji", "dzu", "de", "do",
+"ha", "hi", "hu", "he", "ho",
+"ba", "bi", "bu", "be", "bo",
+"pa", "pi", "pu", "pe", "po",
+"ma", "mi", "mu", "me", "mo",
+"na", "ni", "nu", "ne", "no",
+"wa", "n\'", "ya", "yu", "yo"
+ };
+string nam="";
+ int size=1+random(0, 3);
+for(int i=0; i<size; i++) {
+ string k=kana[random(0, kana.length()-1)];
+ if((k==("n\'"))&&((i==0)||(string_contains(name, "n\'", 1)>=0))) k=kana[random(0, kana.length()-5)];
+  nam=nam + k;
+}
+
+// if(nam.length()>1) nam=nam.substring(0, 1).toUpperCase() + nam.substring(1, nam.length()); else nam=nam.toUpperCase();
+
+ name=nam;
+
+ }// Build Name.
+ string[] sounds;
+ void getItem(string str) {
+
+ // If it's a weapon, add it to weapons, otherwise add it to inventory.
+ if((str=="katana")||(str=="naginata")||(str=="yumi")||(str=="tanto")||(str=="wakazushi")||(str=="jo")||(str=="bo")||(str=="rocket-bow")||(str=="kanabo")||(str=="arcbus")||(str=="empty arcbus")||(str=="kusurigami")||(str=="woodaxe")) {
+ // Redundant weapons need to go into inventory; if the weapon is lost, the extra can be dropped and wielded.
+ bool arm=true;
+ for(uint i=0; i<weapons.length(); i++) {if(weapons[i]==str) arm=false;}
+if(arm) weapons.insert_last(str); else inv.insert_last(str);
+}
+ else if((rank==SHINOBI)&&((str=="shuriken")||(str=="kunai")||(str=="blow-dart")||(str=="black-egg"))) {
+ if(str=="shuriken") 
+ { if( (ninjaAmmo&0xF0)<0x80) ninjaAmmo|=0x80; else ninjaAmmo|=0x70;} // If you have less than 8, you gain 8, otherwise you max out.
+ else if(str=="kunai") ninjaAmmo|=0x7; // Kunai are valueable enough that I don't mind this restriction.
+ else if(str=="blow-dart") ninjaAmmo|=0x700;
+ else if(str=="black-egg") {if((ninjaAmmo&0xF000)==0x3000) ninjaAmmo|=0x7000; else ninjaAmmo|=0x3000;}
+ }// Shinobi get these.
+ else if(str=="shield") hasShield=true;
+ else if(str=="armor") hasArmor=true;
+ else if(str=="ihatsu") {
+ if((rank==SHINOBI)||(rank==CIVIL)) {
+ bool armed=false;
+ for(uint i=0; i<weapons.length(); i++) {if(weapons[i]==str) armed=true;}
+ if(armed) inv.insert_last(str); else weapons.insert_last(str);
+}// Try to use it as a weapon, otherwise...
+ else inv.insert_last(str);
+}// Monk's bowl.
+ else if(string_contains(str, "arrow", 1)>=0) {int a=string_to_number(str); if(a<1) a=1; arrows+=a;}
+
+ else inv.insert_last(str);
+ }// Get Item.
+ bool setState(int s) {
+
+ // When can't you set state?
+ if((state==attacking)||(state==recovering)||(state==s)) return false;
+ // Most other things can be interrupted. Technically, so can these, but they're always handled by the program and not the user.
+ state=s;
+ if(state==preparing) {
+ charged=0.0;
+ // Sound for starting.
+
+if((@gloc!=null)&&(x>=0)&&(x<50)&&(y>=0)&&(y<50)&&(gloc.map[x][y]==deepWater)&&(random(0, 5)<3)) sounds.insert_last("sfx/waterstrike0.wav");
+
+ if(weapon>=weapons.length()) {
+ // I don't think we have a sound for this?
+ if(random(0, 3)==1) sounds.insert_last("sfx/whoosh8.wav");
+}// Unarmed combat.
+else  if((weapons[weapon]=="yumi")||(weapons[weapon]=="rocket-bow")) {
+ sounds.insert_last("sfx/drawbow" + random(1, 2) + ".wav");
+ }// Drawing a bow.
+ else if(weapons[weapon]=="ihatsu") {counter=1.0; state=attacking;}
+ else if((rank!=SHINOBI)&&(weapons[weapon]!="arcbus")) {
+ string toplay="voice/kiai_";
+ if(male) toplay = toplay + "m"; else toplay = toplay + "f";
+ toplay = toplay + "" + random(0, 9) + ".wav";
+ sounds.insert_last(toplay);
+ }// Battlecries.
+ counter=1.0;
+ }// Preparing to attack.
+ else if(state==attacking) {
+ // Fatigue, the size of the weapon and one's mastery over it determines how long this takes.
+
+ if(weapon>=weapons.length()) {
+ counter=0.1*random(1,3);
+ if(random(0, 4)==2) sounds.insert_last("sfx/whoosh8.wav");
+ }// Unarmed.
+ else if((weapons[weapon]=="yumi")||(weapons[weapon]=="rocket-bow")) {counter=0.2;
+ if(arrows>0) {
+ if(weapons[weapon]=="yumi") sounds.insert_last("sfx/bow" + random(1, 3) + ".wav");
+ else sounds.insert_last("sfx/rocket.wav");
+ arrows--;
+ }// Yeah. Ammo check.
+ else state=standing;
+ }// Arrows.
+ else {
+ if(weapons[weapon]=="kanabo") {counter=0.75; if((rank==DAIMYOU)||(rank==CIVIL)) counter=1.0;
+ sounds.insert_last("sfx/zstaff" + random(1, 5) + ".wav");
+ }// Kanabo.
+ else if(weapons[weapon]=="kunai") {
+ // Make sure one has kunai to use!
+ if((ninjaAmmo&0xF)==0) {state=standing; counter=0.0; return false;}
+ if((charged>0.5)||(rank!=SHINOBI)) counter=0.25;
+ else counter=0.15;
+ // What sound should kunai make when used?
+ }// Kunai.
+ else if((weapons[weapon]=="wakazushi")||(weapons[weapon]=="tanto")) {
+ counter=0.25;
+ string[] mallets={
+ "sfx/malletLeftSide1.wav",
+ "sfx/malletLeftUp1.wav",
+ "sfx/malletRightSide1.wav",
+ "sfx/malletRightUp1.wav"
+ };
+ sounds.insert_last(mallets[random(0, mallets.length()-1)]);
+ }// Daggers.
+ else if(weapons[weapon]=="black-egg") {
+ if((ninjaAmmo&0xF000)==0) {state=standing; counter=0.0; return false;}
+
+counter=0.1; sounds.insert_last("sfx/icebreak" + random(0, 5) + ".ogg");}
+ else if(weapons[weapon]=="jo") {counter=0.2; sounds.insert_last("sfx/staff" + random(1, 4) + ".wav");}
+ else if((weapons[weapon]=="arcbus")&&(charged<0.4)) {
+ counter=0.075;
+ sounds.insert_last("sfx/shot.wav");
+}
+ else if(weapons[weapon]=="kusurigami") {
+ counter=0.1*random(5, 8);
+ sounds.insert_last("sfx/bo" + random(1, 6) + ".wav"); // ...
+ }// Kusurigami.
+ else {
+ counter=0.3;
+ if(weapons[weapon]=="naginata") sounds.insert_last("sfx/thrust.wav");
+ sounds.insert_last("sfx/" + weapons[weapon] + random(1, 6) + ".wav"); // ...
+ }// Katana.
+
+ counter*=1.0+(0.015*fatigue);
+ }// Fatigue matters if it isn't a projectile.
+if((@gloc!=null)&&(x>=0)&&(x<50)&&(y>=0)&&(y<50)&&(gloc.map[x][y]==deepWater)&&(random(0, 5)<3)) {sounds.insert_last("sfx/waterstrike0.wav"); counter*=1.0+(0.1*random(0, 6));}
+ blocked=false;
+ }// Attacking.
+ else if(state==walking) {counter=0.3*(1.0+(0.01*fatigue));
+ if(@gloc!=null) {
+ // figure out which direction we're going.
+ Point p(x, y);
+ if(face=="n") p.y--;
+ else if(face=="ne") {p.x++; p.y--;}
+ else if(face=="e") p.x++;
+ else if(face=="se") {p.x++; p.y++;}
+ else if(face=="s") p.y++;
+ else if(face=="sw") {p.y++; p.x--;}
+ else if(face=="w") p.x--;
+ else {p.x--; p.y--;} 
+ int cur=clear; int next=clear;
+ int chx=0; chx+=x; int chy=0; chy+=y;
+ if((x<0)||(y<0)||(chx>=gloc.width)||(chy>=gloc.height)) {cur=cur;}
+ else cur=gloc.map[x][y];
+ chx=0; chx+=p.x; chy=0; chy+=p.y;
+ if((p.x>=0)&&(chx<gloc.width)&&(p.y>=0)&&(chy<gloc.height)) next=gloc.map[p.x][p.y];
+ string toplay="sfx/";
+ if(gloc.weather=="snow") toplay += "snowstep1.wav";
+ else if(gloc.type=="planes") toplay += "grasssteps4.wav";
+ else if(gloc.type=="ocean") toplay += "pikkonsteps2.wav";
+ else toplay += "dirtstep1.wav";
+ if(riding) {
+ if((cur!=boat)&&(cur!=horse)) {
+ if(cur==deepWater) {
+ // Doo a sweep of the spaces surrounding the character to prevent falling.
+ // I have an omenous feeling, though, that this isn't always going to work.
+  for(int xx=x-1; xx<x+2; xx++) {for(int yy=y-1; yy<y+2; yy++) {
+ if((xx<0)||(xx>49)||(yy<0)||(yy>49)) continue;
+ else if(gloc.map[xx][yy]==boat) {x=xx; y=yy; xx=50; yy=50;}
+}}// Loop.
+ }// To make it possible to have multiple people riding in one boat.
+
+ else {
+ toplay="sfx/";
+ if(cur==clear) {
+ if(gloc.weather=="snow") toplay += "snowland" + random(1, 2) + ".wav";
+ else if(gloc.type=="planes") toplay+="grassland2.wav";
+ else if(gloc.type=="ocean") toplay += "pikkonland2.wav";
+ else toplay += "dirtland3.wav";
+ }
+ else {
+ if(cur==tree) toplay += "hardleafland.wav";
+ else if(cur==hole) {toplay += "whoosh1.wav"; state=recovering; counter=0.2+(0.01*fatigue); sounds.insert_last(toplay); toplay="voice/hit_"; if(male) toplay += "m"; else toplay += "f"; sounds.insert_last(toplay + ".wav"); riding=false; return false;}
+ // And so on and so forth.
+ }
+ sounds.insert_last(toplay);
+ state=standing; counter=0.0;; riding=false;
+ }// Falling.
+ }// You can only ride horses or boats.
+ else {
+ counter=0.15;
+ if((cur==horse)&&(next!=clear)&&(next!=garden)&&(next!=water)) {counter=0.0; sounds.insert_last("sfx/collide4-brickwall.ogg"); state=standing;}
+ else if((cur==boat)&&(next!=deepWater)) {counter=0.0; sounds.insert_last("sfx/collide4-brickwall.ogg"); state=standing;}
+ else if(cur==horse) sounds.insert_last("sfx/Gallop.WAV");
+ else sounds.insert_last("waterwake2.ogg");
+ }// Yeah.
+ }// Riding.
+ else if((next==castle_wall)||(next==broken_wall)) {
+ if((climbing)||(next==broken_wall)) {
+ // Actually, I don't think we need to worry about this until the end.
+ // But use woodstep2.
+ }// You can walk on walls under some circumstances.
+ else {state=standing; counter=0.25; sounds.insert_last("sfx/collide2-wall.wav");}
+ }// You generally can't travel through walls.
+ else if((cur==tree)||(next==tree)) {
+ counter+=0.25;
+ if(cur==tree) sounds.insert_last("sfx/leafstep1.ogg");
+ else sounds.insert_last(toplay);
+ }// Trees.
+ else if(cur==garden) sounds.insert_last("sfx/grasssteps3_.wav");
+ // Holes.
+ else if((cur==hole)&&(rank!=SHINOBI)) {
+ sounds.insert_last("sfx/rockstep1.wav");
+ counter+=0.25; // You have to climb out of a hole.
+ }// Shinobi don't have trouble with holes.
+ // Water.
+ else if(cur==water) {if(gloc.weather=="snow") sounds.insert_last("sfx/icestep" + random(1, 2) + ".ogg"); else sounds.insert_last("sfx/waterwalk1.wav");}
+ // Deep water.
+ else if(cur==deepWater) {
+ fatigue++;
+ sounds.insert_last("sfx/watertwirl1.ogg");
+ if(hasShield) {hasShield=false; sounds.insert_last("sfx/drip" + random(1, 3) + ".ogg");}
+ if(hasArmor) {fatigue+=0.5; counter=0.5;}
+ }// Deep water.
+ // Boulders.
+ else if(cur==boulder) sounds.insert_last("sfx/concretesteps2.wav");
+ else if(next==boulder) {
+ // So, some things prevent you from crossing boulders:
+ if((hasShield)||((rank!=SHINOBI)&&(random(0, 10)<5))) {state=recovering; sounds.insert_last("sfx/collide3-brickwall.ogg"); counter=0.5;}
+ else {
+ if(rank!=SHINOBI) counter+=0.25+(0.01*fatigue); // This could top out around 2.5 or 3 seconds...
+ // Something else? Like sound?
+ sounds.insert_last(toplay);
+ }// You manage to climb over the boulder.
+ }// Boulders can be annoying.
+ // Various parts of castles and villages and camps...
+ else if(cur==house) sounds.insert_last("sfx/woodstep3.wav");
+ else if(cur==courtyard) sounds.insert_last("sfx/cementstep" + random(1, 2) + ".wav");
+ else if(cur==castle_room) sounds.insert_last("sfx/squeakystep" + random(1, 2) + ".ogg");
+ else if(cur==campsite) sounds.insert_last("sfx/dirtstep2.wav");
+ else sounds.insert_last(toplay);
+ }// You have to be somewhere...
+ else {sounds.insert_last("sfx/dirtstep1.wav");}
+
+
+}
+ else if(state==greeting) {
+  string toplay="voice/greeting" + random(0, 2) + "";
+ if(male) toplay += "m"; else toplay += "f";
+ toplay += ".wav";
+ sounds.insert_last(toplay);
+ counter=1.5;
+ }
+ else if((state==talking)||(state==rejecting)||(state==requesting)||(state==agreeing)) {
+ counter=2.0;
+// Umm, sound?
+ string toplay="voice/" + state + "_" + random(0, 2) + "" + ((male) ? "m" : "f" ) + ".wav";
+ if(state==talking) {
+ toplay="voice/" + (gloc.weather) + (random(0, 2)) + "" + ( (male) ? "m" : "f" ) + ".wav";
+ }// Weather-specific stuff.
+ sounds.insert_last(toplay);
+ }
+ else if(state==standing) counter=0.0;
+// else if(state=="running") {counter=0.15*(1.0+(0.01*fatigue));}
+ 
+ return state==s;
+ }// SetState.
+ bool riding; bool hiding; bool climbing;
+ bool blocked; // Grr.
+ Char@ target; // This seems dangerous.
+ Char@ love; // LMAO...
+ Point@ destination; // Because one isn't always looking for a specific individual.
+ string stateString() {
+ string ret="standing";
+ switch (state) {
+ case walking : ret="walking"; break;
+ case preparing : ret="preparing to attack"; break;
+ case attacking : ret="attacking"; break;
+ case recovering : ret="recovering"; break;
+ case sepuku : ret="committing sepuku"; break;
+ case greeting : ret="greeting"; break;
+ case rejecting : ret="rejecting"; break;
+ case talking : ret="talking"; break;
+ case agreeing : ret="agreeing"; break;
+ case requesting : ret="making a request"; break;
+ }
+ return ret;
+ }// State String.
+ string rankString() {
+ string ret="a ";
+ if(male) ret += "man"; else ret += "woman";
+ switch (rank) {
+ case SHOGUN : ret="shogun"; break;
+ case DAIMYOU : ret="daimyou"; break;
+ case SAMURAI : ret="samurai"; break;
+ case SHINOBI : ret="shinobi"; break;
+ case CIVIL : ret="civilian"; break;
+ case RONAN : ret="ronan"; break;
+ }
+ return ret;
+ }// Rank String.
+
+ }
+
+
+ // For multiplayer.
+ // Constants for errors.
+ const int already_exists=-2, cannot_create=-1, invalid_password=-3;
+
+ class Account {
+
+ string name; // The username.
+ string password;
+ int id; // Assigned by the server.
+ Char@[] army;
+ uint mychar;
+ // The army only contains characters directly under your control? I'm not sure, exactly.
+ string[] inbox;
+ string[] outbox;
+
+ Account() {
+ id=cannot_create;
+ name=""; password="";
+ mychar=0;
+  }
+
+ string saveString(Map[][] map) {
+ string m="save, " + id + ", |";
+ for(uint i=0; i<army.length(); i++) { 
+ // Figure out the map that we're in.
+ Char@ me; @me=army[i];
+ uint x=0; uint y=0;
+ for(uint xx=0; xx<map.length(); xx++) {
+ for(uint yy=0; yy<map[xx].length(); yy++) {
+ if(@(me.gloc)==@(map[xx][yy])) {x=xx; y=yy;}
+}
+}
+ m += "|\n" + me.name + "\n" + me.male + "\n";
+ m+= "[pose]\n" + me.x + ", " + me.y + "\n";
+ m += "[district]\n" + x + ", " + y + "\n";
+// if(@(me.shogun)==@(myArmy[0])) m += "[army]\n";
+ m += "[orders]\n" + me.orders + "\n";
+ m += "[state]\n" + me.state + "\n";
+ m += "[rank]\n" + me.rank + "\n";
+ m += "[weapon]\n" + me.weapon + "\n";
+ m += "[inv]\n";
+ for(uint j=0; j<me.inv.length(); j++) {m += me.inv[j]; if(j<me.inv.length()-1) m += ", ";}
+ if(me.inv.length()==0) m += "paper fan";
+ m += "\n";
+  m += "[counter]\n" + me.counter + "\n[hp]\n" + me.hp + "\n[fatigue]\n" + me.fatigue + "\n";
+ if(me.hasShield) m += "[shield]\n"; if(me.hasArmor) m += "[armor]\n";
+ m += "[arrows]\n" + me.arrows + "\n";
+ m += "[food]\n" + me.food + "\n";
+ m += "[ninjaAmmo]\n" + me.ninjaAmmo + "\n";
+ m += "[weapons]\n";
+ for(uint j=0; j<me.weapons.length(); j++) {m += me.weapons[j]; if(j<me.weapons.length()-1) m += ", ";}
+ if(me.weapons.length()==0) m += "woodaxe\n";
+ m += "\n";
+ m += "[face]\n" + me.face + "\n";
+ if(me.riding) m += "[riding]\n"; if(me.hiding) m += "[hiding]\n"; if(me.climbing) m += "[climbing]\n";
+
+ m += "[charged]\n" + me.charged + "\n";
+ if(me.blocked) m += "[blocked]\n";
+ if(@(me.destination)!=null) m += "[destination]\n" + me.destination.x + ", " + me.destination.y + "\n";
+ if(@(me.base)!=null) m += "[base]\n" + me.base.x + ", " + me.base.y + "\n";
+ if(me.sounds.length()>0) {
+ m += "[sounds]\n";
+ for(uint j=0; j<me.sounds.length(); j++) {m += me.sounds[j]; if(j<me.sounds.length()-1) m += ", ";}
+ m += "\n";
+ }// Sounds.
+
+ // Save daimyou and shogun for last.
+ if(@(me.shogun)!=null) {
+ m += "[shogun]\n";
+/* for(uint x2=0; x2<map.length(); x2++) {
+ for(uint y2=0; y2<map[x2].length(); y2++) {
+  if(@(me.shogun.gloc)==@(map[x2][y2])) {
+ m += "" + x2 + ", " + y2 + ", ";
+ for(uint j=0; j<map[x2][y2].chars.length(); j++) {
+ if(@(map[x2][y2].chars[j])==@(me.shogun)) {m += "" + j + "\n"; j=map[x2][y2].chars.length();}
+ }// Find them.
+ }// Found.
+ 
+ }}// Loop.
+*/
+ for(uint x2=0; x2<army.length(); x2++) {if(@(army[x2])==@(me.shogun)) {m += "" + x2 + "\n"; x2=army.length();}}
+ }// Gah.
+
+ if(@(me.daimyou)!=null) {
+ m += "[daimyou]\n";
+ for(uint x2=0; x2<army.length(); x2++) {if(@(army[x2])==@(me.daimyou)) {m += "" + x2 + "\n"; x2=army.length();}}
+ }// Gah.
+
+
+ // And target...
+ if(@(me.target)!=null) {
+ m += "[target]\n";
+ for(uint x2=0; x2<map.length(); x2++) {
+ for(uint y2=0; y2<map[x2].length(); y2++) {
+  if(@(me.target.gloc)==@(map[x2][y2])) {
+ m += "" + x2 + ", " + y2 + ", ";
+ for(uint j=0; j<map[x2][y2].chars.length(); j++) {
+ if(@(map[x2][y2].chars[j])==@(me.target)) {m += "" + j + "\n"; j=map[x2][y2].chars.length();}
+ }// Find them.
+ }// Found.
+ 
+ }}// Loop.
+ }// Gah.
+
+
+ // and love.
+ if(@(me.love)!=null) {
+ m += "[love]\n";
+ for(uint x2=0; x2<map.length(); x2++) {
+ for(uint y2=0; y2<map[x2].length(); y2++) {
+  if(@(me.love.gloc)==@(map[x2][y2])) {
+ m += "" + x2 + ", " + y2 + ", ";
+ for(uint j=0; j<map[x2][y2].chars.length(); j++) {
+ if(@(map[x2][y2].chars[j])==@(me.love)) {m += "" + j + "\n"; j=map[x2][y2].chars.length();}
+ }// Find them.
+ }// Found.
+ 
+ }}// Loop.
+ }// Gah.
+
+
+}// Each character.
+ return m;
+ }// Save string.
+ void loadString(string txt, Map[][] map) {
+ army.resize(0);
+ string[] chartext=string_split(txt, "|", true);
+ for(uint i=1; i<chartext.length(); i++) {
+ string[] mlines=string_split(chartext[i], "\n", true);
+ if(mlines.length()<2) {
+ alert("Error", "Received a bad packet from server:\n" + chartext[i]);
+ clipboard_copy_text(chartext[i]);
+ continue;
+ }// Error.
+ Char@ me;
+ Char temp(-1); @me=temp;
+
+ me.name=mlines[0];
+ me.male=(mlines[1]=="1"); // I think that's how that work. Would be weird to swap genders on loading.
+// bool addToArmy=false; // Boolean, because rank definition comes after the army check, and the shogun must be in slot 0.
+ uint xx=0; uint yy=0;
+ for(uint k=2; k<mlines.length(); k++) {
+ bool inc2=true;
+ if(mlines[k]=="[pose]") {
+ string[] parts=string_split(mlines[k+1], ", ", true);
+ Point point(string_to_number(parts[0]), string_to_number(parts[1]));
+// @(me.pose)=point;
+ me.x=point.x; me.y=point.y;
+ }
+// else if(mlines[k]=="[army]") {addToArmy=true; inc2=false;}
+ else if(mlines[k]=="[district]") {
+ string[] parts=string_split(mlines[k+1], ", ", true);
+ xx=string_to_number(parts[0]); yy=string_to_number(parts[1]);
+ if(xx>=map.length()) xx=random(0, map.length()-1);
+ if(yy>=map[xx].length()) yy=random(0, map[xx].length()-1);
+
+}// District.
+ else if(mlines[k]=="[orders]") me.orders=mlines[k+1];
+ else if(mlines[k]=="[state]") me.state=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[rank]") me.rank=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[weapon]") me.weapon=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[inv]") {
+ if(mlines[k+1][0]=="[") {
+ // No inv to speak of.
+ inc2=false;
+ }
+ else me.inv=string_split(mlines[k+1], ", ", true);
+ }// Inv.
+ else if(mlines[k]=="[counter]") me.counter=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[hp]") me.hp=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[fatigue]") me.fatigue=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[shield]") {me.hasShield=true; inc2=false;}
+ else if(mlines[k]=="[armor]") {me.hasArmor=true; inc2=false;}
+ else if(mlines[k]=="[arrows]") me.arrows=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[food]") me.food=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[ninjaAmmo]") me.ninjaAmmo=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[weapons]") {
+ // Make sure we're not canibalizing a face!
+ if((k<mlines.length()-1)&&(mlines[k+1].length()>0)&&(mlines[k+1][0]!="[")) me.weapons=string_split(mlines[k+1], ", ", true);
+ else inc2=false;
+ }// Weapons.
+ else if(mlines[k]=="[face]") me.face=mlines[k+1];
+ else if(mlines[k]=="[riding]") {me.riding=true; inc2=false;}
+ else if(mlines[k]=="[hiding]") {me.hiding=true; inc2=false;}
+ else if(mlines[k]=="[climbing]") {me.climbing=true; inc2=false;}
+ else if(mlines[k]=="[charged]") me.charged=string_to_number(mlines[k+1]);
+ else if(mlines[k]=="[blocked]") {me.blocked=true; inc2=false;}
+ else if((mlines[k]=="[destination]")||(mlines[k]=="[base]")) {
+ string[] parts=string_split(mlines[k+1], ", ", true);
+ Point point(string_to_number(parts[0]), string_to_number(parts[1]));
+ if(mlines[k]=="[base]") {
+(me.base)=point;}
+ else @(me.destination)=point;
+ }// Destination or base.
+ else if(mlines[k]=="[sounds]") me.sounds=string_split(mlines[k+1], ", ", true);
+ else if((mlines[k]=="[daimyou]")||(mlines[k]=="[shogun]")||(mlines[k]=="[target]")||(mlines[k]=="[love]")) {
+ int index=string_to_number(mlines[k+1]);
+ if((index<0)||(index>=army.length())) index=0; // Uh-oh!
+
+ if(mlines[k]=="[daimyou]") {
+if(army.length()==0) @(me.daimyou)=me; else @(me.daimyou)=army[index];
+}
+ else if(mlines[k]=="[shogun]") {
+if(army.length()==0) @(me.shogun)=me; else @(me.shogun)=army[index];
+}
+
+ } // Add to the postprocess list.
+ else inc2=false;
+ if(inc2) k++;
+ }// K Loop.
+// if(addToArmy) {if(me.rank==SHOGUN) myArmy.insert_at(0, me); else myArmy.insert_last(me);}
+ map[xx][yy].chars.insert_last(me); @(me.gloc)=map[xx][yy];
+ army.insert_last(me);
+
+
+ }// Chars.
+ }// Load.
+}
