@@ -1,0 +1,1337 @@
+#include "amaze.bgt"
+#include "clock.bgt"
+#include "custom_voice2.bgt"
+#include "FiniteStateMachine.bgt"
+#include "game.bgt"
+#include "JMenu2.bgt"
+#include "keyconfig.bgt"
+#include "sound_pool.bgt"
+#include "vecmath.bgt"
+#include "c:/games/kbg/include/namegen.bgt"
+
+// irrational numbers we will need:
+const double sqr2 = 0.70710678118654752440084436210485, pi = 3.1415926535897932384626433832795, pi2 = pi/2.0, pi4=pi/4.0, HALFSTEP=1.059463;
+
+enum kid_types {
+	CHILD, PET, BIKE, TOY
+};
+
+// State constants:
+const int WAIT=0, walking=1, drawing=2, charging=4, playing=8, talking=16, recovering=32, stunned=64, hiding=128, seeking=256, tagged=512, climbing=1024, sliding=2048, JUMPING=4096, DUCKING=8192;
+
+// Activity types
+enum activities {
+	WANDER, GO_TO, FOLLOW, RETURN_HOME, TAG_GAME, HIDE_SEEK, PLAY_ITEM, EXPLORE, PARTY
+};
+
+// Sound path constants
+const string sounds = "c:/my programs/jeqocon/ps2023iso/bgt/sounds/steps/", sounds2=sounds + "../../sounds2/", MHI = sounds + "../MHI/", CA = "c:/games/castaways/sounds/";
+const string Swamp = "c:/games/Swamp/Sounds/";
+
+// Possible terrains for map generation
+const string[] terrains = {"Grass", "Dirt", "Leaves", "Leaves2", "Mud", "Sand", "Water", "Wade", "Soil", "Rock"};
+const string wets = "Water Wade";
+const string hards="Concrete Cement Stone Tile Dirt Wood Bridge Plank Stairs Wood2 Metal";
+const string softs="Sand Soil Carpet Leaves Leaves2 Mud Grass";
+const string metals="Metal Metal2 Steel";
+
+// Item categories for neighborhood items
+const string[] item_categories = {"toys", "food", "tools", "gifts", "fun_weapons", "party_items", "exploration"};
+
+// Item flags
+const int TOY=1, FOOD=2, GIFT=4, FUN_WEAPON=8, PARTY_ITEM=16, EXPLORATION=32, CLIMBABLE=64;
+
+class NeighborhoodItem {
+	int flags=0;
+	int slot=-1; // Sound slot
+	int category=0; // Index for item type
+	string name="";
+	double durability=100.0; // How long item lasts
+	vector pose; // Position
+	vector v; // Velocity (for thrown items like water balloons)
+	double range=0.0; // Range for water guns, etc
+	double effect_strength=1.0; // How strong the effect is
+	string use_sound="";
+	string get_sound="";
+	
+	NeighborhoodItem() {}
+	NeighborhoodItem(string n, double x=0, double y=0, double z=0) {
+		this.name=n;
+		this.pose = vector(x, y, z);
+	}
+	
+	bool intersects(vector c, double height=1.4) {
+		vector d = c-this.pose;
+		return (absolute(d.x)<1.5 and absolute(d.y)<1.0+(height/2) and absolute(d.z)<1.5);
+	}
+	
+	bool opEquals(NeighborhoodItem@ o) {return @o == @this; }
+	bool opEquals(string n) {return (this.name==n); }
+}
+
+class Kid : FSM {
+	int slot=-1, voiceslot=-1;
+	Kid@ target=null, friend=null, leader=null, pet=null, it_target=null;
+	string name="";
+	string gender=""; // m/f for voice selection
+	int activity=WANDER;
+	int combo=0;
+	double energy=100, hunger=100, thirst=100, happiness=100;
+	vector pose;
+	double hp=100.0, maxHP=100.0, maxEnergy=100.0;
+	
+	// Status effects from KBG
+	int status_flags=0;
+	int status_time=0;
+	string status_desc="";
+	
+	// Friendship system
+	Kid@[] friends;
+	int[] friendship_levels;
+	
+	// Fun items
+	int water_balloons=0, foam_darts=0, stickers=0, candy=0, juice_boxes=0;
+	
+	NeighborhoodItem@ held_item=null;
+	NeighborhoodItem@[] inventory;
+	
+	vector home; // Home location
+	vector dest; // Destination for movement
+	vector[] path; // Pathfinding
+	int rank=CHILD; // Child, pet, bike, etc
+	
+	vector face(1,0,0); // Facing direction
+	double speed=3.0; // Movement speed
+	vector v; // Velocity
+	NeighborhoodGame@ game_ref=null;
+	
+	// Tag game variables
+	bool is_it=false;
+	bool is_hiding=false;
+	double hide_timer=0.0;
+	
+	Kid() {
+		this.gender = ((random(1, 10)>5) ? "F" : "M");
+		this.name = names[random(0, names.length()-1)];
+	}
+	
+	bool isPlayer() {
+		return (@(this.game_ref)!=null and this.game_ref.player_kid>=0 and 
+				this.game_ref.player_kid<this.game_ref.kids.length() and 
+				this.game_ref.kids[this.game_ref.player_kid] is this);
+	}
+	
+	bool onGround() {
+		if(@(this.game_ref)!=null) return this.pose.y<=this.game_ref.get_height(this.pose.x, this.pose.y, this.pose.z);
+		return this.pose.y<=0;
+	}
+	
+	void always(double dt) {
+		if(this.game_ref is null) return;
+		
+		// Movement physics (simplified from ST)
+		vector d = this.v*dt;
+		bool move = this.game_ref.is_clear(this.pose+d);
+		
+		if(move) {
+			this.pose = this.pose+d;
+		} else {
+			if(this.v.x==0 and this.v.z==0 and this.v.y==0) {
+				this.pose = this.pose-this.face;
+			}
+			if(this.isPlayer() and d.x+d.z!=0) {
+				this.game_ref.play_bump(this, this.pose+d);
+				this.v = vector(0,0,0);
+			} else {
+				this.v=vector(this.v.z,0,this.v.x);
+				if(random(0, 5)>2) this.v*=-1;
+			}
+		}
+		
+		// Gravity and jumping
+		if(this.onGround() == false) {
+			this.v.y-=9.8*dt;
+		} else if(this.v.y<0.0) {
+			double h = this.game_ref.get_height(this.pose.x, this.pose.y+1, this.pose.z);
+			this.pose.y=h;
+			if(this.state==stunned) this.setSlot(this.game_ref.play_fall(this));
+			else this.game_ref.play_land(this);
+			this.v.y=0.0;
+		}
+		
+		// Update needs
+		this.energy -= 0.1*dt;
+		this.hunger -= 0.05*dt;
+		this.thirst -= 0.1*dt;
+		
+		// Regenerate when needs are met
+		if(this.energy < this.maxEnergy && this.hunger > 50 && this.thirst > 50) {
+			this.energy += 0.2*dt;
+		}
+		
+		// Handle status effects
+		if(this.status_time > 0) {
+			this.status_time -= dt;
+			if(this.status_time <= 0) {
+				this.clear_status();
+			}
+		}
+		
+		this.process_sounds();
+	}
+	
+	void clear_status() {
+		this.status_flags = 0;
+		this.status_time = 0;
+		this.status_desc = "";
+	}
+	
+	void set_status(int flags, double time, string desc) {
+		this.status_flags |= flags;
+		this.status_time = time;
+		this.status_desc = desc;
+	}
+	
+	double height() {
+		if(this.rank==PET) {
+			if(this.name=="Cat" || this.name=="Dog") return 0.5;
+			return 0.3;
+		} else if(this.rank==CHILD) {
+			return 1.2 + (0.1 * this.name.length() % 4); // Vary by name
+		}
+		return 1.4;
+	}
+	
+	void damage(Kid@ attacker, double dmg) {
+		// In this game, "damage" is more like being tagged or hit with water
+		this.happiness -= dmg * 5; // Affects happiness instead of health
+		
+		if(this.happiness <= 0) {
+			this.happiness = 0;
+			// Go home when too upset
+			this.activity = RETURN_HOME;
+			this.dest = this.home;
+		} else {
+			// Play reaction sound
+			this.voiceplay("voices/" + this.gender + "/surprised" + random(0, 3) + ".wav");
+		}
+	}
+	bool opEquals (Kid@ other) {return @other == @this;}
+	
+	// Friendship system from KBG
+	int get_friendship(Kid@ other) {
+		int index = this.friends.find(other);
+		if(index < 0) return 0;
+		return this.friendship_levels[index];
+	}
+	
+	void modify_friendship(Kid@ other, int change, string reason="") {
+		int index = this.friends.find(other);
+		if(index < 0) {
+			this.friends.insert_last(other);
+			this.friendship_levels.insert_last(change);
+		} else {
+			this.friendship_levels[index] += change;
+			if(this.friendship_levels[index] > 15) this.friendship_levels[index] = 15;
+			if(this.friendship_levels[index] < -10) this.friendship_levels[index] = -10;
+		}
+	}
+	
+	void keyPressed(int k) {
+		if(((this.state)&k)==0) this.setState(this.state|k);
+	}
+	
+	void keyReleased(int k) {
+		if(this.state==k) {
+			if(k==charging) this.setState(playing);
+			else if(k==DUCKING and this.counter==0.0) {
+				this.counter = 0.125*this.height();
+			}
+		}
+	}
+	
+	bool setState(int s) {
+		if(this.counter<0.0 or this.state==s or 
+		   (this.state==playing and this.counter>0.0)) return false;
+		
+		if(this.state==recovering and this.counter==0.0) this.state=0;
+		if(((this.state)&stunned)!=0) return false;
+		
+		if(s==walking and this.state==talking) {
+			this.state=0;
+			this.counter=0.0;
+		}
+		
+		// Handle different movement states
+		if(s==JUMPING or s==(JUMPING|DUCKING)) {
+			if(((this.state)&(DUCKING|JUMPING))!=this.state) return false;
+			if(((this.state)&JUMPING)!=0 and this.combo>0) return false;
+			
+			if(this.onGround()) {
+				double jump_power = 6.0; // Kids can jump pretty well
+				this.v.y = jump_power;
+				this.setSlot(this.game_ref.play_jump(this, false));
+				this.counter = 0.5;
+				this.state = s;
+			}
+		} else if(((s&(walking|JUMPING))==s) and (((this.state)&(walking|talking))==this.state)) {
+			double sp = this.getSpeed();
+			
+			if((s&JUMPING)!=0) {
+				if(this.onGround()==false) return false;
+				sp*=sqr2;
+				this.v.y=this.getJump()*sqr2;
+				this.setSlot(this.game_ref.play_jump(this, false));
+				this.counter=0.5;
+			} else {
+				vector test (this.pose.x+(this.face.x*sp*0.025), this.pose.y, this.pose.z+(this.face.z*sp*0.025));
+				if(this.game_ref.is_clear(test)) {
+					this.game_ref.play_step(this.pose);
+					this.counter=0.25;
+				} else return false;
+			}
+			this.v.x=sp*this.face.x;
+			this.v.z=sp*this.face.z;
+			this.state=s;
+		} else if(s==charging) {
+			// Charging up for play action (like throwing water balloon)
+			if(((this.state)&(walking|JUMPING|DUCKING))!=this.state) {
+				if(this.state==recovering) {
+					if(@(this.held_item)!=null and this.combo>3) return false;
+					else if(this.held_item is null and this.combo>2) return false;
+				} else return false;
+			}
+			
+			this.counter=1.0;
+			this.state=s;
+			
+			// Sound for starting play action
+			if(this.held_item is null) {
+				if(random(0, 3)==1) this.game_ref.playsound(MHI + "s" + random(0, 5) + ".wav", this.pose, false);
+			} else if(this.held_item.name=="Water Gun") {
+				this.game_ref.playsound("sounds/water_gun_pump.wav", this.pose, false);
+			} else if(this.held_item.name=="Water Balloon") {
+				this.game_ref.playsound("sounds/stretch.wav", this.pose, false);
+			}
+		} else if(s==playing) {
+			// Execute play action
+			this.state=s;
+			this.counter=0.3;
+			
+			if(@(this.held_item)!=null) {
+				this.use_item();
+			} else {
+				// Tag or basic play action
+				this.basic_play_action();
+			}
+		} else if(s==talking) {
+			if(this.state!=walking) this.counter=2.0;
+			string toplay = "voices/" + this.gender + "/greeting" + random(0, 2) + ".wav";
+			this.voiceplay(toplay);
+		}
+		
+		this.process_sounds();
+		return (this.state==s);
+	}
+	
+	void use_item() {
+		if(@(this.held_item)==null) return;
+		
+		if(this.held_item.name=="Water Gun") {
+			// Fire water gun at nearby kids
+			this.fire_water_gun();
+		} else if(this.held_item.name=="Water Balloon") {
+			// Throw water balloon
+			this.throw_water_balloon();
+		} else if(this.held_item.name=="Foam Dart") {
+			// Shoot foam dart
+			this.shoot_foam_dart();
+		} else if(this.held_item.name=="Stickers") {
+			// Give stickers to nearby friend
+			this.give_stickers();
+		}
+	}
+	
+	void basic_play_action() {
+		// Tag nearby kids or pets
+		double tag_range = this.height() + 1.0;
+		
+		for(uint i=0; i<this.game_ref.kids.length(); i++) {
+			Kid@ them = this.game_ref.kids[i];
+			if(them is null or them is this or them.hp<=0.0) continue;
+			
+			double distance = len2(them.pose - this.pose);
+			if(distance <= tag_range*tag_range) {
+				// Tag them!
+				this.tag_kid(them);
+				break;
+			}
+		}
+	}
+	
+	void tag_kid(Kid@ them) {
+		them.damage(this, 1.0); // Very light "damage" 
+		them.modify_friendship(this, 1, "playing together");
+		this.modify_friendship(them, 1, "playing together");
+		
+		// Play tag sound
+		this.game_ref.playsound("sounds/tag.wav", this.pose, false);
+		
+		if(this.game_ref.game_mode == "tag" and this.is_it) {
+			// Transfer "it" status
+			this.is_it = false;
+			them.is_it = true;
+			this.game_ref.announce(them.name + " is now it!");
+		}
+	}
+	
+	void fire_water_gun() {
+		if(this.water_balloons <= 0) return;
+		
+		// Find target in front of us
+		Kid@ target = this.find_target_in_direction();
+		if(@target != null) {
+			target.damage(this, 2.0);
+			target.modify_friendship(this, random(-1, 2), "water gun fight");
+			this.game_ref.playsound("sounds/water_splash.wav", target.pose, false);
+		}
+		
+		this.game_ref.playsound("sounds/water_gun_fire.wav", this.pose, false);
+	}
+	
+	void throw_water_balloon() {
+		if(this.water_balloons <= 0) return;
+		
+		// Create projectile
+		NeighborhoodItem@ balloon = NeighborhoodItem("Water Balloon Projectile");
+		balloon.pose = this.pose;
+		balloon.v = this.face * 8.0 + vector(0, 3, 0); // Arc
+		//@balloon.game_ref = this.game_ref;
+		
+		this.game_ref.projectiles.insert_last(balloon);
+		this.water_balloons--;
+		
+		this.game_ref.playsound("sounds/throw.wav", this.pose, false);
+	}
+	void shoot_foam_dart() {
+		if(this.foam_darts <= 0) return;
+		
+		// Find target in front of us
+		Kid@ target = this.find_target_in_direction();
+		if(@target != null) {
+			target.damage(this, 2.0);
+			target.modify_friendship(this, random(-1, 2), "dart gun");
+			this.game_ref.playsound("sounds/water_splash.wav", target.pose, false);
+		}
+		
+		this.game_ref.playsound("sounds/nerf_gun_fire.wav", this.pose, false);
+	}
+
+	
+	Kid@ find_target_in_direction() {
+		double best_distance = 1000;
+		Kid@ best_target = null;
+		
+		for(uint i=0; i<this.game_ref.kids.length(); i++) {
+			Kid@ them = this.game_ref.kids[i];
+			if(them is null or them is this) continue;
+			
+			vector dir = them.pose - this.pose;
+			dir.y = 0;
+			if(dir.length() == 0) continue;
+			
+			dir = dir / dir.length();
+			double dot = this.face.x * dir.x + this.face.z * dir.z;
+			
+			if(dot > 0.7) { // Roughly in front
+				double distance = len2(them.pose - this.pose);
+				if(distance < best_distance) {
+					best_distance = distance;
+					@best_target = them;
+				}
+			}
+		}
+		
+		return best_target;
+	}
+	
+	void give_stickers() {
+		if(this.stickers <= 0) return;
+		
+		// Find nearby friend
+		for(uint i=0; i<this.game_ref.kids.length(); i++) {
+			Kid@ them = this.game_ref.kids[i];
+			if(them is null or them is this) continue;
+			
+			double distance = len2(them.pose - this.pose);
+			if(distance <= 4) {
+				them.stickers++;
+				this.stickers--;
+				them.modify_friendship(this, 2, "sharing stickers");
+				this.game_ref.playsound("sounds/sticker.wav", this.pose, false);
+				break;
+			}
+		}
+	}
+	
+	void process_sounds() {
+		if(this.game_ref is null or this.game_ref.pool is null) return;
+		
+		if(this.slot>=0 and this.game_ref.pool.sound_is_playing(this.slot)) 
+			this.game_ref.pool.update_sound_3d(this.slot, this.pose.x, this.pose.y, this.pose.z);
+		if(this.voiceslot>=0 and this.game_ref.pool.sound_is_playing(this.voiceslot)) 
+			this.game_ref.pool.update_sound_3d(this.voiceslot, this.pose.x, this.pose.y, this.pose.z);
+	}
+	
+	double getSpeed() {
+		double ret = this.speed;
+		if(this.energy < 20) ret *= 0.5; // Tired kids move slower
+		if(@(this.held_item)!=null and this.held_item.name=="Bike") ret *= 2.0;
+		return ret;
+	}
+	
+	double getJump() {
+		double ret = 6.0;
+		if(this.energy < 20) ret *= 0.7;
+		if(this.rank==PET) ret = 4.0;
+		return ret;
+	}
+	
+	void setSlot(int s) {
+		if(this.slot>=0 and @(this.game_ref)!=null) {
+			this.game_ref.pool.destroy_sound(this.slot);
+		}
+		this.slot=s;
+	}
+	
+	void voiceplay(string fn) {
+		if(@(this.game_ref)==null) return;
+		if(this.voiceslot>=0) this.game_ref.pool.destroy_sound(this.voiceslot);
+		this.voiceslot = this.game_ref.playsound(fn, this.pose, false, true);
+	}
+}
+
+// Main game class
+class NeighborhoodGame : game {
+	Kid@[] kids;
+	NeighborhoodItem@[] items, projectiles;
+	keyconfig@ key=null;
+	sound_pool@ pool=null;
+	custom_voice@ voice=null;
+	
+	int player_kid=0;
+	string game_mode="free_play"; // "tag", "hide_seek", "free_play"
+	
+	// Map properties
+	string[][] ground_map;
+	string[][] elevated_map; // Playground equipment above ground
+	vector[] floor_tiles, elevated_tiles;
+	
+	// Weather and time
+	string weather="";
+	double time_of_day=12.0; // 24 hour format
+	
+	NeighborhoodGame() {
+		this.init();
+		this.generate_neighborhood();
+		this.setup_kids();
+	}
+	
+	void init() {
+		if(file_exists("keyconfig.ini")) @(this.key) = load_keyconfig("keyconfig.ini");
+		else {
+			@(this.key) = load_keyconfig("default_keyconfig.ini");
+			if(this.key is null) alert("ERROR!", "Unable to load keyboard configuration!");
+			this.key.save("keyconfig.ini", "Neighborhood Adventure Game config");
+		}
+		
+		sound_pool temp;
+		@(this.pool)=temp;
+		this.pool.behind_pitch_decrease=5.0;
+		this.pool.max_distance=40.0;
+		
+		custom_voice cv("voice.cfg");
+		@(this.voice)=cv;
+		this.voice.config_path = "voice.cfg";
+	}
+	
+	void generate_neighborhood() {
+		// Generate base terrain using amaze
+		int[][] maze = amaze(25, 4, 8);
+		this.ground_map.resize(maze.length());
+		this.elevated_map.resize(maze.length());
+		
+		for(uint i=0; i<maze.length(); i++) {
+			this.ground_map[i].resize(maze[i].length());
+			this.elevated_map[i].resize(maze[i].length());
+			for(uint j=0; j<maze[i].length(); j++) {
+				if(maze[i][j]==0) {
+					// Choose terrain based on location and randomness
+					if(random(0, 10) < 2) {
+						this.ground_map[i][j] = "Water"; // Ponds, streams
+					} else if(random(0, 10) < 3) {
+						this.ground_map[i][j] = "Leaves2"; // Trees/forest
+					} else if(random(0, 10) < 1) {
+						this.ground_map[i][j] = "Sand"; // Sandbox areas
+					} else {
+						this.ground_map[i][j] = "Grass"; // Default
+					}
+				} else {
+					this.ground_map[i][j]=""; // Walls/obstacles
+				}
+				
+				// Add elevated playground equipment occasionally
+				if(this.ground_map[i][j] != "" and random(0, 50) == 0) {
+					string[] playground = {"Wood2", "Metal", "Roof2"}; // Platforms, monkey bars, slides
+					this.elevated_map[i][j] = playground[random(0, playground.length()-1)];
+				} else {
+					this.elevated_map[i][j] = "";
+				}
+			}
+		}
+		
+		this.update_floor_tiles();
+		this.populate_items();
+	}
+	
+	void update_floor_tiles() {
+		this.floor_tiles.resize(0);
+		this.elevated_tiles.resize(0);
+		
+		for(uint x=0; x<this.ground_map.length(); x++) {
+			for(uint y=0; y<this.ground_map[x].length(); y++) {
+				if(this.ground_map[x][y] != "") {
+					this.floor_tiles.insert_last(vector(x, 0, y));
+				}
+				if(this.elevated_map[x][y] != "") {
+					this.elevated_tiles.insert_last(vector(x, 3, y)); // 3m high
+				}
+			}
+		}
+	}
+	
+	void setup_kids() {
+		// Create player character
+		Kid@ player = Kid();
+		player.name = "You";
+		@(player.game_ref) = this;
+		if(this.floor_tiles.length() > 0) {
+			player.pose = 10*this.floor_tiles[0] + vector(5, 0, 5);
+			player.home = player.pose;
+		}
+		this.kids.insert_last(player);
+		
+		// Create NPCs
+		for(uint i=0; i<8; i++) {
+			Kid@ npc = Kid();
+			@(npc.game_ref) = this;
+			if(this.floor_tiles.length() > i+1) {
+				npc.pose = 10*this.floor_tiles[i+1] + vector(5, 0, 5);
+				npc.home = npc.pose;
+			}
+			
+			// Give some random items
+			if(random(0, 3) == 0) {
+				npc.water_balloons = random(1, 5);
+			}
+			if(random(0, 4) == 0) {
+				npc.stickers = random(1, 3);
+			}
+			
+			this.kids.insert_last(npc);
+		}
+		
+		// Add some pets
+		for(uint i=0; i<3; i++) {
+			Kid@ pet = Kid();
+			pet.rank = PET;
+			pet.name = (random(0, 1) == 0) ? "Dog" : "Cat";
+			pet.gender = (random(0, 1) == 0) ? "M" : "F";
+			@(pet.game_ref) = this;
+			if(this.floor_tiles.length() > i+9) {
+				pet.pose = 10*this.floor_tiles[i+9] + vector(5, 0, 5);
+				pet.home = pet.pose;
+			}
+			this.kids.insert_last(pet);
+		}
+	}
+	
+	void populate_items() {
+		// Scatter fun items around the neighborhood
+		string[] fun_items = {"Water Gun", "Water Balloon", "Foam Dart", "Stickers", "Juice Box", "Candy", "Ball", "Frisbee", "Jump Rope"};
+		
+		for(uint i=0; i<15; i++) {
+			if(this.floor_tiles.length() == 0) break;
+			
+			NeighborhoodItem@ item = NeighborhoodItem(fun_items[random(0, fun_items.length()-1)]);
+			item.pose = 10*this.floor_tiles[random(0, this.floor_tiles.length()-1)] + vector(random(1, 9), 0, random(1, 9));
+			
+			// Set item properties
+			if(item.name == "Water Gun") {
+				item.flags = FUN_WEAPON;
+				item.range = 8.0;
+			} else if(item.name == "Water Balloon") {
+				item.flags = FUN_WEAPON;
+			} else if(item.name == "Juice Box" or item.name == "Candy") {
+				item.flags = FOOD;
+			} else if(item.name == "Stickers") {
+				item.flags = GIFT;
+			} else {
+				item.flags = TOY;
+			}
+			
+			this.items.insert_last(item);
+		}
+	}
+	
+	bool is_clear(vector p) {
+		int x = floor(p.x/10);
+		int z = floor(p.z/10);
+		if(x<0 or z<0 or x>=this.ground_map.length() or z>=this.ground_map[x].length() or this.ground_map[x][z]=="") return false;
+		
+		// Check elevated areas
+		if(p.y > 2.0) {
+			if(this.elevated_map[x][z] == "") return false;
+		}
+		
+		return true;
+	}
+	
+	vector get_camera() {
+		if(this.player_kid>=0 and this.player_kid<this.kids.length() and @(this.kids[this.player_kid]) != null) 
+			return this.kids[this.player_kid].pose;
+		return vector(0, 1.6, 0);
+	}
+	
+	string get_terrain(vector p) {
+		int x = floor(p.x/10);
+		int z = floor(p.z/10);
+		if(x<0 or z<0 or x>=this.ground_map.length() or z>=this.ground_map[x].length()) return "";
+		
+		if(p.y > 2.0 and this.elevated_map[x][z] != "") {
+			return this.elevated_map[x][z];
+		}
+		
+		return this.ground_map[x][z];
+	}
+	
+	double get_height(double x, double y, double z) {
+		int ix = floor(x/10);
+		int iz = floor(z/10);
+		if(ix<0 or iz<0 or ix>=this.ground_map.length() or iz>=this.ground_map[ix].length() or this.ground_map[ix][iz]=="") return 9001;
+		
+		// Check for elevated playground equipment
+		if(this.elevated_map[ix][iz] != "") {
+			if(y >= 2.5) return 3.0; // On playground equipment
+		}
+		
+		// Ground level terrain
+		if(this.ground_map[ix][iz] == "Leaves2") {
+			// Climbable trees
+			if(y >= 1.5) return 2.0; // In tree branches
+		}
+		
+		return 0; // Ground level
+	}
+	
+	int play_step(vector p) {
+		string terrain = this.get_terrain(p);
+		if(terrain=="") return -1;
+		
+		// Weather modifications
+		if(this.weather=="rain" or this.weather=="storm") {
+			if(terrain=="Grass") terrain="Mud";
+		}
+		
+		vector l = this.get_camera();
+		uint max=9;
+		if(terrain=="Metal" or terrain=="Wood2" or terrain=="Roof2") max=6;
+		else if(terrain=="Sand") max=7;
+		
+		return this.pool.play_3d(sounds + terrain + "/run" + random(1, max) + ".wav", 
+								l.x, l.y, l.z, p.x, p.y, p.z, false);
+	}
+	
+	int play_jump(Kid@ me, bool is_big=false) {
+		if(me is null) return -1;
+		string terrain = this.get_terrain(me.pose);
+		if(terrain=="") return -1;
+		
+		vector l = this.get_camera();
+		string toplay = "sounds/jump.wav";
+		
+		if(file_exists(sounds + terrain + "/jump.wav")) {
+			toplay = sounds + terrain + "/jump.wav";
+		} else if(terrain=="Water" or terrain=="Wade") {
+			toplay = "sounds/splash.wav";
+		} else if(terrain=="Sand") {
+			toplay = sounds + "Sand/run" + random(1, 7) + ".wav";
+		}
+		
+		return this.pool.play_3d(toplay, l.x, l.y, l.z, me.pose.x, me.pose.y, me.pose.z, false, true);
+	}
+	
+	int play_bump(Kid@ me, vector p) {
+		if(me is null) return -1;
+		string terrain = this.get_terrain(me.pose);
+		string toplay = "sounds/bump.wav";
+		
+		if(terrain=="Leaves2") toplay = "sounds/rustle.wav";
+		else if(terrain=="Water") toplay = "sounds/splash.wav";
+		else if(terrain=="Metal") toplay = "sounds/clang.wav";
+		
+		vector l = this.get_camera();
+		return this.pool.play_3d(toplay, l.x, l.y, l.z, p.x, p.y, p.z, false);
+	}
+	
+	int play_fall(Kid@ me) {
+		if(me is null) return -1;
+		string terrain = this.get_terrain(me.pose);
+		if(terrain=="") return -1;
+		
+		vector camera = this.get_camera();
+		string toplay = "sounds/fall.wav";
+		
+		if(file_exists(sounds + terrain + "/fall1.wav")) {
+			toplay = sounds + terrain + "/fall" + random(1, 4) + ".wav";
+		} else if(terrain=="Water") {
+			toplay = "sounds/big_splash.wav";
+		} else if(terrain=="Sand") {
+			toplay = sounds + "Sand/fall" + random(1, 3) + ".wav";
+		}
+		
+		return this.playsound(toplay, me.pose, false, true);
+	}
+	
+	int play_land(Kid@ me) {
+		if(me is null) return -1;
+		string terrain = this.get_terrain(me.pose);
+		if(terrain=="") return -1;
+		
+		string toplay = sounds + terrain + "/run" + random(1, 6) + ".wav";
+		return this.playsound(toplay, me.pose, false);
+	}
+	
+	void handle_input(int k, int p=-1, keyconfig@ kc=null) {
+		if(p==-1) p = this.player_kid;
+		if(p<0 or p>=this.kids.length() or this.kids[p] is null) return;
+		
+		Kid@ me = this.kids[p];
+		
+		if(me.hp<=0.0) {
+			// Handle what to do when kid is "out" (too upset, etc)
+		} else {
+			if(k==Q and p==this.player_kid) {
+				string status = me.name + " has " + round(me.energy, 0) + " energy, " + 
+							   round(me.happiness, 0) + " happiness. ";
+				if(@(me.held_item) != null) {
+					status += "Holding " + me.held_item.name + ". ";
+				}
+				status += "Friends nearby: ";
+				bool found_friend = false;
+				for(uint i=0; i<this.kids.length(); i++) {
+					if(this.kids[i] is me or this.kids[i] is null) continue;
+					double distance = len2(this.kids[i].pose - me.pose);
+					if(distance <= 25) { // Within 5 units
+						int friendship = me.get_friendship(this.kids[i]);
+						if(friendship > 0) {
+							status += this.kids[i].name + " (" + friendship + "), ";
+							found_friend = true;
+						}
+					}
+				}
+				if(!found_friend) status += "none nearby.";
+				this.voice.speak_interrupt(status);
+			}
+			else if(k==L or k==R or k==U or k==D) {
+				// Movement with diagonals
+				if(@kc!=null) {
+					if(kc.key_down(L)) {
+						if(kc.key_down(U)) me.face = vector(-sqr2, 0, sqr2);
+						else if(kc.key_down(D)) me.face = vector(-sqr2, 0, -sqr2);
+						else me.face = vector(-1, 0, 0);
+					}
+					else if(kc.key_down(R)) {
+						if(kc.key_down(U)) me.face = vector(sqr2, 0, sqr2);
+						else if(kc.key_down(D)) me.face = vector(sqr2, 0, -sqr2);
+						else me.face = vector(1, 0, 0);
+					}
+					else if(k==U) me.face = vector(0, 0, 1);
+					else if(k==D) me.face = vector(0, 0, -1);
+				} else {
+					if(k==L) me.face = vector(-1, 0, 0);
+					else if(k==R) me.face=vector(1, 0, 0);
+					else if(k==U) me.face = vector(0, 0, 1);
+					else if(k==D) me.face = vector(0, 0, -1);
+				}
+				
+				if(me.state==talking) me.setState(walking);
+				else me.keyPressed(walking);
+			}
+			else if(k==JL or k==JR or k==JU or k==JD) {
+				// Jumping movement
+				if(@kc!=null) {
+					if(kc.key_down(JL)) {
+						if(kc.key_down(JU) or kc.key_down(U)) me.face = vector(-sqr2, 0, sqr2);
+						else if(kc.key_down(JD) or kc.key_down(D)) me.face = vector(-sqr2, 0, -sqr2);
+						else me.face = vector(-1, 0, 0);
+					}
+					else if(kc.key_down(JR)) {
+						if(kc.key_down(JU) or kc.key_down(U)) me.face = vector(sqr2, 0, sqr2);
+						else if(kc.key_down(JD) or kc.key_down(D)) me.face = vector(sqr2, 0, -sqr2);
+						else me.face = vector(1, 0, 0);
+					}
+					else if(k==JU) {
+						if(kc.key_down(L)) me.face = vector(-sqr2, 0, sqr2);
+						else if(kc.key_down(R)) me.face = vector(sqr2, 0, sqr2);
+						else me.face = vector(0, 0, 1);
+					}
+					else if(k==JD) {
+						if(kc.key_down(L)) me.face = vector(-sqr2, 0, -sqr2);
+						else if(kc.key_down(R)) me.face = vector(sqr2, 0, -sqr2);
+						else me.face = vector(0, 0, -1);
+					}
+				} else {
+					if(k==JL) me.face = vector(-1, 0, 0);
+					else if(k==JR) me.face=vector(1, 0, 0);
+					else if(k==JU) me.face = vector(0, 0, 1);
+					else if(k==JD) me.face = vector(0, 0, -1);
+				}
+				me.keyPressed(JUMPING|walking);
+			}
+			else if(k==J) me.keyPressed(JUMPING);
+			else if(k==C) me.keyPressed(DUCKING);
+			else if(k==A) {
+				// Play/interact action
+				me.setState(charging);
+			}
+			else if(k==ENTER) {
+				// Interact with nearby items or kids
+				this.interact_with_nearby(me);
+			}
+			
+			// Player-only information commands
+			if(p==this.player_kid) {
+				if(k==V) {
+					this.voice.speak_interrupt(me.name + " is at " + round(me.pose.x, 0) + 
+											 ", " + round(me.pose.y, 0) + ", " + round(me.pose.z, 0) + 
+											 " on " + this.get_terrain(me.pose) + ".");
+				}
+				else if(k==X) {
+					this.voice.speak_interrupt("Energy: " + round(me.energy, 0) + 
+											 ", Happiness: " + round(me.happiness, 0) + 
+											 ", Hunger: " + round(me.hunger, 0) + 
+											 ", Thirst: " + round(me.thirst, 0));
+				}
+				else if(k==Z) {
+					string inv_desc = "Inventory: ";
+					if(@(me.held_item) != null) {
+						inv_desc += "holding " + me.held_item.name + ". ";
+					}
+					if(me.water_balloons > 0) inv_desc += me.water_balloons + " water balloons, ";
+					if(me.stickers > 0) inv_desc += me.stickers + " stickers, ";
+					if(me.candy > 0) inv_desc += me.candy + " candy, ";
+					if(me.juice_boxes > 0) inv_desc += me.juice_boxes + " juice boxes.";
+					
+					this.voice.speak_interrupt(inv_desc);
+				}
+			}
+		}
+	}
+	
+	void interact_with_nearby(Kid@ me) {
+		// Check for nearby items first
+		for(uint i=0; i<this.items.length(); i++) {
+			if(this.items[i] is null) continue;
+			if(this.items[i].intersects(me.pose, me.height())) {
+				this.pickup_item(me, this.items[i]);
+				this.items.remove_at(i);
+				return;
+			}
+		}
+		
+		// Check for nearby kids to talk to
+		for(uint i=0; i<this.kids.length(); i++) {
+			if(this.kids[i] is me or this.kids[i] is null) continue;
+			double distance = len2(this.kids[i].pose - me.pose);
+			if(distance <= 9) { // Within 3 units
+				this.start_conversation(me, this.kids[i]);
+				return;
+			}
+		}
+	}
+	
+	void pickup_item(Kid@ me, NeighborhoodItem@ item) {
+		if(item.name == "Water Balloon") {
+			me.water_balloons++;
+		} else if(item.name == "Stickers") {
+			me.stickers++;
+		} else if(item.name == "Candy") {
+			me.candy++;
+			me.happiness += 10;
+		} else if(item.name == "Juice Box") {
+			me.juice_boxes++;
+			me.thirst += 20;
+		} else {
+			// Hold the item
+			@(me.held_item) = item;
+		}
+		
+		this.playsound("sounds/pickup.wav", me.pose, false);
+		
+		if(me.isPlayer()) {
+			this.voice.speak_interrupt("Picked up " + item.name);
+		}
+	}
+	
+	void start_conversation(Kid@ me, Kid@ them) {
+		// Simple friendship interaction
+		int current_friendship = me.get_friendship(them);
+		int change = random(1, 3);
+		
+		me.modify_friendship(them, change, "chatting");
+		them.modify_friendship(me, change, "chatting");
+		
+		me.setState(talking);
+		them.setState(talking);
+		
+		this.playsound("sounds/chat.wav", me.pose, false);
+		
+		if(me.isPlayer()) {
+			this.voice.speak_interrupt("Chatting with " + them.name + 
+									 ". Friendship is now " + me.get_friendship(them));
+		}
+	}
+	
+	int playsound(string filename, vector s, bool looping, bool persistent=false) {
+		vector l = this.get_camera();
+		return this.pool.play_3d(filename, l.x, l.y, l.z, s.x, s.y, s.z, looping, persistent);
+	}
+	
+	void announce(string message) {
+		this.voice.speak_interrupt(message);
+	}
+	
+	void key_pressed(int k) {
+		// Global shortcuts
+		if(k==KEY_F4 and (key_down(KEY_LMENU) or key_down(KEY_RMENU))) {
+			exit();
+		}
+		
+		// Convert key to game command
+		int mods=0;
+		if(key_down(KEY_LMENU) or key_down(KEY_RMENU)) mods|=alt;
+		if(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) mods|=shift;
+		if(key_down(KEY_LCONTROL) or key_down(KEY_RCONTROL)) {
+			mods+=ctrl;
+			voice.stop();
+		}
+		
+		int c = this.key.press(k, mods);
+		this.handle_input(c, this.player_kid, this.key);
+	}
+	
+	void key_released(int k) {
+		int mods=0;
+		if(key_down(KEY_LMENU) or key_down(KEY_RMENU)) mods|=alt;
+		if(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) mods|=shift;
+		if(key_down(KEY_LCONTROL) or key_down(KEY_RCONTROL)) mods+=ctrl;
+		
+		int c = this.key.release(k, mods);
+		
+		Kid@ me = null;
+		if(this.kids.length()>0 and this.player_kid>=0 and this.player_kid<this.kids.length()) 
+			@me = this.kids[this.player_kid];
+			
+		if(me is null) return;
+		
+		if(c==A) {
+			if(me.state==charging) me.setState(playing);
+		} else if(c==C) {
+			if(me.state==DUCKING) me.setState(0);
+		}
+	}
+	
+	void tick(double dt) {
+		dt *= 0.001; // Convert to seconds
+		
+		if(this.ground_map.length()>0 and this.kids.length()>0) {
+			vector camera = this.get_camera();
+			this.pool.update_listener_3d(camera.x, camera.y, camera.z);
+			
+			// Update all kids
+			for(uint i=0; i<this.kids.length(); i++) {
+				if(this.kids[i] is null) {
+					this.kids.remove_at(i);
+					i--;
+					continue;
+				}
+				
+				this.update_kid(i, dt, camera);
+			}
+			
+			// Update projectiles (water balloons, etc)
+			for(uint i=0; i<this.projectiles.length(); i++) {
+				if(this.projectiles[i] is null) {
+					this.projectiles.remove_at(i);
+					i--;
+					continue;
+				}
+				
+				this.update_projectile(i, dt);
+			}
+			
+			// Update items (make them sparkle, etc)
+			for(uint i=0; i<this.items.length(); i++) {
+				if(this.items[i] is null) {
+					this.items.remove_at(i);
+					i--;
+					continue;
+				}
+				
+				// Items could have sound effects, animations, etc
+				NeighborhoodItem@ item = this.items[i];
+				if(item.slot<0 or !this.pool.sound_is_playing(item.slot)) {
+					if(len2(item.pose - camera) <= 400) { // Within 20 units
+						string sound_file = "sounds/item_ambient.wav";
+						if(item.name == "Water Gun") sound_file = "sounds/water_drip.wav";
+						else if(item.name == "Candy") sound_file = "sounds/wrapper_rustle.wav";
+						if(!file_exists(sound_file)) sound_file = Swamp + "Items/Quest.wav";
+						
+						if(item.slot>=0) this.pool.destroy_sound(item.slot);
+						item.slot = this.playsound(sound_file, item.pose, true);
+					}
+				} else {
+					this.pool.update_sound_3d(item.slot, item.pose.x, item.pose.y, item.pose.z);
+				}
+			}
+			
+			// Occasionally spawn new items
+			if(this.game_clock.frame % 1800 == 0 and this.items.length() < 20) { // Every 30 seconds
+				this.spawn_random_item();
+			}
+			
+			// Update time of day
+			this.time_of_day += dt / 60.0; // 1 real second = 1 game minute
+			if(this.time_of_day >= 24.0) this.time_of_day = 0.0;
+			
+			// Random weather changes
+			if(this.game_clock.frame % 3600 == 0) { // Every minute
+				string[] weathers = {"", "rain", "wind", ""};
+				this.weather = weathers[random(0, weathers.length()-1)];
+			}
+		}
+	}
+	
+	void update_kid(int i, double dt, vector camera) {
+		Kid@ me = this.kids[i];
+		me.step(dt);
+		
+		// Handle NPC AI
+		if(i != this.player_kid) {
+			this.handle_npc_ai(me, dt);
+		}
+		else {
+			// If buttons are being held, stuff needs to happen.
+			keyconfig@ kc = null;
+			if(i==this.player_kid) @kc = this.key;
+			//else, get the virtual keyconfig associated with the online player.
+			
+			if(@kc!=null) {
+				// Danger! : joysticks! We do not want to explicitly link joystick and keyboard input, if it can be helped, so we need to test _both_ for the local player!
+				if(kc.key_down(R) or kc.key_down(U) or kc.key_down(L) or kc.key_down(D)) {
+					// The simplest way to do this is to just call handle_action... but with what direction?
+					int k = U;
+					if(kc.key_down(L)) k=L;
+					else if(kc.key_down(R)) k=R;
+					else if(kc.key_down(D)) k=D;
+					this.handle_input(k, i, kc);
+				}// Holding walk.
+
+			}// Holding buttons.
+			
+		}//player.
+		
+		// Check for interactions with other kids
+		for(uint j=0; j<this.kids.length(); j++) {
+			if(j == i or this.kids[j] is null) continue;
+			
+			double distance = len2(me.pose - this.kids[j].pose);
+			if(distance <= 4) { // Very close
+				// Random friendship interactions
+				if(random(0, 300) == 0) { // Rare
+					int change = random(0, 2);
+					if(change > 0) {
+						me.modify_friendship(this.kids[j], change, "playing nearby");
+						this.kids[j].modify_friendship(me, change, "playing nearby");
+					}
+				}
+			}
+		}
+		
+		// Handle status recovery
+		if(me.energy <= 0 and me.activity != RETURN_HOME) {
+			me.activity = RETURN_HOME;
+			me.dest = me.home;
+		}
+		
+		if(me.happiness <= 0 and me.activity != RETURN_HOME) {
+			me.activity = RETURN_HOME;
+			me.dest = me.home;
+		}
+	}
+	
+	void handle_npc_ai(Kid@ me, double dt) {
+		// Simple AI behaviors
+		if(me.rank == PET) {
+			// Pets follow nearby kids they like
+			Kid@ best_kid = null;
+			double best_distance = 1000;
+			int best_friendship = 0;
+			
+			for(uint i=0; i<this.kids.length(); i++) {
+				if(this.kids[i] is me or this.kids[i].rank == PET) continue;
+				double distance = len2(me.pose - this.kids[i].pose);
+				int friendship = me.get_friendship(this.kids[i]);
+				
+				if(friendship > best_friendship or (friendship == best_friendship and distance < best_distance)) {
+					@best_kid = this.kids[i];
+					best_distance = distance;
+					best_friendship = friendship;
+				}
+			}
+			
+			if(@best_kid != null and best_distance > 25) {
+				// Follow the kid
+				me.dest = best_kid.pose;
+				vector dir = me.dest - me.pose;
+				dir.y = 0;
+				if(dir.length() > 0) {
+					me.face = dir / dir.length();
+					me.setState(walking);
+				}
+			}
+		} else {
+			// Regular kid AI
+			if(me.activity == WANDER) {
+				// Wander around randomly
+				if(me.state == 0 and random(0, 180) == 0) { // Change direction occasionally
+					double angle = random(0, 628) / 100.0;
+					me.face = vector(cosine(angle), 0, sine(angle));
+					me.setState(walking);
+				}
+				
+				// Look for interesting items
+				if(random(0, 300) == 0) {
+					NeighborhoodItem@ closest_item = null;
+					double closest_distance = 100;
+					
+					for(uint i=0; i<this.items.length(); i++) {
+						double distance = len2(this.items[i].pose - me.pose);
+						if(distance < closest_distance) {
+							@closest_item = this.items[i];
+							closest_distance = distance;
+						}
+					}
+					
+					if(@closest_item != null) {
+						me.dest = closest_item.pose;
+						vector dir = me.dest - me.pose;
+						dir.y = 0;
+						if(dir.length() > 0) {
+							me.face = dir / dir.length();
+							me.setState(walking);
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	void update_projectile(int i, double dt) {
+		NeighborhoodItem@ proj = this.projectiles[i];
+		
+		// Apply gravity and movement
+		proj.v.y -= 9.8 * dt;
+		proj.pose += proj.v * dt;
+		
+		// Check for collision with ground
+		if(proj.pose.y <= this.get_height(proj.pose.x, proj.pose.y, proj.pose.z)) {
+			// Hit ground - create splash effect
+			if(proj.name == "Water Balloon Projectile") {
+				this.water_balloon_splash(proj.pose);
+			}
+			
+			this.projectiles.remove_at(i);
+			return;
+		}
+		
+		// Check for collision with kids
+		for(uint j=0; j<this.kids.length(); j++) {
+			if(this.kids[j] is null) continue;
+			
+			double distance = len2(proj.pose - this.kids[j].pose);
+			if(distance <= 4) { // Hit!
+				if(proj.name == "Water Balloon Projectile") {
+					this.kids[j].damage(null, 3.0);
+					this.water_balloon_splash(proj.pose);
+				}
+				
+				this.projectiles.remove_at(i);
+				return;
+			}
+		}
+	}
+	
+	void water_balloon_splash(vector pos) {
+		// Create splash effect
+		this.playsound("sounds/water_balloon_pop.wav", pos, false);
+		
+		// Affect nearby kids
+		for(uint i=0; i<this.kids.length(); i++) {
+			if(this.kids[i] is null) continue;
+			
+			double distance = len2(pos - this.kids[i].pose);
+			if(distance <= 16) { // Splash radius
+				this.kids[i].happiness += 2; // Getting splashed is fun!
+				this.kids[i].voiceplay("voices/" + this.kids[i].gender + "/laugh" + random(0, 2) + ".wav");
+			}
+		}
+	}
+	
+	void spawn_random_item() {
+		if(this.floor_tiles.length() == 0) return;
+		
+		string[] spawn_items = {"Water Balloon", "Stickers", "Candy", "Juice Box", "Ball"};
+		NeighborhoodItem@ new_item = NeighborhoodItem(spawn_items[random(0, spawn_items.length()-1)]);
+		
+		vector spawn_pos = 10*this.floor_tiles[random(0, this.floor_tiles.length()-1)] + 
+						  vector(random(1, 9), 0, random(1, 9));
+		new_item.pose = spawn_pos;
+		
+		// Set appropriate flags
+		if(new_item.name == "Candy" or new_item.name == "Juice Box") {
+			new_item.flags = FOOD;
+		} else if(new_item.name == "Stickers") {
+			new_item.flags = GIFT;
+		} else {
+			new_item.flags = TOY;
+		}
+		
+		this.items.insert_last(new_item);
+	}
+}
+
+// Key constants (same as ST but adapted for neighborhood activities)
+const int L=0, R=1, D=2, U=3,
+          JL=4, JR=5, JD=6, JU=7,
+          Q=8, E=9, A=29, J=33, C=34, ENTER=35,
+          Z=36, X=37, V=40;
+
+NeighborhoodGame@ game_instance = null;
+
+void main() {
+	NeighborhoodGame temp();
+	@game_instance = temp;
+	game_instance.start("Neighborhood Adventure Game - Hide, Seek, and Play!");
+}

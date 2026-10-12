@@ -1,0 +1,500 @@
+#include "sound_pool.bgt"
+
+// Towering Tones.bgt 8:30 AM 5/8/2011 C. A. E. Jones
+
+ const int width=5, height=5, maxTones=5;
+
+ const int MAIN=0, game=1, paused=2, gameOver=3;
+ const int normal=0, flash=1; // Type of game.
+
+ int loc=MAIN, mode=normal;
+
+ // Settings and such:
+ uint music=0; // BGM
+ int t=5; // Milliseconds to wait between iterations of the main loop.
+ double speed=0.001; // The units for t, mostly just to adjust game speed.
+ tts_voice voice;
+ sound bgm, gem1, gem2, land, scoresnd;
+ sound[][] gems; // This... is not good coding.
+ sound_pool pool;
+ bool shiftIsPressed=false; // A keyUp event would be nice.
+ // Game variables:
+ uint menuX=0;
+ int x=0, y=0, camX=0, camY=0;
+ // camX and camY allow the player to check individual spaces of the board.
+ // Hopefully, those won't be incredibly necessary, but better safe than frustrated.
+ int p1=-1, p2=-1; // The blocks that are falling. -1 means none.
+ int score=0, comboLength=0;
+ int[][] board;
+ double counter=0.0; // This way the speed setting makes a difference.
+ // Admitedly, it would have been better to just set a counter cutoff and make speed and t constant, but... ur... Hey look, a decoy!
+
+ string[] songs = {"clotho", "atropos", "lathesis"};
+
+ // I could use the dynamic menu class, but I don't feel like it, so nya.
+ string[] mainMenu = {"Start Game", "Game Mode", "Game Speed", "Frame Delay", "Background Music", "Today\'s high score", "Help", "Exit"};
+ int highScore=0;
+ string highScorer="No one";
+
+ // So... I think that's everything.
+
+
+ // Runs an iteration of the game. Note that this concerns itself with internal events and output, not input.
+ void step() {
+ if(loc!=game) return;
+
+ double dt=t*speed;
+ counter+=dt;
+ if(counter>=1.0) {counter=0.0;
+
+ // If there are no falling gems, make them:
+ if((p1<0)||(p2<0)) {
+ p1=random(0, maxTones);
+ p2=random(0, maxTones);
+  x=2; y=-5;
+  // Start sounds.
+ gem1.stop();
+ gem1.close();
+ gem1.load("sfx/tone" + p1 + ".wav");
+ gem1.pan=0; gem1.pitch=400;
+ gem1.play_looped();
+
+ gem2.stop();
+ gem2.close();
+ gem2.load("sfx/tone" + p2 + ".wav");
+ gem2.pan=0; gem2.pitch=400;
+ gem2.play_looped();
+
+ }// New gems.
+ else {
+ if((y>=-1)&&((y==height-1)||(board[x][y+1]>=0))) {
+ // Touchdown.
+ if(y<=0) setLoc(gameOver);
+ else {
+// y++;
+ gem1.stop(); gem2.stop(); gem1.close(); gem2.close();
+ playLand(x, y);
+ // Check all possible spaces? Not yet...
+// voice.speak_wait("Trying to land at " + x + ", " + y + ". ");
+ if(y>=0)   board[x][y]=p1;
+
+ if(y>0) board[x][y-1]=p2;
+ p1=-1; p2=-1;
+ int originalScore=score;
+ checkBoard();
+ if(score>originalScore) voice.speak_wait("Current score: " + score + "."); comboLength=0;
+ setBoardSounds();
+ }// Not game over.
+ }// Check to see if there's anything below.
+ else {y++; gem1.pitch=getPitch(y); gem2.pitch=getPitch(y);
+ gem1.pan=getPan(x); gem2.pan=getPan(x);
+ }
+ }// Falling.
+ }
+ 
+ }
+
+ // Handles keyboard input.
+ void keyEvents() {
+ // If we get caught in an infinite loop, need to do this:
+ if((key_pressed(KEY_LMENU))&&(key_pressed(KEY_F1))) exit();
+ switch (loc) {
+ case MAIN : {
+ bool read=true;
+ if((key_pressed(KEY_DOWN))||(key_pressed(KEY_Z))) {
+ menuX++;
+ if(menuX>=mainMenu.length()) menuX=0;
+ pool.play_stationary("sfx/select.wav", false);
+ }// Select next.
+ else if((key_pressed(KEY_UP))||(key_pressed(KEY_W))) {
+ if(menuX>0) menuX--; else menuX=mainMenu.length()-1;
+ pool.play_stationary("sfx/select.wav", false);
+ }
+ else if((key_pressed(KEY_LEFT))||(key_pressed(KEY_A))) {
+
+ switch (menuX) {
+ case 1 : {
+ if(mode==normal) mode=flash; else mode=normal;
+}; break; 
+ case 2 : {
+ speed*=0.75;
+ if(speed<0.00075) speed=0.00075;
+ }; break;
+ case 3 : {t--; if(t<1) t=1;}; break;
+ case 4 : { if(music==0) music=songs.length(); else music--;}; break;
+ default : read=false;
+ }// MenuX switch in key left.
+ }// Left.
+ else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_S))) {
+
+ switch (menuX) {
+ case 1 : {
+ if(mode==normal) mode=flash; else mode=normal;
+}; break; 
+ case 2 : {
+ speed/=0.75;
+ if(speed>0.01) speed=0.01;
+ }; break;
+ case 3 : {t++; if(t>1000) t=1;}; break;
+ case 4 : {music++; if(music>songs.length()) music=0;}; break;
+ default : read=false;
+ }// MenuX switch in key right.
+
+ }// Right.
+ else if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {
+ if(menuX==mainMenu.length()-1) {voice.speak_wait("Thanks for playing."); exit();}
+ else if(menuX==mainMenu.length()-2) {
+ voice.speak_interrupt("Use the arrow keys and space bar slash enter to navigate the menu. But you did that already to get here, didn't you?");
+ voice.speak("If you wish, you can use A for left, S for right, Z for down and W for up instead of the arrows.");
+ voice.speak("In this game, you are in a mine with various gems falling from above.");
+ voice.speak("Each type of gem makes a different sound. When gems of the same type touch, they annihilate one another.");
+ voice.speak("If you are buried in too many gems, you lose.");
+ voice.speak("The left and right, or A and S keys move the falling pair of gems horizontally. The up or W keys flips the gems.");
+ voice.speak("The down or Z keys will cause the gems to fall faster.");
+ voice.speak("You can press c to hear the position of the bottom gem in the falling pair. Press T to hear your total score. Press o to hear the order of the falling gems, from top to bottom. Press page up or page down to change the background music during gameplay.");
+ voice.speak("Press the space bar or enter at any time to pause the game. Press escape to return to the main menu.");
+ voice.speak("If you hold either shift key while playing, you can look at each individual gem on the board. Use the arrow keys while holding shift to select a gem.");
+  voice.speak("There are two modes of play: normal, and flash. In normal mode, you try to destroy as many falling gems as possible until you lose or quit. In flash mode, there are already two rows of gems, and your goal is to destroy the gem in the middle of the bottom row.");
+ voice.speak("If you need any further assistance, visit the audio games dot net forum, at http://forum.audiogames.net");
+ voice.speak(" Good luck!");
+ }// Help.
+ else  {pool.play_stationary("sfx/selected.wav", false);
+ setLoc(game);
+ }
+ read=false;
+ }
+ else read=false;
+
+ if(read) {
+ string tosay=mainMenu[menuX];
+ if((menuX>0)&&(menuX<mainMenu.length()-1)) {
+ tosay += ": ";
+ switch (menuX) {
+ case 1 : { if(mode==normal) tosay += "normal"; else tosay += "flash";}; break;
+ case 2 : {tosay = tosay + speed; }; break; // Ouch.
+ case 3 : {tosay = tosay + t; }; break;
+ case 4 : {if(music>=songs.length()) tosay += "none"; else tosay += songs[music]; }; break;
+ case 5 : { tosay += highScorer + ", with " + highScore + " points.";}; break;
+ }// This is pretty arbitrary. Hopefully order doesn't change.
+ }// Add settings.
+ voice.speak_interrupt(tosay);
+ }
+ }; break;
+ case game :
+ case paused : {
+ if(key_pressed(KEY_ESCAPE)) setLoc(gameOver);
+ 
+ if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) {
+ if(!shiftIsPressed) {
+ }// pressing shift for the first time should quiet the board so you can hear what you're looking at.
+shiftIsPressed=true;
+}
+ else if(shiftIsPressed) {
+ shiftIsPressed=false;
+ gem1.play_looped(); gem2.play_looped(); setBoardSounds();
+ }// Release shift, make sure that all sounds are playing properly
+ 
+ if(loc==game) {
+
+ if((key_pressed(KEY_LEFT))||(key_pressed(KEY_A))) {
+ if(shiftIsPressed) {
+ }// Shift.
+ else if(x>0) {x--;
+ pool.play_1d("sfx/select.wav", 0, 50*(x-2), false);}
+ }// left.
+ else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_S))) {
+ if(shiftIsPressed) {
+ }// Shift.
+ else if(x<width-1) {x++;
+ pool.play_1d("sfx/select.wav", 0, 50*(x-2), false);}
+ 
+ }// Right
+ else if((key_pressed(KEY_UP))||(key_pressed(KEY_W))) {
+ if(shiftIsPressed) {
+
+ }
+ else {
+ int p3=p1; p1=p2; p2=p3;
+ gem1.stop(); gem1.close(); gem2.stop(); gem2.close();
+ gem1.load("sfx/tone" + p1 + ".wav"); gem1.pitch=getPitch(y); gem1.pan=getPan(x); gem1.play_looped();
+ gem2.load("sfx/tone" + p2 + ".wav"); gem2.pitch=getPitch(y-1); gem2.pan=getPan(x); gem2.play_looped();
+ // Sound?
+ }// Swap.
+ }// Up.
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_Z))) {
+ if(shiftIsPressed) {
+
+ }//Shift.
+ else {
+ counter=1.0; step();
+ }
+ }// Down.
+ else if(key_pressed(KEY_PRIOR)) {
+ bgm.stop(); bgm.close();
+ if(music==0) music=songs.length(); else music--;
+ if(music<songs.length()) {bgm.stream("music/" + songs[music] + ".ogg"); bgm.play_looped();}
+ }// Previous song.
+ else if(key_pressed(KEY_NEXT)) {
+ music++; if(music>songs.length()) music=0;
+ bgm.stop(); bgm.close();
+ if(music<songs.length()) {bgm.stream("music/" + songs[music] + ".ogg"); bgm.play_looped();}
+ }// Next song.
+
+ } // Things specific to game.
+ if(key_pressed(KEY_C)) {
+voice.speak_wait("Bottom of pair is at " + x + ", " + y + ".");
+ if(shiftIsPressed) voice.speak_wait("Camera is looking at " + camX + ", " + camY + ". ");
+}
+ else if(key_pressed(KEY_T)) voice.speak_wait("Your current score is " + score + " points.");
+ else if(key_pressed(KEY_O)) {
+ gem1.stop(); gem2.stop();
+ voice.speak_wait("Top:");
+ gem2.play_wait();
+ voice.speak_wait("Bottom: ");
+ gem1.play_wait();
+ if((loc==game)&&(!shiftIsPressed)) {gem1.play_looped(); gem2.play_looped();}
+ }// Play pair order.
+
+
+ }; break;
+ case gameOver : {setLoc(MAIN); }; break;
+ default : {
+ voice.speak_wait("Keyboard check does not know where you are. Returning to main menu.");
+setLoc(MAIN);};
+ }// Locswitch in key events.
+ }
+
+ // Sets loc. For a game of this size, not overly useful, but eh.
+ void setLoc(int tl) {
+ switch (tl) {
+ case game : {
+ // Initialize a new game, unless you're resuming a paused game.
+ if(loc==paused) {loc=game; if(music<songs.length()) bgm.play_looped();
+ gem1.play_looped(); gem2.play_looped(); setBoardSounds();
+}
+ else {
+ // First, clear the board:
+ for(int xx=0; xx<width; xx++) {
+ for(int yy=0; yy<height; yy++) {board[xx][yy]=-1;}
+ }// X Loop
+ p1=-1; p2=-1; x=2; y=0;
+ // If the game mode is flash, then we need to initialize the board with some random contents.
+ if(mode == flash) {
+ // We can randomize the contents of the board all fine and well, but we have to be absolutely certain that none of them break themselves.
+ // If we use random, it's bound to be that something annihilates automatically.
+ // Easy enough a fix, though, so let's go:
+
+ board[0][3]=random(0, 5); board[0][4]=(board[0][3]+1)%6;
+ for(int i=1; i<width; i++) {
+ board[i][3]=(board[i-1][3]+2)%6;
+ board[i][4]=(board[i-1][4]+2)%6; // Makes the pattern repetitive, but we know it won't break. Hopefully.
+ }// Flash Loop.
+
+ setBoardSounds();
+ }// Initialize.
+
+ // Finally, start the game and bgm.
+ voice.speak_wait("Get ready to play!");
+ if((music>=0)&&(music<songs.length())) {bgm.stream("music/" + songs[music] + ".ogg"); bgm.play_looped(); }
+ voice.speak("Begin!");
+ }// Initializing a game.
+ loc=tl;
+ }; break;
+ case paused : { bgm.pause(); 
+ // This is where you stop everything else that's playing.
+ gem1.stop(); gem2.stop();
+ for(int i=0; i<width; i++) for(int j=0; j<height; j++) gems[i][j].stop();
+}; break;
+ case gameOver : {
+ gem1.stop(); gem2.stop();
+ for(int i=0; i<width; i++) for(int j=0; j<height; j++) {gems[i][j].stop();}
+ voice.speak("Game Over!");
+ // Try and make the bgm fade out.
+// while(bgm.volume>-100) {bgm.volume--; wait(25);}
+ bgm.stop();
+// bgm.volume=0;
+ // High Score check.
+ checkScore();
+ wait(1000); setLoc(MAIN);
+ }; break;
+ case MAIN : {
+ bgm.stop();
+ gem1.stop(); gem2.stop();
+ for(int i=0; i<width; i++) for(int j=0; j<height; j++) {gems[i][j].stop();}
+ menuX=0;
+ voice.speak_wait("Towering Tones Main Menu.");
+ }; break;
+ default : loc=tl;
+ }
+ loc=tl;
+ }
+
+ // Reads the player's current score, and asks for initials if it is the highes score.
+ void checkScore() {
+ voice.speak_wait("You're score is " + score + ".");
+ if(score>=highScore) {
+ get_characters();
+ voice.speak_wait("That\'s a new high score! In the next 5 seconds, enter your initials.");
+ wait(5000);
+ highScorer=get_characters();
+ voice.speak("Congratulations, " + highScorer + "!");
+ highScore=score; score=0;
+ }
+ else {
+ voice.speak_wait("The best score today is " + highScore + ".");
+ }
+ }
+
+ double getPitch(int v) {
+ // max: 400 (negative number), min 50 (height-1).
+ // I don't use inverse ratios like this often. :-/
+ // y/height = ret/300;
+ // Unfortunately, that returns not the number we want. -_-.
+ /* This is giving me problems, so I'm going to do this the worse way.
+ double ret=350*(v/height);
+ // So... first... let's invert that so it's negative.
+ ret*=-1; // There's a quicker way to do this. I'm... programming as I think.
+ // Ok, now negative numbers are higher than positive ones. Yay?
+ // Now we need to shift it so that the min is 50.
+ // I think that's... what... -350 if v=height?
+ // But we want 50 to be the min, so add 400:
+ ret+=400;
+ // Then do a range check:
+ if(ret<25) ret=25; else if(ret>400) ret=400;
+*/
+
+ double ret=100;
+ switch (v) {
+ case 5 : ret=25; break;
+ case 4 : ret=50; break;
+ case 3 : ret=100; break;
+ case 2 : ret=150; break;
+ case 1 : ret=200; break;
+ case 0 : ret=250; break;
+ default : {if(v>=height) ret=25; else ret=300;}
+}
+ return ret;
+ }
+ double getPan(int v) {
+
+ // This should be a simple proportion:
+ // x/width = (ret/200);
+ // These always trip me up. So:
+ // 200*x/width=ret;
+ /* Giving me problems, so using a less awesome way.
+ double ret=200*(v/width);
+ ret-=100;
+ if(ret<-100) ret=-100; else if(ret>100) ret=100;
+ */
+ double ret=0;
+ switch (v) {
+ case 0 : ret=-40; break;
+ case 1 : ret=-10; break;
+ case 2 : ret=0; break;
+ case 3 : ret=10; break;
+ case 4 : ret=40; break;
+ }
+ return ret;
+}
+ void playLand(int xx, int yy) {
+ land.pan=getPan(xx); land.pitch=getPitch(yy); land.stop(); land.play_wait();
+ }
+ void playScore() {
+ score+=100+(10*comboLength);
+ double pitch=50*(1+comboLength); if(pitch>400) pitch=400;
+ scoresnd.pitch=pitch;
+  scoresnd.stop(); scoresnd.play_wait();
+
+ comboLength++;
+ }
+
+ // Refreshes the sounds for the board.
+ void setBoardSounds() {
+ for(int i=0; i<width; i++) {
+ for(int j=0; j<height; j++) {
+ gems[i][j].stop(); gems[i][j].close();
+ if(board[i][j]>=0) gems[i][j].load("sfx/tone" + board[i][j] + ".wav");
+ gems[i][j].pan=getPan(i);
+ gems[i][j].pitch=getPitch(j);
+ gems[i][j].play_looped();
+ }}
+ }
+ void checkBoard() {
+ // Note that there might be recursive calls, here. Be careful!
+
+ bool restart=false; // If gems fall and we need to check again.
+ for(int i=0; i<width; i++) {
+ for(int j=0; j<height; j++) {
+ // Hmm. The total iterations we're looking at, without recursion, is 9*width*height. Which... is a lot.
+ // Oh well.
+ bool resCur=false;
+ // Eight spaces to check:
+ int cur=board[i][j]; // So we can kill it and still reference it.
+
+ for(int xx=-1; xx<2; xx++) {
+ for(int yy=-1; yy<2; yy++) {
+ if((i+xx<0)||(i+xx>=width)||(j+yy<0)||(j+yy>=height)||((xx==0)&&(yy==0))) continue;
+
+ if(strike(cur, i+xx, j+yy)) {
+restart=true;
+ resCur=true;
+ if((mode==flash)&&(((i==2)&&(j==4))||((i+xx==2)&&(j+yy==4)))) {
+ voice.speak_wait("You\'ve destroyed the flashing gem!"); playScore(); setLoc(gameOver);
+ } // You win.
+}
+ }}
+
+ if(resCur) drop(i, j);
+ 
+ }}
+ if(restart) {wait(5); checkBoard();}
+ }// Checks board for scoring.
+
+ // Checks the specified space for the given gem type, and clears and scores if they match.
+ bool strike(int cur, int i, int j) {
+ if(cur==-1) return false;
+// if((i==x)&&(j==y)) return false;
+ if(board[i][j]==cur) {
+ drop(i, j);
+ playScore();
+ return true;
+ }
+ return false;
+ }
+ // Removes the gem at (xx, yy) and drops all gems above it.
+ // Returns true if another gem fills (xx, yy), false otherwise.
+ bool drop(int xx, int yy) {
+
+ for(int i=yy; i>=0; i--) {
+ if(i==0) board[xx][i]=-1;
+ else  board[xx][i]=board[xx][i-1];
+ }
+ return board[xx][yy]>=0;
+ } // drop.
+ void main() {
+
+ // Initialize everything.
+ board.resize(width); gems.resize(width);
+ for(int i=0; i<width; i++) {
+board[i].resize(height);
+ gems[i].resize(height);
+ // Go ahead and adjust pitch and balance settings for each row?
+ for(int j=0; j<height; j++) {
+  gems[i][j].pitch=getPitch(j);
+ gems[i][j].pan=getPan(i);
+
+ }
+}
+ land.load("sfx/land.wav");
+ scoresnd.load("sfx/selected.wav");
+ show_game_window("Towering Tones version 2.0 by C. A. E. Jones, 5/8/2011.");
+
+ voice.speak_wait("Welcome to Towering Tones, version 2.0 by C A E Jones.");
+ setLoc(MAIN);
+
+ while (true) {
+  keyEvents();
+ step();
+ wait(t);
+ } // Main loop.
+ }// Main.

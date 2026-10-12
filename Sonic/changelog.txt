@@ -1,0 +1,15 @@
+10:57 PM 10/27/2011
+
+- Chopper, Buzz Bomber and Moto Bug added
+- Ring and star monitors added
+- Collapsing platforms now collapse if Sonic is touching them when the second counter resets.
+- Sonic's max unaided running speed has been decreased from 25 to 15
+- Sonic's max unaided air speed has been decreased to 7.5.
+- The bug that caused the last song to play after game over has been corrected.
+- Speed Shoes added
+- Spikes added.
+- Kill method updated so that the appropriate die sound can play based on the manner of death (spikes, drowning, etc).
+- Dropped rings bounce higher, hopefully cutting down on the spamming of the landing sound.
+- Save/load added.
+- Green Hills act 2 added.
+- Swinging Platforms added

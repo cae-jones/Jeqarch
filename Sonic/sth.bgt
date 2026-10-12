@@ -1,0 +1,1535 @@
+#include "sound_pool.bgt"
+
+ // If given the endpoints for two line segments, this function returns the point at which they intersect.
+ // If the segments do not intersect, the return value will be null.
+ Point@ lineIntersects(Point@ p1, Point@ p2, Point@ p3, Point@ p4) {
+ // Let's be sure that our points are in left-right order.
+ double x1=p1.x; double x2=p2.x; double x3=p3.x; double x4=p4.x;
+ double y1=p1.y; double y2=p2.y; double y3=p3.y; double y4=p4.y;
+ if(x3>x4) {x3=p4.x; x4=p3.x; y3=p4.y; y4=p3.y;}
+ if(x1>x2) {x1=p2.x; x2=p1.x; y1=p2.y; y2=p1.y;}
+
+ // Now, find the slopes.
+ // Ur, be aware that vertical lines might happen...
+ double m1;
+ if(x1==x2) m1=1999999999;
+ else m1=(y2-y1)/(x2-x1); 
+ double m2;
+ if(x3==x4) m2=1999999999;
+ else m2=(y4-y3)/(x4-x3);
+
+ double b1=y1-(m1*x1);
+ double b2=y3-(m2*x3);
+ if(m1==m2) {
+ if(b1==b2) {
+ // One point must be between the other two.
+ if((x3>=x1)&&(x3<=x2)) return newPoint(x3, y3);
+ else if((x4>=x1)&&(x4<=x2)) return newPoint(x4, y4);
+ else if((x1>=x3)&&(x1<=x4)) return newPoint(x1, y1);
+ else if((x2>=x3)&&(x2<=x4)) return newPoint(x2, y2);
+ else return null;
+ }
+ else return null;
+ }// They don't collide unless b1 and b2 are the same.
+ else {
+double rx=(b2-b1)/(m1-m2);
+ if((rx>=x1)&&(rx<=x2)&&(rx>=x3)&&(rx<=x4)) {
+ double ry = (m1*rx)+b1;
+
+ return newPoint(rx, ry);
+} else return null;
+}
+// return null;
+ }
+
+ class Rectangle {
+
+ double x; double y; double width; double height;
+ Rectangle(double xx, double yy, double w, double h) {
+x=xx; y=yy; width=w; height=h;}
+
+ bool collide(Rectangle@ r) {
+ double x1=x;
+ double x2=x+width;
+ double x3=r.x;
+ double x4=r.x+r.width;
+ double y1=y;
+ double y2=y+height;
+ double y3=r.y;
+ double y4=r.y+r.height;
+ return (
+ (
+( ((x1>=x3)&&(x1<=x4))||((x2>=x3)&&(x2<=x4)))&&
+ (((y1>=y3)&&(y1<=y4))||((y2>=y3)&&(y2<=y4)))
+ )||
+ (
+ (((x3>=x1)&&(x3<=x2))||((x4>=x1)&&(x4<=x2)))&&
+ (((y3>=y1)&&(y3<=y2))||((y4>=y1)&&(y4<=y2))))
+);
+}
+ bool contains(Point@ p) {
+ double x1=x; double x2=x+width;
+ double y1=y; double y2=y+height;
+ double x3=p.x; double y3=p.y;
+
+ return ((x3>=x1)&&(x3<=x2)&&(y3>=y1)&&(y3<=y2));
+ }
+
+ // Does this Rectangle intersect a line, as defined by two points?
+ bool intersects(Point p1, Point p2) {
+ if((contains(p1))||(contains(p2))) return true;
+
+ double x1=x; double x2=x+width;
+ double y1=y; double y2=y+height;
+
+ Point@ p;
+ @p=lineIntersects(p1, p2, newPoint(x1, y1), newPoint(x2, y1));
+ if(@p==null) @p=lineIntersects(p1, p2, newPoint(x1, y1), newPoint(x1, y2));
+ if(@p==null) @p=lineIntersects(p1, p2, newPoint(x2, y1), newPoint(x2, y2));
+ if(@p==null) @p=lineIntersects(p1, p2, newPoint(x1, y2), newPoint(x2, y2));
+ return (@p!=null);
+ }
+}// rectangle
+
+ class Point {
+ double x; double y;
+ Point() {x=0; y=0;}
+ Point(double xx, double yy) {x=xx; y=yy;}
+ }
+
+ Rectangle@ newRectangle(double xx, double yy, double w, double h) {Rectangle ret(xx, yy, w, h); return ret;}
+ Point@ newPoint(double xx, double yy) {Point ret(xx, yy); return ret;}
+
+
+
+
+ // Trying again!
+ const double pi=3.14159265;
+ class Track {
+ double angle; double length;
+ Item@[] items;
+ Particle@[] particles;
+ string bgm;
+ Track@ next;
+ Track@ prev;
+
+ Track(double an, double len) {angle=an; length=len; @next=null; @prev=null; underwater=false;}
+ bool underwater;
+
+ /* Returns the y value where the ground can be found at a given x, measured from the start of the track (0.0).
+ * If the given x value is out of the bounds of the track, the slope is extended.
+ */
+ double getGroundHeight(double x) {
+  return tangent(angle)*x;
+ }// Feh. It took me three minutes to come up with that. Where have all my math skills gone?
+
+
+ Track@ getEnd() {
+ Track@ ret;
+ @ret=this;
+ Track@ nxt;
+ @nxt=next;
+// watch out for looping tracks.
+ int tries=0;
+ while((@nxt!=null)&&(tries<10000)) {
+ @ret=nxt; @nxt=nxt.next;
+ tries++;
+ }
+ return ret;
+ }// GetEnd.
+
+ void addNext(double an, double len) {addNext(newTrack(an, len));}
+
+ void addNext(Track@ n) {
+ @next=n;
+ if(@n!=null) @(n.prev)=this;
+ }
+ void addToEnd(double an, double len) {addToEnd(newTrack(an, len));}
+ void addToEnd(Track@ n) {
+ Track@ en; @en=getEnd();
+ en.addNext(n);
+ }//Ad to end.
+
+
+ void addRing(double x, double y) {
+ addItem(ring(x, y));
+ }
+ void addItem(Item@ it) {items.insert_last(it);}
+ void addItem(string n, double x, double y, double w, double h) {addItem(newItem(n, x, y, w, h));}
+
+ string[] getDescriptions() {
+string[] ret;
+ ret.insert_last("This section of track is " + length + " units long.");
+ ret.insert_last("This section of track is at an angle of " + (angle/pi) + " times pi, radians.");
+ for(uint i=0; i<items.length(); i++) {
+ ret.insert_last("There is a " + items[i].type + ", at " + items[i].x + ", " + items[i].y + ". It is " + items[i].width + " wide, and " + items[i].height + " high.");
+ }// Items.
+ for(uint i=0; i<particles.length(); i++) {
+ ret.insert_last("There is a " + particles[i].name + ", at " + particles[i].x + ", " + particles[i].y + ". It is " + particles[i].radius*2.0 + " in diameter.");
+ }
+ return ret;
+ }// Get Descriptions.
+
+ void addEnemy(string n, double x, double y) {
+ Particle@ enemy;
+ @enemy=newParticle(n, x, y);
+ enemy.weightless=true; enemy.intangible=true;
+ enemy.setTrack(this);
+ }
+
+ }
+
+ class Item {
+ double y; // Distance from track.
+ double x; // Position along the track.
+ double width;
+ double height;
+ string type;
+ Track@ door;
+ Item(string n, double xx, double yy, double w, double h) {
+ type=n; width=w; height=h; x=xx; y=yy;
+ @door=null;
+ @bounds=null;
+ state=0;
+}
+ Rectangle@ bounds;
+ bool intersects(Point@ p1, Point@ p2) {
+  if(@bounds==null) @bounds=newRectangle(x, y, width, height);
+ else if((bounds.x!=x)||(bounds.y!=y)||(bounds.width!=width)||(bounds.height!=height)) @bounds=newRectangle(x, y, width, height);
+
+ return bounds.intersects(p1, p2);
+}
+ bool collide(Rectangle@ r) {
+  if(@bounds==null) @bounds=newRectangle(x, y, width, height);
+ else if((bounds.x!=x)||(bounds.y!=y)||(bounds.width!=width)||(bounds.height!=height)) @bounds=newRectangle(x, y, width, height);
+
+ return bounds.collide(r);
+ }
+ int state; // *headdesk*
+ }// Item.
+
+class Particle {
+
+ double x; double y;
+ double vx; double vy;
+ double ax; double ay;
+ bool weightless;
+ bool intangible; // Can it pass through things, like the ground?
+ string name;
+ Track@ track;
+ int state;
+ Particle(string n) {init(); name=n;}
+ void init() {
+ x=0; y=0; vx=0; vy=00; ax=0; ay=0; weightless=true;
+ intangible=false;
+ @track=null;
+ radius=0.5;
+ state=0;
+ }
+
+ bool onGround() {
+ double tg=0.0;
+ if(@track!=null) tg=track.getGroundHeight(x);
+
+ if(y<=tg) return true;
+
+ // Check for items that one can stand on. Mostly platforms and walls, in this case, but...
+ if(@track!=null) {
+ for(uint i=0; i<track.items.length(); i++) {
+ if((string_contains(track.items[i].type, "latform", 1)>0)||(string_contains(track.items[i].type, "wall", 1)>=0)) {
+ if((y>=track.items[i].y)&&(y<=track.items[i].y+track.items[i].height)) return true;
+ }// Check for standing atop said wall.
+ }// Things to stand on.
+ }
+ return false;
+ }
+ void step (double dt) {
+
+ // Ok. So. Yeah. Woo-hoo...
+
+ if((@track!=null)&&(track.underwater)) dt*=0.6;
+
+ double ground=0.0;
+ if(@track!=null) ground=track.getGroundHeight(x);
+
+ // Be sure that we aren't going through the ground when we move, unless we're intangible.
+ if(intangible) {x+=vx*dt; y+=vy*dt;
+
+ vx+=ax*dt; vy+=ay*dt;
+ if(!weightless) vy-=9.0*dt;
+}// Intangible is simple.
+ else {
+
+
+ double tx=x+(vx*dt);
+ double ty=y+(vy*dt);
+
+ double tg=0.0; if(@track!=null) tg=track.getGroundHeight(tx);
+ // Well, we need to run collision detection on solid objects
+
+ // But if we're landing on the ground, do that, too!
+ if(ty<tg) {
+if(y<=tg)  {
+ty=tg;
+ 
+}
+ else {
+ Point@ tp;
+ double tl=tx+10.0;
+ double th=0.0;
+ if(@track!=null) {tl=track.length; th=track.getGroundHeight(tl);}
+
+ @tp=lineIntersects(
+ newPoint(x, y), newPoint(tx, ty),
+ newPoint(0, 0), newPoint(tl, th)
+ );
+ if(@tp!=null) {tx=tp.x; ty=tp.y;}
+ else ty=tg;
+}// Point of intersection ftw?
+ // Good place to tell it to play a sound...
+ if(y>ty) addSound("sfx/landing.wav");
+ vy=0.0;
+ // Good time to add friction?
+ }// How to handle this? Make ty into tg?
+
+ if((tx!=x)&&(@track!=null)) ground=track.getGroundHeight(tx); // Since x might have changed.
+ x=tx; y=ty;
+
+ vx+=ax*dt; vy+=ay*dt;
+ if(!onGround()) {
+ if(!weightless) vy-=9.0*dt;
+}// In the air.
+ else if(@track!=null) {
+  // Friction. Woo hoo?
+ // Basically, our velocity changes by -9.0*sine(track.angle).
+ // Unfortunately, vectors.
+ if(track.angle!=0.0) {
+ vy-=9.0*sine(track.angle)*sine(track.angle)*dt;
+ vx-=9.0*cosine(track.angle)*sine(track.angle)*dt;
+}
+ // Also, friction.
+ if(vx>0.0) {vx-=4.5*dt; if(vx<0.0) {vx=0.0; if((name=="Sonic")||(name=="Tails")||(name=="Knuckles")) addSound("sfx/breaks.wav"); }} //?
+ else if(vx<0.0) {vx+=4.5*dt; if(vx>=0.0) {vx=0.0; if((name=="Sonic")||(name=="Tails")||(name=="Knuckles")) addSound("sfx/breaks.wav");}}
+ }// Some... inclined plane... stuff.
+ }// Not so simple.
+
+ if(@track!=null) {
+ if(x<0.0) {
+ if(@(track.prev)!=null) {
+ double dy=y-track.getGroundHeight(0.0); // Usually 0, right?
+setTrack(track.prev); x=track.length;
+ // But! y needs to remain relative, as though the tracks are connected at the ends.
+ y=track.getGroundHeight(x)+dy;
+}
+ else x=0.0;
+ }// Left.
+ else if(x>track.length) {
+ if(@(track.next)!=null) {
+ double dy=y-track.getGroundHeight(x); // Or track.length, whichever works best.
+ double an=track.angle;
+setTrack(track.next); x=0.0;
+ y=track.getGroundHeight(0)+dy;
+ // Adjust velocity!
+ if(y<=track.getGroundHeight(x)) {
+ double v=square_root((vx*vx)+(vy*vy));
+ vx=absolute(v*cosine(track.angle));
+ vy=v*sine(track.angle);
+ if(tangent(track.angle)<0.0) vy=-absolute(vy);
+
+}
+
+}
+ else x=track.length;
+ }// Right.
+
+ }// Check for going out of bounds.
+ }
+
+ void setTrack(Track@ t) {
+ bool splash=false;
+ if(@track!=null) {
+ for(uint i=0; i<track.particles.length(); i++) {
+ if(@(track.particles[i])==@this) {track.particles.remove_at(i); i--; continue;}
+ }
+ splash=track.underwater;
+ }// Remove from track's particles list.
+ @track=t;
+ if(@track!=null) {track.particles.insert_last(this);
+ if((splash!=track.underwater)&&((name=="Sonic")||(name=="Tails")||(name=="Knuckles"))) addSound("sfx/splash.wav");
+}
+ }
+ string[] sounds;
+ void addSound(string snd) {sounds.insert_last(snd);}
+ double radius;
+ }// There you go.
+
+
+ Particle@ newParticle(string n) {Particle ret(n); return ret;}
+ Particle@ newParticle(string n, double x, double y) {return newParticle(n, x, y, 0.5);}
+ Particle@ newParticle(string n, double x, double y, double w, double h) {return newParticle(n, x, y, (w+h)/4.0);}
+ Particle@ newParticle(string n, double x, double y, double r) {
+ Particle ret(n); ret.x=x; ret.y=y; ret.radius=r;
+ return ret;
+ }
+
+ Particle@ sonic, tails, knuckles;
+ Track@ gloc;
+ double invincibility=0.0, shoes=0.0;
+uint starpost=0;
+ uint rings=0;
+ int lives=3, continues=0, emeralds=0, stage=0;
+
+ const int MAIN=0, intro=-1, demo=1, game=2, soundtest=3, nextStage=4, continuing=5, gameOver=6, paused=7, credits=8;
+ int loc=intro;
+
+string[] zones={"Green Hill", "Marble", "Spring Yard", "Labyrinth", "Starlight", "Scrap Brain", "Final"};
+
+ float BGMVolume=0;
+ tts_voice voice;
+ sound bgm;
+ sound_pool pool, pool2;
+
+ int tailssound=-1;
+ bool tailscheck=false, tailsright=true;
+ double counter;
+ int score=0;
+
+ uint cheat_code=0;
+ uint debug_mode=0;
+ long[] cheat_sequence={
+ KEY_UP, KEY_SPACE, KEY_DOWN, KEY_SPACE, KEY_LEFT, KEY_SPACE, KEY_RIGHT, KEY_SPACE};
+// uint[] debug_sequence={1, 0, 2, 3, 2, 0, 1, 1};
+ long[] debug_sequence={KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SPACE};
+
+bool y_pitch=false, nvda=false;
+
+
+ void extendStage(Track@ tr) {
+  Track@ cur;
+ @cur=tr;
+ int tries=0;
+ while((tries<10000)&&(@cur!=null)) {
+  cur.bgm=tr.bgm;
+ @cur=cur.next;
+ tries++;
+ }
+
+ }// Extend Stage.
+
+
+ Item@ ring(double x, double y) {
+ Item@ ret; @ret=newItem("ring", x, y, 1, 1);
+ return ret;}
+
+ Item@ newItem(string n, double x, double y, double w, double h) {
+ Item ret(n, x, y, w, h);
+ return ret;
+ }
+Track@ newTrack(double a, double l) {
+ Track ret(a, l); return ret;
+ }
+
+
+
+ Track@ getTrack(int s) {
+
+ Track@ ret;
+ @ret=null;
+
+ switch (s) {
+
+ case 0 : {
+ // Green hill zone, act 1.
+ @ret=newTrack(0, 15.0);
+  ret.addItem(ring(9.5, 3.0));
+ ret.addItem(ring(10.5, 3.0));
+ ret.addItem(ring(11.5, 3.0));
+ ret.bgm="music/greenHill.ogg";
+
+ret.addNext(newTrack(pi/6.0, 7.5));
+ ret.addToEnd(newTrack(0.0, 15.0));
+
+ Track@ last; @last=ret.getEnd();
+ last.addItem(newItem("bridge", 4.5, 0.0, 3.0, 1.0));
+ last.addItem("leafy platform", 8.0, 3.0, 1.0, 1.0);
+ last.addItem("ring monitor", 8.0, 4.0, 1.0, 1.0);
+ last.addItem(newItem("pit", 9.0, -1.0, 1.5, 1.50));
+ last.addItem(newItem("pit", 12.50, -1.0, 1.5, 1.50));
+ Particle@ enemy;
+ @enemy=newParticle("Buzz Bomber", 10, 5.0, 0.5);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ last.addNext(newTrack(0.75*pi, 5.0));
+ last.next.addNext(newTrack(0.0, 25.0));
+ @last=last.next.next;
+
+ @enemy=newParticle("Moto Bug", 5.5, 0, 0.5);
+ enemy.intangible=false; enemy.weightless=false; enemy.setTrack(last);
+
+ last.addItem("bridge", 10.0, 0.0, 5.0, 1.0);
+ for(int i=0; i<5; i++) last.addRing(10.0+i, 0);
+ @enemy=newParticle("Chopper", 13.0, 1.0, 0.5);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+
+ last.addNext(newTrack(pi/4.0, 5.0));
+  @last=last.next;
+ last.addItem("leafy platform", 2.5, 5.0, 1.0, 1.0);
+ @(last.items[0].door)=newTrack(0, 3);
+ Track@ door; @door=last.items[0].door;
+ door.addItem("star monitor", 1.25, 0.0, 1.0, 1.0);
+ door.addItem("pit", -0.5, -0.5, 1.0, 1.0);
+ @(door.items[1].door)=last;
+ door.addItem("pit", door.length-0.5, -0.5, 1.0, 1.0);
+ @(door.items[2].door)=last;
+ // That... was way more complicated than it needed to be.
+
+ last.addNext(0, 25);
+ @enemy=newParticle("Crabmeat", 6.0, 0.0, 1.0, 1.0);
+ enemy.weightless=true; enemy.intangible=true;
+ enemy.setTrack(last.next);
+ @enemy=newParticle("Crabmeat", 16.0, 0.0, 1.0, 1.0);
+ enemy.weightless=true; enemy.intangible=true;
+ enemy.setTrack(last.next);
+
+ @last=last.next;
+ last.addItem("pit", 9.0, -0.5, 1.5, 1.0);
+ last.addItem("pit", 13.0, -0.5, 1.5, 1.0);
+ last.addItem("pit", 17.0, -0.5, 1.5, 1.0);
+
+ last.addItem("bridge", 20.0, 0.0, 5.0, 1.0);
+ for(int i=0; i<5; i++) last.addRing(20.0+i, 4.0);
+
+ last.addNext(0.75*pi, 10.0);
+ for(int i=0; i<3; i++) last.next.addRing(4.0+i, last.next.getGroundHeight(2.5+i));
+ last.next.addNext(0, 15);
+ @last=last.getEnd();
+  @enemy=newParticle("Buzz Bomber", 4.0, 4.0);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+  @enemy=newParticle("Buzz Bomber", 7.5, 3.0);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+
+ last.addNext(0.25*pi, 10.0);
+  last.next.addNext(0.9*pi, 10.0);
+ @last=last.next.next;
+   @enemy=newParticle("Buzz Bomber", 4.0, 4.0);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ last.addNext(0, 10);
+ last.next.addNext(0.3*pi, 10);
+ @last=last.next.next;
+ for(int i=0; i<last.length; i++) last.addRing(i, last.getGroundHeight(i));
+ last.addNext(0, 15);
+ last.next.addItem("ground spikes", 7.5, 0, 1, 1);
+  @enemy=newParticle("Buzz Bomber", 12.5, 4.0);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last.next);
+
+ last.next.addNext(pi/6.0, 5);
+ @last=last.next.next;
+ last.addNext(0, 15);
+ last.next.addItem("pit", 10, -0.5, 6, 1);
+ last.next.addItem("springboard up", 8.5, 0, 1, 1);
+ @last=last.next;
+ last.addItem("collapsing platform", 11.0, 10.0, 2.0, 1.0);
+ last.addItem("grassy platform", 13.0, 10.0, 2.0, 1.0);
+ @door=newTrack(0, 25);
+ door.bgm=ret.bgm;
+ @(last.items[last.items.length()-1].door)=door;
+ @(door.prev)=last;
+ @last=door;
+ for(int i=0; i<3; i++) last.addRing(5+i, 4);
+
+ last.addItem("pit", 15, -0.5, 10, 1);
+ for(int i=0; i<5; i++) last.addItem("collapsing platform", 15+(2*i), 1, 2, 1); // Or -1, if that's better
+ last.addNext(0.9*pi, 10);
+ last.next.addNext(0, 25);
+ @last=last.getEnd();
+ last.addItem("starpost", 5, 0, 1, 3);
+ last.addItem("ground spikes", 10, 0, 1.5, 1);
+ last.addRing(10, 4); last.addRing(11, 4); last.addRing(9, 4);
+ last.addItem("wall", 20, 0, 5, 10); // Make it higher if Sonic can actually jump that high.
+ last.addItem("springboard up", 19, 0, 1, 1);
+ @enemy=newParticle("Neutron", 20, 5);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ last.addItem("grassy platform", 20, 10, 5, 1);
+ extendStage(door);
+ @door=newTrack(0.9*pi, 10);
+ door.bgm=ret.bgm;
+ @(last.items[last.items.length()-1].door)=door;
+ @(door.prev)=last; //???
+ @last=door;
+ last.addNext(0, 10);
+ last.next.addNext(2*pi, 3*pi); // Loop.
+ @last=last.getEnd();
+ last.addNext(0.6*pi, 15);
+ last.next.addNext(0.75*pi, 10);
+ last.next.next.addNext(0.9*pi, 10);
+ @last=last.getEnd();
+ last.addNext(0, 15);
+
+ @last=last.next; 
+
+ last.addItem("tunnel entrance", 14, 0, 1, 1);
+ extendStage(door);
+  @door=newTrack(0, 25);
+ door.bgm=ret.bgm;
+  @(last.items[last.items.length()-1].door)=door;
+ @last=door;
+  last.addItem("tunnel exit", 0, 10, 1, 1);
+ for(int i=0; i<5; i++) {
+ for(int j=0; j<5; j++) {
+ last.addRing(i+1, 9-j);
+}}
+ @enemy=newParticle("Buzz Bomber", 4, 7);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ @enemy=newParticle("Buzz Bomber", 7, 4);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ last.addItem("ground spikes", 0, 0, 7, 1);
+
+ last.addItem("pit", 20, -0.5, 1.5, 1);
+ last.addNext(pi/6.0, 5);
+ last.next.addNext(0, 25);
+ @last=last.getEnd();
+ last.addItem("pit", 5.0, -0.5, 2, 1);
+ last.addItem("bridge", 15.0, 0, 5, 1);
+ @enemy=newParticle("Chopper", 16, 1);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ @enemy=newParticle("Chopper", 18, 5);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ for(int i=0; i<5; i++) last.addRing(15+i, 4);
+
+ last.addNext(0.8*pi, 10.0);
+ @last=last.next;
+ last.addItem("leafy platform", 5, 4, 1, 1);
+ last.addItem("ring monitor", 5, 5, 1, 1);
+  @enemy=newParticle("Buzz Bomber", 6, 3);
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+
+
+ last.addNext(0, 15.0);
+ last.next.addItem("goal post", 7, 0, 2, 2);
+
+ extendStage(ret);
+ extendStage(door);
+ }; break;
+ case 1 : {
+ // Green Hills act 2.
+ @ret=newTrack(0, 15);
+ ret.addRing(8, 0); ret.addRing(9, 0); ret.addRing(10, 0);
+
+ ret.addNext(0.25*pi, 5);
+ ret.next.addNext(0.0, 25);
+ Track@ last; @last=ret.getEnd();
+ last.addItem("bridge", 7.5, 0, 5, 1);
+ Particle@ enemy;
+ @enemy=newParticle("Chopper", 9, 1);
+ enemy.weightless=true; enemy.intangible=true;
+ enemy.setTrack(last);
+ @enemy=newParticle("Chopper", 11, random(0, 3));
+ enemy.weightless=true; enemy.intangible=true; enemy.setTrack(last);
+ for(uint i=0; i<5; i++) last.addRing(7.5+i, 0);
+   for(uint i=0; i<7; i++) last.addRing(20.0, 5+i);
+ last.addItem("springboard up", 20, 0, 1, 1);
+ last.addEnemy("Crabmeat", 22, 0);
+ last.addNext(0.1*pi, 10);
+ for(uint i=0; i<4; i++) last.next.addRing(1+(2*i), last.next.getGroundHeight(1+(2*i)));
+ last.next.addNext(0, 20);
+ @last=last.getEnd();
+ last.addItem("bridge", 5, 0, 5, 1);
+for(int i=0; i<5; i++) last.addRing(5+i, 4);
+ last.addEnemy("Buzz Bomber", 15, 4);
+ last.addItem("ground spikes", 20, 0, 1, 1);
+ last.addRing(20, 3);
+ last.addRing(21, 3);
+ last.addRing(22, 3);
+ last.addNext(0.1*pi, 10);
+ last.next.addItem("pit", 4, last.next.getGroundHeight(4)-0.5, 1, 1);
+last.addToEnd(0, 30);
+ @last=last.getEnd();
+ ret.bgm="music/greenHill.ogg";
+ last.addItem("pit", 15.0, -0.5, 10, 1);
+ last.addItem("grassy platform", 5, 2, 5, 1);
+ last.addItem("swinging platform", 15, 2, 1, 1);
+ last.addItem("grassy platform", 25, 2, 5, 1);
+
+ last.addNext(0.8*pi, 10);
+ for(int i=0; i<5; i++) last.next.addRing(2*i, last.next.getGroundHeight(2*i));
+ last.next.addNext(0.25*pi, 5);
+ last.addToEnd(0, 20);
+ @last=last.getEnd();
+ last.addItem("ground spikes", 12.5, 0, 1.5, 1);
+ last.addItem("bridge", 15, 0, 5, 1);
+ last.addRing(12, 4); last.addRing(13, 4); last.addRing(14, 4); last.addRing(15, 0); last.addRing(16, 0); last.addRing(17, 0); last.addRing(18, 0);
+ last.addNext(2*pi, 10.0); // Hmm.
+ last.next.addNext(0.75*pi, 10);
+ last.addToEnd(0.3*pi, 10);
+ @last=last.getEnd();
+ last.addNext(0, 35);
+ @last=last.next;
+ last.addItem("leafy platform", 2, 4, 1, 1);
+ last.addItem("star monitor", 2, 5, 1, 1);
+ last.addEnemy("BuzzBomber", 7, 5);
+ for(int i=0; i<5; i++) last.addItem("ground spikes", 10+i, 0, 3, 1);
+ last.addItem("pit", 23, 0, 10, 1);
+ last.addItem("grassy platform", 7, 1, 1, 1);
+ last.addItem("grassy platform", 9, 2, 1, 1);
+ last.addItem("grassy platform", 11, 5, 1.5, 1);
+ last.addItem("grassy platform", 15, 7, 1.5, 1);
+ last.addItem("grassy platform", 18, 6, 1, 1);
+ last.addItem("grassy platform", 20, 7, 1, 1);
+ last.addItem("grassy platform", 22, 8, 1, 1);
+ last.addEnemy("Buzz Bomber", random(10, 25), random(2, 8));
+ last.addItem("ring monitor", 18, 7, 1, 1);
+ last.addNext(0.9*pi, 10);
+ last.next.addNext(0, 30);
+ @last=last.getEnd();
+ last.addItem("starpost", 5, 0, 1, 2);
+
+ last.addItem("ground spikes", 12, 0, 1, 1);
+ last.addEnemy("Moto Bug", 10, 0);
+ last.addItem("grassy platform", 17, 2, 2, 1);
+ last.addItem("grassy platform", 19, 3, 2, 1);
+ last.addItem("grassy platform", 21, 4, 2, 1);
+ last.addItem("grassy platform", 23, 5, 2, 1);
+ last.addItem("grassy platform", 25, 6, 2, 1);
+ last.addItem("grassy platform", 27, 7, 3, 1);
+ last.addEnemy("Neutron", 21, 5);
+ last.addEnemy("Crabmeat", 28, 8);
+  Track@ door; @door=newTrack(0.6*pi, 10);
+ @(last.items[last.items.length()-1].door)=door;
+ extendStage(ret); door.bgm=ret.bgm;
+ @last=door;
+ for(int i=0; i<8; i++) last.addRing(1+i, last.getGroundHeight(1+i));
+ last.addNext(0, 25);
+ last.next.addItem("ground spikes", 10, 0, 1, 1);
+ @last=last.next;
+ last.addItem("ground spikes", 16, 0, 1, 1);
+ last.addRing(11, 4); last.addRing(12, 4); last.addRing(13, 4);
+ last.addItem("tunnel entrance", 22, 0, 1, 1);
+ extendStage(door);
+ @door=newTrack(0, 15);
+ @(last.items[last.items.length()-1].door)=door;
+ door.bgm=ret.bgm;
+ door.addItem("tunnel exit", 0, 0, 1, 1);
+ door.addItem("goal post", 7.5, 0, 3, 3);
+
+}; break;
+ case 2 : {
+ // Green Hills, act 3
+
+}; break;
+
+ }// Stageswitch in set stage.
+
+ return ret;
+ }// Get stage.
+
+
+ int play(string fn, double x, double y) {return play (fn, x, y, false);}
+ int play(string fn, double x, double y, bool loop) {
+
+ if(y_pitch) {
+return pool.play_extended_2d(fn, camera.x, camera.y, x, y, 0, 0,
+0, 0,
+loop, 0.0,
+0, 0,
+100.0+(5.0*(y-camera.y)));
+ }// Pitch for vertical.
+ else return pool.play_2d(fn, camera.x, camera.y, x, y, loop);
+ }
+ double prevY=0;
+Point camera(0, 0);
+
+ void updateSounds() {updateSounds(camera.x, camera.y); }
+ void updateSounds(double x, double y) {
+ if(y_pitch) {
+ pool.update_listener_1d(x);
+ for(uint i=0; i<100; i++) {
+ if(@(pool.items[i])==null) continue;
+ float pitch=pool.items[i].start_pitch;
+// determine y, like so:
+ pitch-=100.0;
+ pitch/=5.0;
+ pitch=100.0+(5.0*(pitch-camera.y));
+ pool.update_sound_start_values(i, 0, 0, pitch);
+ }
+}
+ else pool.update_listener_2d(x, y);
+ prevY=camera.y;
+ }
+ void update_sound(int i, double x, double y) {
+ if(!y_pitch) {
+ pool.update_sound_2d(i, x, y);
+}
+ else {
+ pool.update_sound_1d(i, x);
+ pool.update_sound_start_values(i, 0, 0, 100.0+(5.0*(y)));
+}
+}// Updating sounds. Gurgle.
+
+
+void system_commands() {
+ bool needsave=false;
+ if((key_down(KEY_LMENU))&&(key_down(KEY_F4))) exit();
+ else if((voice.speaking)&&((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL)))) voice.stop();
+ else if(key_pressed(KEY_TAB)) {
+ nvda=!nvda; needsave=true;
+ if(nvda) output("Screen reader mode.");
+ else output("sapi mode");
+ }// Tab.
+ else if(key_pressed(KEY_NEXT)) {BGMVolume-=5; bgm.volume=BGMVolume; needsave=true;}
+ else if(key_pressed(KEY_PRIOR)) {BGMVolume+=5; if(BGMVolume>0) BGMVolume=0; bgm.volume=BGMVolume; needsave=true;}
+ else if(key_pressed(KEY_LBRACKET)) {
+ needsave=true;
+ if(voice.rate>-9) {voice.rate=voice.rate-1; voice.speak_interrupt("sapi slower");} else voice.speak("Isn\'t this slow enough?");
+ }
+ else if(key_pressed(KEY_RBRACKET)) {
+ needsave=true;
+ if(voice.rate<9) {voice.rate=voice.rate+1; voice.speak_interrupt("sapi faster.");}
+ else voice.speak("<voice/><pitch middle=\"+5\">What do you want from me?</pitch>");
+}
+ else if(key_pressed(KEY_Y)) {
+ y_pitch=!y_pitch; needsave=true;
+ if(y_pitch) output("Vertical position will be represented by pitch.");
+ else output("Vertical position will be represented by volume.");
+ }
+ if(needsave) saveSettings();
+}// System commands?
+
+ void output(string str) {
+ if(nvda) show_game_window(str);
+ else voice.speak_interrupt(str);
+}
+
+ void loadSettings() {
+ file fin;
+ if(fin.open("settings.ini", "r")) {
+ string str=fin.read(0);
+ string[] lines=string_split(str, "\n", true);
+ for(uint i=0; i<lines.length(); i++) {
+ if(lines[i]=="n") nvda=true;
+ else if(lines[i][0]=="v") BGMVolume=string_to_number(string_right(lines[i], lines[i].length()-1));
+ else if(lines[i][0]=="r") voice.rate=string_to_number(string_right(lines[i], lines[i].length()-1));
+ else if(lines[i]=="y") y_pitch=true;
+
+ }
+
+ fin.close();
+ }// Load successful.
+ }// Load settings.
+ void saveSettings() {
+ file fout; fout.open("settings.ini", "w");
+
+ string str="";
+ if(y_pitch) str+= "y\n";
+ if(nvda) str += "n\n";
+ str += "v" + BGMVolume + "\n";
+ str += "r" + voice.rate + "\n";
+
+ fout.write(str);
+ fout.close();
+ }// Done.
+
+ void output_wait(string str) {
+ if(nvda) {
+ show_game_window(str);
+ while((!key_pressed(KEY_LCONTROL))&&(!key_pressed(KEY_RCONTROL))&&(!key_pressed(KEY_SPACE))&&(!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_ESCAPE))&&(!key_pressed(KEY_DOWN))&&(!key_pressed(KEY_Z))&&(!key_pressed(KEY_LEFT))&&(!key_pressed(KEY_RIGHT))&&(!key_pressed(KEY_UP))&&(!key_pressed(KEY_W))&&(!key_pressed(KEY_A))&&(!key_pressed(KEY_S))) {system_commands(); wait(5);}
+}
+ else {
+ while(voice.speaking) {system_commands(); wait(100);}
+ voice.speak(str);
+ while(voice.speaking) {system_commands(); wait(100);}
+ }// Voice waiting.
+ }// Output with waiting.
+
+ void init() {
+
+ @sonic=newParticle("Sonic", 0, 0);
+ @tails=newParticle("Tails", 0, 0);
+ @knuckles=newParticle("Knuckles", 0, 0);
+ sonic.weightless=false; sonic.intangible=false;
+ tails.weightless=false; tails.intangible=false;
+ knuckles.weightless=false; knuckles.intangible=false;
+
+}
+void main() {
+
+ loadSettings();
+ show_game_window("Sonic the Hedgehog, the audio edition!");
+ init();
+ output_wait("Sonic the Hedgehog!");
+
+ string[] mainMenu={
+ "Exit", "Play Sonic the Hedgehog",
+ // "Play Sonic the Hedgehog 2",
+ // "Play Sonic 3 and Knuckles",
+ "Help"
+ };
+ int mml=0; mml+=mainMenu.length();
+ int menuX=1;
+ output(mainMenu[menuX]);
+ while(true) {
+ system_commands();
+ bool speak=true;
+ if((key_pressed(KEY_DOWN))||(key_pressed(KEY_RIGHT))) menuX++;
+ else if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) menuX--;
+ else if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {
+ if(mainMenu[menuX][0]=="P") {
+ sonicMain(menuX);
+ }// Play the game!
+ else if(mainMenu[menuX]=="Help") {
+ output("Arrow down to read help.");
+
+ string[] helpbook={
+ "Press enter to return to the main menu.",
+ "Sonic the Hedgehog is the flagship franchise of Sega.",
+ "The 2d Sonic games are sidescrolling platformers, starring Sonic, the blue hedgehog, whose main ability is his incredible speed.",
+ "Use the arrow keys, or A, S, W and Z to direct Sonic. Press the space bar to jump.",
+ "Sonic moves by trying to accelerate in the specified direction. However, the success of these attempts is dependent on the slope of the track on which Sonic stands.",
+ "Slopes are defined using radians. So the closer the angle is to 0.5 times pi, the steeper the slope.",
+ "The steeper the slope, the more sonic will have to work against gravity to move along it. Sometimes, gravity will win, and Sonic will fall down the slope.",
+ "In some cases, falling down steep slopes is a good thing, enabling Sonic to attain greater speed for climbing a steep slope further along the track.",
+ "If you want an audio indication as to the length and angle of the current section of track, you can press T to have Sonic\'s flying fox-buddy, Tails, fly along the track.",
+ "Hold left or right shift while pressing T to change the direction that tails flies. Press T again to make Tails stop flying the track.",
+ "You can also hear a quick sound representing the surrounding slopes by pressing, L. These sounds will play automatically whenever you move over a different slope.",
+ "Sonic will have to do more than just speed his way over various slopes, however.",
+ "The evil Doctor Robotnic, or Eggman, or whatever his name is, is Sonic's mortal enemy, mostly because he constantly tries to take over the world (or small portions of it) with his robotic armies.",
+ "At some point, Robotnic thought it would be cheaper to add cybernetics to the locals rather than build and power robots from scratch.",
+ "So, Sonic must contend with the Roboticized hords. Luckily, all it will take is a well-placed bop from above to break Robotnic\'s control. Most of the time, anyway.",
+ "Sonic is protected by golden rings that are scattered throughout the zones. So long as Sonic is holding one ring, he cannot be killed, unless by falling in pits, being crushed or drowning.",
+ "When Sonic is hit, he will drop all of his rings, which will scatter into the environment. If you are quick enough, you can catch dropped rings before they bounce off into oblivion.",
+ "There are also various items, in the form of computer monitors scattered throughout the zones.",
+ "These monitors can be broken by jumping on them. There are other methods, but they\'ll come in later.\n",
+ "Beware of water! You\'ll know when Sonic has entered or left water by means of a splashing sound.",
+ "Sonic will gradually run out of oxygen while under water. You\'ll know when Sonic is close to drowning, as the music will change to something omenous.",
+ "Sonic can regain all of his available oxygen by jumping out of the water for air, though keep in mind that some tasks require spending a good deal of time away from the surface, so be careful!",
+ "Most levels will end in one of two ways.",
+ "There will either be a goal post, which you must run past to complete the level,",
+ "Or there will be a boss fight with one of Robotnic\'s contraptions.",
+ "Each boss behaves differently, and it is necessary to develop a strategy for dealing with them.",
+ "Once a boss is defeated, you can usually find a Roboticizer, with a button atop it. Jump on the button to release Robotnic\'s captives and complete the zone!",
+ "The exception is the final boss of each game, who, rather than guarding prisoners, usually controls the fortress where the battle takes place.",
+ "Defeating the final boss almost inevitably results in the ground crumbling, in which case Sonic must run so as to keep ahead of the destruction. With any luck, this will lead to completing the game, and not an anticlimactic death by pit.",
+ "That\'s most of what you need to know to play!",
+ "Other than game controls, you can use page up and page down to adjust the volume of the background music, tab to change the output mode, the left and right brackets to adjust sapi speed, and...",
+ "If you\'d prefer that vertical position be represented by pitch rather than volume, or if you just want to mix it up from time to time, press Y.",
+ "Press R to hear your total number of rings.",
+ "You can also stop and observe details about the current section of track, or the items and enemies in the area, by pressing V.",
+ "Ok, now go speed past some cyborgs!"
+ };
+
+ bool cont=true;
+ int chl=0; chl+=helpbook.length();
+ int mx=0;
+ while(cont) {
+ system_commands();
+ bool speak2=true;
+ if((key_pressed(KEY_DOWN))||(key_pressed(KEY_RIGHT))) mx++;
+ else if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) mx--;
+ else if((key_pressed(KEY_ESCAPE))||(key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {cont=false; speak2=false;}
+ else speak2=false;
+ if(mx<0) mx=chl-1; else if(mx>=chl) mx=0;
+ if(speak2) output(helpbook[mx]);
+ wait(5);
+ }// Help loop.
+
+ }// Help.
+ else if(mainMenu[menuX]=="Exit") exit();
+ }// Activate.
+ else speak=false;
+ if(menuX<0) menuX=mml-1; else if(menuX>=mml) menuX=0;
+ if(speak) output(mainMenu[menuX]);
+ wait(5);
+ }// Loop!
+ }
+ string curbgm="---";
+ void playsong(string str) {
+ if((curbgm==str)||(str=="")) {
+ if(!bgm.playing) bgm.play();
+ bgm.volume=BGMVolume;
+ }
+ else {
+ if(bgm.playing) bgm.stop();
+ bgm.stream(str);
+ bgm.play();
+ curbgm=str;
+ bgm.volume=BGMVolume;
+ }
+ }// Playsong.
+ void fadeOut() {
+ while((bgm.playing)&&(bgm.volume>-30)) {
+ bgm.volume=bgm.volume-1;
+ wait(50);
+ }
+ bgm.stop();
+ }// Fade out.
+
+ // This function contains the startup for each Sonic Game.
+
+ void sonicMain(int g) {
+wait(1000); // Don't let the keys overlap.
+ loc=MAIN;
+ cheat_code=0; debug_mode=0;
+ switch (g) {
+ case 1 : {
+ // Sonic 1.
+
+ while(!key_pressed(KEY_ESCAPE)) {
+ system_commands();
+
+// s1keys();
+ s1step();
+
+ wait(5);
+ }
+
+ }; break;
+ default : {
+ output_wait("ERROR! An invalid game ID has been sent to sonic main. The error code is " + g + ". ");
+}
+ }// Game switch.
+
+ fadeOut();
+ }// Sonic Main.
+
+
+ void s1step() {
+
+ switch (loc) {
+ case MAIN : {
+ if(!bgm.playing) {
+ output("Press enter to begin!");
+ playsong("music/title.ogg");
+ while(bgm.playing) {
+ system_commands();
+ if(key_pressed(KEY_RETURN)) {loc=nextStage;
+ if(cheat_code>=cheat_sequence.length()) {
+ output("Level Select!");
+ while(!key_pressed(KEY_RETURN)) {
+ system_commands();
+ bool speak=true;
+ if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) {
+ if(stage>0) stage--;
+ }
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_RIGHT))) {
+ stage++;
+ if(stage>18) stage=18;
+}
+ else speak=false;
+
+ if(speak) output(zones[stage/3] + " zone, act " + ((stage%3)+1) + ". ");
+ wait(5);
+}
+ }// Level select.
+
+ fadeOut();
+ return;
+ }
+ else if(key_pressed(KEY_ESCAPE)) {return;
+ // Umm. Yes?
+}
+ // Cheat codes.
+ else if((cheat_code<cheat_sequence.length())&&(key_pressed(cheat_sequence[cheat_code]))) {
+ cheat_code++;
+ if(cheat_code>=cheat_sequence.length()) pool.play_1d("sfx/ring.wav", 0, 0, false);
+ }
+
+ wait(5);
+ }
+ loc=demo;
+ }
+ }; break;
+ case nextStage : {
+ if(bgm.playing) bgm.stop();
+@gloc=getTrack(stage);
+ sonic.setTrack(gloc);
+sonic.x=0; sonic.y=0; sonic.vx=0; sonic.vy=0; sonic.ax=0; sonic.ay=0;
+ rings=0;
+ // And... umm... all that other fun stuff.
+ output_wait(zones[stage/3] + " zone, act " + ((stage%3)+1) + ".");
+ loc=game;
+ counter=0.0;
+// wait(250);
+ }; break;
+ case game : {
+
+ double dt=0.005; // Maybe using a timer would be better?
+ counter+=dt;
+ if(@gloc!=@(sonic.track)) { @gloc=sonic.track;
+ pool2.play_1d("sfx/angles/" + round( (gloc.angle/pi)*10.0, 0) + ".wav", 0, 0, false);
+}
+ Particle@[] particles=gloc.particles;
+ for(uint i=0; i<gloc.particles.length(); i++) {
+ gloc.particles[i].step(dt);
+ if(particles.length()!=gloc.particles.length()) {particles=gloc.particles;}
+ if(i>=particles.length()) continue; // WTF?
+ for(uint j=0; j<particles[i].sounds.length(); j++) {
+ play(particles[i].sounds[j], particles[i].x, particles[i].y);
+ }
+ particles[i].sounds.resize(0);
+
+
+ // Check for important things... like... collisions.
+ if(@(particles[i])==@sonic) {
+ Rectangle@ b; @b=newRectangle(particles[i].x-particles[i].radius, particles[i].y-particles[i].radius, 2.0*particles[i].radius, 2.0*particles[i].radius);
+// int secs=counter;
+// double rem=secs;
+//rem=counter-rem;
+ bool atSecond=(secondCounter.elapsed>=1000);
+ if(atSecond) secondCounter.restart();
+ for(uint j=0; j<gloc.items.length(); j++) {
+  bool col=gloc.items[j].collide(b);
+
+
+ if(gloc.items[j].type=="ring") {
+ if(col) {
+ addRing(1);
+  gloc.items.remove_at(j); j--; continue;
+}
+ else if(atSecond) play("sfx/freeRing.wav", gloc.items[j].x, gloc.items[j].y);
+ }
+ else if(string_contains(gloc.items[j].type, "spikes", 1)>=0) {
+ if(atSecond) play("sfx/spikes.wav", gloc.items[j].x, gloc.items[j].y);
+ // Problem! We need to distinguish between the spikes that actually are on a timer, and the ones that aren't.
+ if((col)&&(invincibility<=0.0)) {
+  // Basically, this can go a few ways, but they're all dependent on this...
+ string type=gloc.items[j].type;
+ if(type=="ground spikes") {
+ if((particles[i].x<=gloc.items[j].x)&&(particles[i].y<=gloc.items[j].y)) {particles[i].x=gloc.items[j].x-particles[i].radius; particles[i].vx=0.0; play("sfx/breaks.wav", particles[i].x, particles[i].y);}
+ else if((particles[i].x>=gloc.items[j].x+gloc.items[j].width)&&(particles[i].y<=gloc.items[j].y)) {particles[i].x=gloc.items[j].x+particles[i].radius+gloc.items[j].width; particles[i].vx=0.0; play("sfx/breaks.wav", particles[i].x, particles[i].y);}
+ else hitEnemy1(null);
+ }
+ }// Colliding with spikes
+ }// Spikes. 
+ else if(string_contains(gloc.items[j].type, "spring", 1)>=0) {
+ if(col) {
+ if(string_contains(gloc.items[j].type, "up", 1)>=0) {
+ if(particles[i].y>=gloc.items[j].y) {
+ pool2.play_2d("sfx/spring.wav", camera.x, camera.y, gloc.items[j].x, gloc.items[j].y, false);
+ particles[i].vy=18.0; particles[i].y++;
+ }// Sprung.
+ else particles[i].vx*=0.5; 
+ }// Well, there are up-right and up-left ones as well...
+ }// We care about the direction, though.
+ if(atSecond) play("sfx/freeSpring.wav", gloc.items[j].x, gloc.items[j].y);
+ }// Springboards. 
+ else if(gloc.items[j].type=="pit") {
+ if(atSecond) play("sfx/pit.wav", gloc.items[j].x, gloc.items[j].y);
+ if((col)&&(@(gloc.items[j].door)==null)) {
+ if(particles[i].y<=gloc.getGroundHeight(particles[i].x)) {
+ kill1();
+ }// Death by pit.
+ }// Hmm. Omenous.
+}// pits.
+else if(string_contains(gloc.items[j].type, "platform", 1)>=0) {
+ if(col) {
+ if(particles[i].y>gloc.items[j].y) {
+  if(particles[i].vy<0.0) {particles[i].vy=0.0; particles[i].y=gloc.items[j].y+gloc.items[j].height;
+ }// Landing on platforms...???
+}
+ if((gloc.items[j].type=="collapsing platform")&&(atSecond)) {
+ play("sfx/crash.wav", gloc.items[j].x, gloc.items[j].y);
+ gloc.items.remove_at(j); j--; continue; // Lame...
+ }// Collapse!
+ }
+else if(atSecond) {play("sfx/birdy.wav", gloc.items[j].x, gloc.items[j].y);
+
+ if(gloc.items[j].type=="swinging platform") {
+  gloc.items[j].state++;
+
+ if(gloc.items[j].state<=5) gloc.items[j].x++; 
+ else gloc.items[j].x--;
+ if(gloc.items[j].state>9) gloc.items[j].state=0;
+if(col) {sonic.x=gloc.items[j].x; sonic.vx=0;}
+ }// swinging platforms.
+}// Platform steppage.
+ }// Platforms.
+ else if(string_contains(gloc.items[j].type, " monitor", 1)>0) {
+ if(col) {
+ if((particles[i].y>gloc.items[j].y)&&(particles[i].vy<0.1)) {
+ string type=gloc.items[j].type;
+ pool2.play_1d("sfx/box.wav", camera.x, gloc.items[j].x, false);
+ particles[i].vy=pi;
+ gloc.items.remove_at(j); j--;
+ if(type=="ring monitor") addRing(10);
+ else if(type=="star monitor") invincibility=16.0;
+ else if(type=="shoe monitor") shoes=12.0;
+ // And so on.
+ continue;
+ }// Broken.
+ }// Either hit from above, while spinning, or they block you like platforms.
+ else if(atSecond) play("sfx/monitor.wav", gloc.items[j].x, gloc.items[j].y);
+ }// Monitors.
+else if(gloc.items[j].type=="goal post") {
+ if(col) {pool2.play_1d("sfx/sign.wav", 0, 0, false);
+ wait(1500);
+ setStageComplete1();
+ return;
+} }
+
+ if((@(gloc.items[j].door)!=null)&&(col)) {
+ particles[i].setTrack(gloc.items[j].door);
+ particles[i].x=0; particles[i].y=1;
+ if(gloc.items[j].type=="tunnel entrance") {
+ for(uint k=0; k<gloc.items[j].door.items.length(); k++) {
+ if(gloc.items[j].door.items[k].type=="tunnel exit") {particles[i].x=gloc.items[j].door.items[k].x; particles[i].y=gloc.items[j].door.items[k].y+1;}
+}
+ play("sfx/spin.wav", camera.x, camera.y);
+ wait(1500);
+ pool2.play_1d("sfx/exit_tunnel.wav", 0, 0, false);
+ }// Tunnels.
+ }// I think this works?
+ }// Items collision.
+ }// Run for tails and knuckles in sonic2 or sonic 3.
+ else {
+ bool col;
+ Rectangle@ r1; @r1=newRectangle(sonic.x-sonic.radius, sonic.y-sonic.radius, 2.0*sonic.radius, 2.0*sonic.radius);
+ Rectangle@ r2; @r2=newRectangle(particles[i].x-particles[i].radius, particles[i].y-particles[i].radius, 2.0*particles[i].radius, 2.0*particles[i].radius);
+ col=r1.collide(r2);
+
+ if(particles[i].name=="Crabmeats") {
+ if(secondCounter.elapsed>=1000) {
+ particles[i].state++;
+ if(particles[i].state>6) particles[i].state=0;
+ if(particles[i].state<3) particles[i].vx=-1.0;
+ else if(particles[i].state>3) particles[i].vx=1.0;
+ else {
+ play("sfx/shoot.wav", particles[i].x, particles[i].y);
+ particles[i].vx=0.0;
+ Particle@ projectile=newParticle("blast", particles[i].x, particles[i].y+0.5, 0.15);
+ projectile.weightless=false; projectile.intangible=true;
+ projectile.vy=4.0; //?
+ projectile.vx=4.0;
+ if(sonic.x<particles[i].x) projectile.vx*=-1.0;
+ projectile.setTrack(particles[i].track);
+ }// blast
+ play("sfx/scurry.wav", particles[i].x, particles[i].y);
+ }//Crabstep.
+ if(col) {
+ if((sonic.y>particles[i].y)&&(sonic.vy<0.1)) {
+ pool2.play_2d("sfx/box.wav", camera.x, camera.y, particles[i].x, particles[i].y, false);
+ enemiesKilled++;
+ gloc.particles.remove_at(i); continue;
+ }
+ else hitEnemy1(particles[i]);
+ }// colliding.
+ }// Crabmeats.
+
+ else if(particles[i].name=="Buzz Bomber") {
+ // These should be much faster than crabmeats.
+  if(secondCounter.elapsed>=1000) {
+ particles[i].vx*=-1.0;
+ if(particles[i].vx==0.0) particles[i].vx=5.0;
+ play("sfx/shoot.wav", particles[i].x, particles[i].y);
+ Particle@ blast; @blast=newParticle("blast", particles[i].x, particles[i].y);
+ blast.weightless=true; blast.intangible=true;
+  if(sonic.x<blast.x) blast.vx=-5.0;
+ else blast.vx=5.0;
+ if(sonic.y<blast.y) blast.vy=-5.5;
+ else blast.vy=5.5;
+ blast.radius=0.15;
+ blast.setTrack(particles[i].track);
+ }// Buzz Bomber blast.
+
+  if(col) {
+ if((sonic.y>particles[i].y)&&(sonic.vy<0.1)) {
+ pool2.play_2d("sfx/box.wav", camera.x, camera.y, particles[i].x, particles[i].y, false);
+ enemiesKilled++;
+ gloc.particles.remove_at(i); continue;
+ }
+ else hitEnemy1(particles[i]);
+ }// colliding.
+}// Buzz Bombers.
+
+ else if(particles[i].name=="Moto Bug") {
+ // They just crawl around.
+ if(secondCounter.elapsed>=1000) {
+ play("sfx/scurry.wav", particles[i].x, particles[i].y);
+ particles[i].state++;
+ if(particles[i].state>5) particles[i].state=0;
+ if(particles[i].state<3) particles[i].vx=-2.0;
+ else particles[i].vx=2.0;
+ }// Scurry.
+ if(col) {
+ if((sonic.y>particles[i].y)&&(sonic.vy<0.1)) {
+ pool2.play_2d("sfx/box.wav", camera.x, camera.y, particles[i].x, particles[i].y, false);
+ enemiesKilled++;
+ gloc.particles.remove_at(i);  continue;
+ }
+ else hitEnemy1(particles[i]);
+ }// colliding.
+}// Moto Bug.
+ else if(particles[i].name=="blast") {
+ // It could use a sound.
+ if(secondCounter.elapsed>=1000) {
+ play("sfx/blastContinues.wav", particles[i].x, particles[i].y);
+ if((particles[i].x<=0.0)||(particles[i].x>=gloc.length)||(particles[i].y<gloc.getGroundHeight(particles[i].x))) {gloc.particles.remove_at(i); continue;}
+ }// Hmm.
+ if(col) hitEnemy1(particles[i]);
+ }// Blast.
+
+ else if(particles[i].name=="Chopper") {
+
+ if(secondCounter.elapsed>=1000) {
+ play("sfx/chopper.wav", particles[i].x, particles[i].y);
+ if(particles[i].y>7) particles[i].vy=-random(2, 4);
+ else if(particles[i].vy<gloc.getGroundHeight(particles[i].x)) particles[i].vy=random(1.0, 4.0);
+ }// Choppers fly.
+
+ if(col) {
+ if((sonic.y>particles[i].y)&&(sonic.vy<0.1)) {
+ pool2.play_2d("sfx/box.wav", camera.x, camera.y, particles[i].x, particles[i].y, false);
+ enemiesKilled++;
+ gloc.particles.remove_at(i);  continue;
+ }
+ else hitEnemy1(particles[i]);
+ }// colliding.
+}//Choppers.
+
+ else if(particles[i].name=="ring") {
+ if(particles[i].onGround()) particles[i].vy=random(1, 3.0);
+ if(secondCounter.elapsed>=1000) {
+ particles[i].state++;
+ if(particles[i].state>random(3, 6)) {
+ gloc.particles.remove_at(i);  continue;
+ }// Lost.
+  play("sfx/freeRing.wav", particles[i].x, particles[i].y);
+ }// Hmm.
+ if(col) {
+ addRing(1);
+ gloc.particles.remove_at(i);  continue;
+}
+}// Rings.
+ else if(particles[i].name=="burst") {
+ enemiesKilled++; particles.remove_at(i); continue;
+ }// Dead things.
+
+
+ }
+}// Particles loop.
+
+
+if((key_pressed(KEY_SPACE))||(key_pressed(KEY_UP))||(key_pressed(KEY_W))) {
+ if(sonic.onGround()) {
+  sonic.vy=8.0;
+ pool2.play_2d("sfx/jump.wav", camera.x, camera.y, sonic.x, sonic.y, false);
+ }// On the ground.
+ }// Jumping.
+
+ if(((key_down(KEY_S))||(key_down(KEY_RIGHT)))&&(sonic.vx<15.0)) {
+sonic.ax=6.5;
+ if(shoes>0.0) sonic.ax*=2.0;
+ // Hey, wait! Acceleration shouldn't work in the air, should it?
+ if(!sonic.onGround()) {sonic.ax*=0.5; if(sonic.vx>7.5) sonic.ax=0.0;}
+}
+ else if(((key_down(KEY_A))||(key_down(KEY_LEFT)))&&(sonic.vx>-15.0)) {
+sonic.ax=-6.5;
+ if(shoes>0.0) sonic.ax*=2.0;
+ if(!sonic.onGround()) {
+ sonic.ax*=0.5;
+ if(sonic.vx<-7.5) sonic.ax=0.0;
+ }
+}
+ else {
+ sonic.ax=0.0;
+ if(key_pressed(KEY_T)) {
+ if(tailscheck) {
+ tailscheck=false; pool.destroy_sound(tailssound); tailssound=-1;
+ tails.weightless=false; tails.intangible=false;
+ }
+ else {
+ tailscheck=true;
+ tails.setTrack(sonic.track);
+
+ tails.x=0.0; tails.y=tails.track.getGroundHeight(0.0);
+ tailssound=play("sfx/tailsfly.wav", tails.x, tails.y, true);
+ if(key_down(KEY_LSHIFT)) tailsright=false; else if(key_down(KEY_RSHIFT)) tailsright=true;
+ tails.weightless=true; tails.intangible=true;
+ }// Beacon start.
+ }// Tails as a track aid..
+else if(key_pressed(KEY_V)) {
+ viewList(sonic.track);
+ }
+ else if(key_pressed(KEY_RETURN)) {
+ bgm.pause();
+ loc=paused;
+ wait(250);
+return;
+ }
+ else if(key_pressed(KEY_R)) output("" + rings + " rings");
+ else if(key_pressed(KEY_L)) {
+
+ if(@(gloc.prev)!=null) {pool.play_1d("sfx/angles/" + (round(gloc.prev.angle/pi*10.0, 0)) + ".wav", 0, -5, false); wait(1000);}
+ pool2.play_1d("sfx/angles/" + round(gloc.angle/pi*10.0, 0) + ".wav", 0, 0, false);
+ wait(1000);
+ if(@(gloc.next)!=null) pool2.play_1d("sfx/angles/" + round(gloc.next.angle/pi*10.0, 0) + ".wav", 0, 5, false); wait(1000);
+
+ }
+ else if(key_pressed(KEY_F1)) {
+ output("Sonic is at " + sonic.x + ", " + sonic.y + ". Sonic\'s x velocity is " + sonic.vx + ". Sonic\'s y velocity is " + sonic.vy + ". ");
+ }// F1.
+ else if(key_pressed(KEY_F2)) save1();
+ else if(key_pressed(KEY_F3)) load1();
+}// We have to have everything other than horizontal movement in an else block? Lame!
+
+ if(tailscheck) {
+ if(@(tails.track)!=@(sonic.track)) {tails.setTrack(sonic.track); tails.x=0; tails.y=0;
+ if(!tailsright) {tails.x=tails.track.length; tails.y=tails.track.getGroundHeight(tails.x);}
+}
+if(tailsright) tails.vx=2.0; else tails.vx=-2.0;
+ tails.step(dt);
+ tails.y=tails.track.getGroundHeight(tails.x);
+ update_sound(tailssound, tails.x, tails.y);
+ }// Tails.
+
+ if(loc==game) {
+ camera.x=sonic.x; camera.y=sonic.y;
+ updateSounds();
+ if(invincibility>0.0) {playsong("music/invincibility.ogg"); invincibility-=dt;}
+ else if(shoes>0.0) {shoes-=dt;
+ bgm.pitch=125;
+ if(shoes<=0.0) {
+ sonic.vx*=0.5; sonic.ax*=0.5;
+bgm.pitch=100;
+}
+ }
+ else if((curbgm=="music/1up.wav")&&(bgm.playing)) {
+ ; // 1up replaces all music.
+ }// 1up
+ else playsong(sonic.track.bgm);
+}// Music has been doing annoying things.
+ else output("" + loc); // Debug information, remove later.
+ }; break;
+ case paused : {
+ if(key_pressed(KEY_V)) viewList(sonic.track);
+ else if(key_pressed(KEY_RETURN)) loc=game;
+ else if((key_pressed(KEY_SPACE))&&(debug_mode>=debug_sequence.length())) {loc=MAIN; bgm.play(); fadeOut();}
+ }; break;
+ }// Locswitch in sonic 1.
+ }
+
+ void viewList(Track@ tr) {
+ string[] list=tr.getDescriptions();
+ int mx=0;
+ int chl=0; chl+=list.length();
+ output(list[0]);
+ while((!key_pressed(KEY_ESCAPE))&&(!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {
+ system_commands();
+ bool speak=true;
+
+ if((key_pressed(KEY_DOWN))||(key_pressed(KEY_RIGHT))||(key_pressed(KEY_Z))||(key_pressed(KEY_S))) mx++;
+ else if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))||(key_pressed(KEY_A))||(key_pressed(KEY_W))) mx--;
+ else speak=false;
+ if(mx<0) mx=chl-1; else if(mx>=chl) mx=0;
+ if(speak) output(list[mx]);
+ wait(5);
+ }
+ }
+
+ void addRing(uint r) {
+ rings+=r;
+ int x=0;
+ if(rings%2==0) x=5; else x=-5;
+ pool2.play_1d("sfx/ring.wav", 0, x, false);
+ if(rings%100<r) {
+ playsong("music/1up.wav");
+ lives++;
+ }
+ }
+ timer secondCounter;
+
+ void setStageComplete1() {
+ playsong("music/levelComplete.wav");
+wait(1000);
+ output_wait("You collected " + rings + " rings. You completed this act in " + round(counter, 0) + " seconds. You defeated " + enemiesKilled + " enemies.");
+ while(bgm.playing) {wait(50);}
+ pool2.play_1d("sfx/cash.wav", 0, 0, false);
+ wait(2000);
+ stage++;
+ loc=nextStage;
+ }
+ void kill1() {kill1(sonic);}
+ double oxygen=32.0;
+ void kill1(Particle@ enemy) {
+ string toplay="sfx/die.wav"; if(@enemy==null) toplay="sfx/spike.wav";
+ if(oxygen<=0.0) toplay="sfx/drown.wav";
+ pool2.play_1d(toplay, 0, 0, false);
+ wait(1000); fadeOut();
+ lives--;
+if(lives>=0) output_wait("You have " + lives + " lives left.");
+ loc=nextStage;
+ if(lives<0) {
+// loc=gameover;
+ playsong("music/gameOver.ogg");
+ output_wait("Game Over!");
+ wait(1000);
+ while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {wait(50);}
+ fadeOut();
+ if(continues>0) loc=continuing;
+ else {loc=MAIN; stage=0; lives=3;}
+ }// Game over.
+ }
+
+
+ int enemiesKilled=0;
+ timer hitCounter;
+ void hitEnemy1(Particle@ enemy) {
+ if((hitCounter.elapsed<4000)&&(invincibility<=0.0)) return;
+
+ hitCounter.restart(); hitCounter.resume();
+ string toplay="sfx/die.wav"; if(@enemy==null) toplay="sfx/spike.wav";
+ if(shield>0) {
+ // Generally?
+ shield=0;
+ pool2.play_1d(toplay, 0, 0, false);
+ sonic.vy=4.0; sonic.vx*=-1.0;
+ if(sonic.vx<-1.0) sonic.vx=-1.0;
+ else if(sonic.vx>1.0) sonic.vx=1.0;
+ }// Shields.
+ else if(invincibility>0.0) {
+ // Kill it.
+if(@enemy!=null) enemy.name="burst";
+ play("sfx/box.wav", enemy.x, enemy.y);
+}
+ else {
+ if(rings>0) dropRings();
+ else kill1(enemy);
+
+ }// Hit Sonic.
+ }
+ void dropRings() {
+ for(uint i=0; i<rings; i++) {
+ Particle@ r; @r=newParticle("ring", sonic.x+random(-1, 2), sonic.y+random(0, 1), 0.5);
+ r.vx=random(1, 50)*0.1; r.vy=random(1, 50)*0.1;
+ r.weightless=false; r.intangible=false;
+ r.setTrack(sonic.track);
+ if(r.x<sonic.x) r.x*=-1.0;
+ r.step(0.5);
+}
+ pool2.play_1d("sfx/drop.wav", camera.x, sonic.x, false);
+ rings=0;
+ }// Drop Rings.
+ int shield=0;
+
+ void save1() {
+ // Mostly just saves the stage you were on? And lives, continues, emeralds, shields... -_-
+string savestring="s" + stage + "\nh" + shield + "\nl" + lives + "\nc" + continues + "\ne" + emeralds + "\n";
+ file savefile; savefile.open("s1.dat", "w");
+ savefile.write(savestring);
+ savefile.close();
+ output("Saved.");
+ }
+ void load1() {
+ file fin; if(fin.open("s1.dat", "r")) {
+ string text=fin.read(0);
+ string[] lines=string_split(text, "\n", true);
+ for(uint i=0; i<lines.length(); i++) {
+ if(lines[i][0]=="s") stage=string_to_number(string_right(lines[i], lines[i].length()-1));
+  else if(lines[i][0]=="h") shield=string_to_number(string_right(lines[i], lines[i].length()-1));
+  else if(lines[i][0]=="l") lives=string_to_number(string_right(lines[i], lines[i].length()-1));
+  else if(lines[i][0]=="c") continues=string_to_number(string_right(lines[i], lines[i].length()-1));
+  else if(lines[i][0]=="e") emeralds=string_to_number(string_right(lines[i], lines[i].length()-1));
+
+ }
+ loc=nextStage;
+}
+ else output("No saved data for Sonic 1 could be found.");
+
+ }

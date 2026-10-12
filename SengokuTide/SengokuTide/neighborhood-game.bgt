@@ -1,0 +1,1005 @@
+#include "amaze.bgt"
+#include "clock.bgt"
+#include "custom_voice2.bgt"
+#include "FiniteStateMachine.bgt"
+#include "game.bgt"
+#include "JMenu2.bgt"
+#include "keyconfig.bgt"
+#include "sound_pool.bgt"
+#include "vecmath.bgt"
+
+// Character types
+enum chartypes {
+    KID, TEEN, ADULT, PET, SPECIAL
+};
+
+// States for kids
+const int WAIT=0, walking=1, running=2, playing=4, talking=8, tired=16, excited=32, scared=64, sick=128, crafting=256, hiding=512, exploring=1024, JUMPING=2048, DUCKING=4096;
+
+// Activities/Missions
+enum activities {
+    EXPLORE, FIND_FRIENDS, PLAY_GAME, BUILD_FORT, TREASURE_HUNT, HIDE_SEEK, HOMEWORK, CHORES, HOME, PARTY
+};
+
+// Terrain types
+const string[] terrains = {"Grass", "Sidewalk", "Street", "Driveway", "Playground", "Sandbox", "Garden", "Creek", "TreeHouse", "Fort", "Room", "Kitchen", "Bathroom", "Basement", "Attic", "Yard", "Garage"};
+
+// Status flags
+const int has_bike=1, has_ball=2, has_toy=4, is_grounded=8, needs_bathroom=16, is_leader=32, has_pet=64;
+
+// Forward declarations
+/*class NA;
+class Kid;
+class Item;
+class ActivityCard;
+class Location;
+class Event;
+*/
+// Item class
+class Item {
+    string name;
+    string description;
+    int type; // 0=toy, 1=food, 2=tool, 3=special
+    
+    Item(string n, string d, int t) {
+        this.name = n;
+        this.description = d;
+        this.type = t;
+    }
+}
+
+// Activity card class
+class ActivityCard {
+    string title;
+    string description;
+    int funPoints;
+    int energyCost;
+    bool requiresFriend;
+    
+    ActivityCard(string t, string d, int fp, int ec, bool rf) {
+        this.title = t;
+        this.description = d;
+        this.funPoints = fp;
+        this.energyCost = ec;
+        this.requiresFriend = rf;
+    }
+}
+
+// Location class
+class Location {
+    string name;
+    vector position;
+    string[] activities;
+    Item@[] hiddenItems;
+    
+    Location(string n, vector p) {
+        this.name = n;
+        this.position = p;
+    }
+    
+    void addActivity(string activity) {
+        this.activities.insert_last(activity);
+    }
+    
+    void hideItem(Item@ item) {
+        this.hiddenItems.insert_last(item);
+    }
+}
+
+// Event class
+class Event {
+    string name;
+    string description;
+    int type; // 0=personal, 1=area, 2=global
+    
+    Event(string n, string d, int t) {
+        this.name = n;
+        this.description = d;
+        this.type = t;
+    }
+}
+
+// Kid class
+class Kid : FSM {
+    int slot=-1, voiceslot=-1;
+    Kid@ bestFriend=null, target=null, leader=null;
+    string name="";
+    string g=""; // m/f
+    int activity=EXPLORE;
+    vector pose;
+    vector v; // velocity
+    vector face(1, 0, 0); // facing direction
+    double energy=100.0, mood=100.0, hunger=100.0;
+    double courage=50.0, creativity=50.0, humor=50.0;
+    
+    // Inventory for toys/items
+    string[] inventory;
+    
+    // Home location
+    vector home;
+    
+    // Friend tracking
+    Kid@[] friends;
+    int[] friendLevels;
+    
+    // Personal stats
+    int adventurePoints=0;
+    int pranksPlayed=0;
+    int gamesWon=0;
+    
+    NA@ game=null;
+    
+    Kid() {
+        this.g = ((random(1, 10)>5) ? "F" : "M");
+        this.name = generateKidName();
+    }
+    
+    bool isPlayer() {
+        return (@(this.game)!=null and this.game.playerKid>=0 and this.game.playerKid<this.game.kids.length() and this.game.kids[this.game.playerKid] is this);
+    }
+    
+    bool onGround() {
+        return this.pose.y <= 0.1; // Simple ground check
+    }
+    
+    double getSpeed() {
+        double baseSpeed = 4.0;
+        
+        // Modify speed based on energy
+        if(this.energy < 20) {
+            baseSpeed *= 0.5;
+        }
+        
+        // Running when excited
+        if(this.state == running || this.state == excited) {
+            baseSpeed *= 1.5;
+        }
+        
+        // Slower when tired or sick
+        if(this.state == tired || this.state == sick) {
+            baseSpeed *= 0.7;
+        }
+        
+        return baseSpeed;
+    }
+    
+    bool setState(int s) {
+        if(this.counter < 0.0) return false;
+        this.state = s;
+        this.counter = 0.0;
+        
+        // Play appropriate sounds
+        if(@(this.game) != null) {
+            if(s == JUMPING && this.isPlayer()) {
+                this.game.pool.play_3d("sounds/jump.wav", 
+                    this.pose.x, this.pose.y, this.pose.z,
+                    this.pose.x, this.pose.y, this.pose.z, false);
+            }
+            else if(s == DUCKING && this.isPlayer()) {
+                this.game.pool.play_3d("sounds/duck.wav", 
+                    this.pose.x, this.pose.y, this.pose.z,
+                    this.pose.x, this.pose.y, this.pose.z, false);
+            }
+        }
+        
+        return true;
+    }
+    
+    void fromAbove() {
+        int s = this.state;
+        this.state = 0;
+        
+        if(s == walking || s == running) {
+            // Stop moving
+            this.v.x = 0;
+            this.v.z = 0;
+        }
+        else if(s == JUMPING) {
+            // Apply jump velocity
+            this.v.y = 7.0;
+        }
+        else if(s == DUCKING) {
+            // Just crouch
+            this.counter = 0.5;
+        }
+        else if(s == tired) {
+            // Rest state
+            this.energy += 10;
+            if(this.energy > 100) this.energy = 100;
+        }
+        
+        this.state = 0;
+    }
+    
+    void always(double dt) {
+        if(this.game is null) return;
+        
+        // Basic movement physics
+        vector d = this.v*dt;
+        bool canMove = this.game.is_clear(this.pose+d);
+        
+        if(canMove) {
+            this.pose = this.pose+d;
+            
+            // Play footstep sounds
+            if(this.isPlayer() && this.state == walking && this.game.game_clock.frame % 15 == 0) {
+                this.game.play_step(this.pose);
+            }
+        } else {
+            // Bump sound
+            if(this.isPlayer()) {
+                this.game.play_bump(this, this.pose+d);
+                this.v = vector(0,0,0);
+            }
+        }
+        
+        // Simple gravity
+        if(!this.onGround()) {
+            this.v.y -= 9.8*dt;
+        } else if(this.v.y < 0) {
+            this.v.y = 0;
+            this.pose.y = 0;
+            
+            // Landing sound
+            if(this.isPlayer() && this.state == JUMPING) {
+                this.game.pool.play_3d("sounds/land.wav", 
+                    this.pose.x, this.pose.y, this.pose.z,
+                    this.pose.x, this.pose.y, this.pose.z, false);
+            }
+        }
+        
+        // Status updates
+        this.energy -= 0.1*dt;
+        this.hunger -= 0.05*dt;
+        
+        if(this.hunger < 20) {
+            this.mood -= 0.2*dt;
+        }
+        
+        if(this.energy < 20) {
+            // Tired - move slower
+            if(this.v.length() > 2) {
+                this.v = this.v * 0.5;
+            }
+        }
+        
+        // Clamp values
+        if(this.energy < 0) this.energy = 0;
+        if(this.energy > 100) this.energy = 100;
+        if(this.mood < 0) this.mood = 0;
+        if(this.mood > 100) this.mood = 100;
+        if(this.hunger < 0) this.hunger = 0;
+        if(this.hunger > 100) this.hunger = 100;
+    }
+    
+    void makeFriend(Kid@ other, int change) {
+        int idx = this.friends.find(other);
+        if(idx < 0) {
+            this.friends.insert_last(other);
+            this.friendLevels.insert_last(change);
+        } else {
+            this.friendLevels[idx] += change;
+            
+            // Update best friend
+            if(this.friendLevels[idx] >= 50 && @this.bestFriend == null) {
+                @this.bestFriend = other;
+                
+                // Announce new best friend if this is the player
+                if(this.isPlayer() && @(this.game) != null) {
+                    this.game.voice.speak("" + other.name + " is now your best friend!");
+                }
+            }
+        }
+        
+        // Clamp friendship levels
+        if(idx >= 0 && idx < this.friendLevels.length()) {
+            if(this.friendLevels[idx] < -100) this.friendLevels[idx] = -100;
+            if(this.friendLevels[idx] > 100) this.friendLevels[idx] = 100;
+        }
+    }
+    
+    int getFriendshipLevel(Kid@ other) {
+        int idx = this.friends.find(other);
+        if(idx < 0) return 0;
+        return this.friendLevels[idx];
+    }
+    
+    bool opEquals(Kid@ o) {
+        return @this == @o;
+    }
+    
+    string getStatusDescription() {
+        string status = this.name + ": ";
+        
+        if(this.energy < 20) status += "tired, ";
+        else if(this.energy > 80) status += "energetic, ";
+        
+        if(this.mood < 20) status += "unhappy, ";
+        else if(this.mood > 80) status += "very happy, ";
+        
+        if(this.hunger < 20) status += "hungry, ";
+        else if(this.hunger > 80) status += "full, ";
+        
+        if(status.length() > this.name.length() + 2) {
+            status = string_left(status, status.length() - 2); // Remove trailing comma
+        } else {
+            status += "feeling good";
+        }
+        
+        return status;
+    }
+}
+
+// Main game class
+class NA : game {
+    Kid@[] kids;
+    int playerKid=0;
+    
+    keyconfig@ key=null;
+    Menu@ mainmenu=null, menu=null;
+    sound_pool@ pool=null;
+    custom_voice@ voice=null;
+    
+    // Items and activities
+    Item@[] availableItems;
+    ActivityCard@[] activityDeck;
+    Location@[] specialLocations;
+    Event@[] possibleEvents;
+    Event@ currentEvent=null;
+    
+    // Map data
+    string[][] map;
+    vector[] houses;
+    vector[] playgrounds;
+    vector[] secrets;
+    
+    // Time and weather
+    int timeOfDay=0; // 0=morning, 1=afternoon, 2=evening
+    string weather="sunny";
+    
+    NA() {
+        this.init();
+    }
+    
+    void init() {
+        if(file_exists("keyconfig.ini")) @(this.key) = load_keyconfig("keyconfig.ini");
+        else {
+            keyconfig temp;
+            @(this.key) = temp;
+        }
+        
+        sound_pool temp;
+        @(this.pool)=temp;
+        this.pool.max_distance=40.0;
+        
+        custom_voice cv;
+        if(file_exists("voice.cfg")) cv.load_config("voice.cfg");
+        @(this.voice)=cv;
+        
+        this.setup_events();
+        this.setup_menu();
+        this.init_items();
+        this.init_activities();
+    }
+    
+    void setup_menu() {
+        Menu@ m = newMenu("Neighborhood Adventures");
+        m.add("Start New Game", MENU_ENTER).value = 1;
+        m.add("Continue", MENU_ENTER).value = 2;
+        m.add("Options", MENU_ENTER).value = 3;
+        m.add("Credits", MENU_ENTER).value = 4;
+        m.add("Exit", MENU_ENTER).value = 5;
+        @(this.mainmenu) = m;
+    }
+    
+    void setup_events() {
+        this.possibleEvents.insert_last(Event("Water Balloon Fight", "A water balloon fight has broken out!", 1));
+        this.possibleEvents.insert_last(Event("Ice Cream Truck", "The ice cream truck is coming down the street!", 2));
+        this.possibleEvents.insert_last(Event("Hide and Seek", "Someone suggested a game of hide and seek", 1));
+        this.possibleEvents.insert_last(Event("Treasure Map", "You found a mysterious treasure map!", 0));
+        this.possibleEvents.insert_last(Event("New Kid", "A new kid moved into the neighborhood", 2));
+        this.possibleEvents.insert_last(Event("Fort Building", "Perfect day to build a fort!", 1));
+        this.possibleEvents.insert_last(Event("Bike Race", "Kids are organizing a bike race", 1));
+        this.possibleEvents.insert_last(Event("Storm Coming", "Dark clouds are gathering", 2));
+    }
+    
+    void init_items() {
+        // Toys
+        this.availableItems.insert_last(Item("Water Balloon", "Perfect for water fights!", 0));
+        this.availableItems.insert_last(Item("Soccer Ball", "Great for playing soccer with friends", 0));
+        this.availableItems.insert_last(Item("Jump Rope", "How many jumps can you do?", 0));
+        this.availableItems.insert_last(Item("Frisbee", "Throw it far!", 0));
+        this.availableItems.insert_last(Item("Chalk", "Draw on the sidewalk", 0));
+        this.availableItems.insert_last(Item("Kite", "Fly it on a windy day", 0));
+        
+        // Food
+        this.availableItems.insert_last(Item("Popsicle", "Cool treat on a hot day", 1));
+        this.availableItems.insert_last(Item("Cookies", "Homemade chocolate chip!", 1));
+        this.availableItems.insert_last(Item("Juice Box", "Refreshing apple juice", 1));
+        
+        // Tools
+        this.availableItems.insert_last(Item("Walkie Talkie", "Talk to friends far away", 2));
+        this.availableItems.insert_last(Item("Magnifying Glass", "Investigate mysteries", 2));
+        this.availableItems.insert_last(Item("Flashlight", "For nighttime adventures", 2));
+        
+        // Special
+        this.availableItems.insert_last(Item("Lucky Penny", "Might bring good luck!", 3));
+        this.availableItems.insert_last(Item("Secret Note", "Contains a mysterious message", 3));
+    }
+    
+    void init_activities() {
+        this.activityDeck.insert_last(ActivityCard("Tree Climbing Contest", "See who can climb the highest!", 15, 20, true));
+        this.activityDeck.insert_last(ActivityCard("Sidewalk Art", "Create amazing chalk drawings", 10, 10, false));
+        this.activityDeck.insert_last(ActivityCard("Treasure Hunt", "Follow clues to find hidden treasure", 25, 15, true));
+        this.activityDeck.insert_last(ActivityCard("Fort Building", "Build the ultimate fort", 20, 25, true));
+        this.activityDeck.insert_last(ActivityCard("Water Gun Battle", "Epic water fight in the backyard", 30, 30, true));
+        this.activityDeck.insert_last(ActivityCard("Ghost Stories", "Tell spooky stories as it gets dark", 15, 5, true));
+    }
+    
+    void generate_neighborhood() {
+        // Create a neighborhood layout
+        int size = 30;
+        this.map.resize(size);
+        
+        for(int i=size-1; i>=0; i--) {
+            this.map[i].resize(size);
+            
+            for(uint j=0; j<size; j++) {
+                // Default to grass
+                this.map[i][j] = "Grass";
+                
+                // Add streets in a grid pattern
+                if(i % 6 == 0 || j % 6 == 0) {
+                    this.map[i][j] = "Street";
+                }
+                
+                // Add houses
+                if(i % 6 == 2 && j % 6 == 2) {
+                    this.map[i][j] = "House";
+                    this.houses.insert_last(vector(i, 0, j));
+                    
+                    // Add yard elements
+                    if(i+1 < size) this.map[i+1][j] = "Yard";
+                    if(j+1 < size) this.map[i][j+1] = "Driveway";
+                }
+                
+                // Add playground
+                if(i > 10 && i < 15 && j > 10 && j < 15) {
+                    this.map[i][j] = "Playground";
+                    if(i == 12 && j == 12) {
+                        this.playgrounds.insert_last(vector(i, 0, j));
+                    }
+                }
+                
+                // Add some trees randomly
+                if(random(1, 20) == 1 && this.map[i][j] == "Grass") {
+                    this.map[i][j] = "Tree";
+                }
+                
+                // Add creek
+                if(j == 18 && i > 5 && i < 25) {
+                    this.map[i][j] = "Creek";
+                }
+            }
+        }
+    }
+    
+    void spawn_kids() {
+        // Create player kid
+        Kid player;
+        player.name = "You";
+        @(player.game) = this;
+        if(this.houses.length() > 0) {
+            player.pose = vector(this.houses[0].x * 10, 0, this.houses[0].z * 10);
+            player.home = player.pose;
+        } else {
+            player.pose = vector(50, 0, 50);
+            player.home = player.pose;
+        }
+        this.kids.insert_last(player);
+        
+        // Create neighborhood kids
+        for(uint i=1; i<this.houses.length() && i<8; i++) {
+            Kid npc;
+            @(npc.game) = this;
+            npc.pose = vector(this.houses[i].x * 10, 0, this.houses[i].z * 10);
+            npc.home = npc.pose;
+            
+            // Give them some personality traits
+            npc.courage = random(30, 70);
+            npc.creativity = random(30, 70);
+            npc.humor = random(30, 70);
+            
+            this.kids.insert_last(npc);
+        }
+    }
+    
+    bool is_clear(vector p) {
+        int x = floor(p.x/10);
+        int z = floor(p.z/10);
+        
+        if(x<0 || z<0 || x>=this.map.length() || z>=this.map[x].length()) return false;
+        
+        string terrain = this.map[x][z];
+        
+        // Can't walk through houses
+        if(terrain == "House") return false;
+        
+        return true;
+    }
+    
+    void play_bump(Kid@ k, vector p) {
+        vector camera = this.get_camera();
+        string terrain = this.get_terrain(p);
+        
+        string toplay =  "Border"; //"sounds/bump.wav";
+        if(terrain == "House") toplay =  "Door"; //"sounds/door.wav";
+        else if(terrain == "Tree") toplay =  "Brush"; //"sounds/leaves.wav";
+        toplay = "c:/games/Swamp/Sounds/Obstacles/" + toplay + ".wav";
+        this.pool.play_3d(toplay, camera.x, camera.y, camera.z, p.x, p.y, p.z, false);
+    }
+    
+    int play_step(vector p) {
+        string terrain = this.get_terrain(p);
+        if(terrain == "") return -1;
+        
+        string steptoplay =  "Grass"; // Default
+        
+        if(terrain == "Street" || terrain == "Sidewalk") steptoplay =  "Concrete";
+        else if(terrain == "Driveway") steptoplay =  "Rock";
+        else if(terrain == "Creek") steptoplay =  "Wade";
+        else if(terrain == "Yard") steptoplay =  "Grass";
+        else if(terrain == "House") steptoplay =  "Carpet";
+        else if(terrain == "Playground") steptoplay =  "Sand";
+        
+        string soundFile = "c:/my programs/jeqocon/ps2023iso/bgt/" + "sounds/steps/" + steptoplay + "/run" + random(1, 6) + ".wav";
+        
+        vector camera = this.get_camera();
+        return this.pool.play_3d(soundFile, camera.x, camera.y, camera.z, p.x, p.y, p.z, false);
+    }
+    
+    vector get_camera() {
+        if(this.playerKid >= 0 && this.playerKid < this.kids.length()) {
+            return this.kids[this.playerKid].pose;
+        }
+        return vector(0, 0, 0);
+    }
+    
+    string get_terrain(vector p) {
+        int x = floor(p.x/10);
+        int z = floor(p.z/10);
+        
+        if(x<0 || z<0 || x>=this.map.length() || z>=this.map[x].length()) return "";
+        return this.map[x][z];
+    }
+    
+    void key_pressed(int k) {
+        if(k == KEY_ESCAPE) {
+            if(@this.menu != null) {
+                @this.menu = null;
+                this.voice.speak("Menu closed");
+            } else {
+                exit(); //this.running = false;
+            }
+        }
+        
+        // Handle menu if open
+        if(@this.menu != null) {
+            if(k == KEY_UP) {
+                this.menu.selectPrevious();
+                this.voice.speak(this.menu.getCurrent().toString());
+            }
+            else if(k == KEY_DOWN) {
+                this.menu.selectNext();
+                this.voice.speak(this.menu.getCurrent().toString());
+            }
+            else if(k == KEY_RETURN) {
+                int value = this.menu.getCurrent().value;
+                this.execute_kid_action(value);
+                @this.menu = null;
+            }
+            return;
+        }
+        
+        // Open menu on M
+        if(k == KEY_M) {
+            this.create_kid_menu();
+            if(@this.menu != null) {
+                this.voice.speak(this.menu.title);
+            }
+            return;
+        }
+        
+        if(@this.key != null) {
+            int action = this.key.press(k, 0);
+            this.handle_input(action);
+        }
+    }
+    
+    void key_released(int k) {
+        if(@this.key == null) return;
+        
+        int action = this.key.release(k, 0);
+        
+        if(this.playerKid < 0 || this.playerKid >= this.kids.length()) return;
+        
+        Kid@ player = this.kids[this.playerKid];
+        
+        // Stop moving when directional keys are released
+        if(action == 0 || action == 1 || action == 2 || action == 3) {
+            if(player.state == walking) {
+                player.v = vector(0, 0, 0);
+                player.setState(WAIT);
+            }
+        }
+    }
+    
+    void handle_input(int action) {
+        if(this.playerKid < 0 || this.playerKid >= this.kids.length()) return;
+        
+        Kid@ player = this.kids[this.playerKid];
+        
+        // Movement
+        if(action == 0) { // Left
+            player.face = vector(-1, 0, 0);
+            player.setState(walking);
+            player.v = player.face * player.getSpeed();
+        }
+        else if(action == 1) { // Right
+            player.face = vector(1, 0, 0);
+            player.setState(walking);
+            player.v = player.face * player.getSpeed();
+        }
+        else if(action == 2) { // Down
+            player.face = vector(0, 0, -1);
+            player.setState(walking);
+            player.v = player.face * player.getSpeed();
+        }
+        else if(action == 3) { // Up
+            player.face = vector(0, 0, 1);
+            player.setState(walking);
+            player.v = player.face * player.getSpeed();
+        }
+        else if(action == 33) { // Jump
+            if(player.onGround()) {
+                player.setState(JUMPING);
+                player.v.y = 7.0;
+            }
+        }
+        else if(action == 29) { // Action button
+            this.interact();
+        }
+        else if(action == 8) { // Status
+            string status = player.name + ": ";
+            status += "Energy: " + round(player.energy, 0) + "%, ";
+            status += "Mood: " + round(player.mood, 0) + "%, ";
+            status += "Hunger: " + round(player.hunger, 0) + "%, ";
+            status += "Adventure Points: " + player.adventurePoints;
+            this.voice.speak(status);
+        }
+        else if(action == 40) { // coords
+            this.voice.speak_interrupt(player.name + " is at " + round(player.pose.x, 0) + ", " + round(player.pose.z, 0));
+        }
+    }
+    
+    void interact() {
+        Kid@ player = this.kids[this.playerKid];
+        
+        // Check for nearby kids to talk to
+        for(uint i=0; i<this.kids.length(); i++) {
+            if(i == this.playerKid) continue;
+            
+            Kid@ other = this.kids[i];
+            double dist = (other.pose - player.pose).length();
+            
+            if(dist < 30) {
+                // Start conversation
+                this.voice.speak("Hi " + other.name + "!");
+                player.makeFriend(other, 1);
+                
+                // Maybe they suggest an activity
+                if(random(1, 3) == 1) {
+                    string[] activites = {
+                        "Want to play tag?",
+                        "Let's build a fort!",
+                        "Want to explore the creek?",
+                        "Let's have a race!"
+                    };
+                    
+                    string suggestion = activites[random(0, activites.length()-1)];
+                    this.voice.speak(other.name + " says: " + suggestion);
+                }
+            }
+        }
+    }
+    
+    void create_kid_menu() {
+        Kid@ player = this.kids[this.playerKid];
+        
+        Menu@ kidMenu = newMenu("What do you want to do?");
+        
+        // Basic actions
+        kidMenu.add("Look around", MENU_ENTER).value = 1;
+        kidMenu.add("Check status", MENU_ENTER).value = 2;
+        kidMenu.add("Go home", MENU_ENTER).value = 3;
+        
+        // Activity options based on location
+        string terrain = this.get_terrain(player.pose);
+        
+        if(terrain == "Playground") {
+            kidMenu.add("Play on swings", MENU_ENTER).value = 10;
+            kidMenu.add("Go down slide", MENU_ENTER).value = 11;
+        }
+        else if(terrain == "Creek") {
+            kidMenu.add("Skip stones", MENU_ENTER).value = 20;
+            kidMenu.add("Look for tadpoles", MENU_ENTER).value = 21;
+        }
+        else if(terrain == "Tree") {
+            kidMenu.add("Climb tree", MENU_ENTER).value = 30;
+        }
+        
+        @this.menu = kidMenu;
+    }
+    
+    void execute_kid_action(int action) {
+        Kid@ player = this.kids[this.playerKid];
+        
+        if(action == 1) {
+            // Look around
+            this.describe_surroundings();
+        }
+        else if(action == 2) {
+            // Check status
+            string status = player.getStatusDescription();
+            this.voice.speak(status);
+        }
+        else if(action == 3) {
+            // Go home
+            player.activity = HOME;
+            this.voice.speak("Time to go home!");
+        }
+        else if(action >= 10 && action < 20) {
+            // Playground activities
+            if(action == 10) {
+                this.voice.speak("You swing high into the air! Wheee!");
+                player.mood += 10;
+                player.energy -= 5;
+            }
+            else if(action == 11) {
+                this.voice.speak("You slide down fast! That was fun!");
+                player.mood += 8;
+                player.energy -= 3;
+            }
+        }
+        else if(action >= 20 && action < 30) {
+            // Creek activities
+            if(action == 20) {
+                this.voice.speak("You skip a stone across the water. " + random(1, 5) + " skips!");
+                player.mood += 5;
+            }
+            else if(action == 21) {
+                if(random(1, 3) == 1) {
+                    this.voice.speak("You found some tadpoles!");
+                    player.adventurePoints += 5;
+                } else {
+                    this.voice.speak("No tadpoles today, but the search was fun!");
+                }
+                player.mood += 3;
+            }
+        }
+        else if(action >= 30 && action < 40) {
+            // Tree activities
+            if(action == 30) {
+                if(player.courage > 40) {
+                    this.voice.speak("You climb to the top of the tree! You can see the whole neighborhood!");
+                    player.mood += 15;
+                    player.courage += 2;
+                    player.adventurePoints += 10;
+                } else {
+                    this.voice.speak("You climb partway up. Maybe you'll go higher next time!");
+                    player.mood += 8;
+                    player.courage += 1;
+                }
+                player.energy -= 15;
+            }
+        }
+    }
+    
+    void describe_surroundings() {
+        Kid@ player = this.kids[this.playerKid];
+        string terrain = this.get_terrain(player.pose);
+        
+        string description = "You are at ";
+        
+        if(terrain == "House") {
+            description += "a house";
+        } else if(terrain == "Street") {
+            description += "the street";
+        } else if(terrain == "Playground") {
+            description += "the playground! You can see swings and slides";
+        } else if(terrain == "Creek") {
+            description += "the creek. The water is flowing gently";
+        } else if(terrain == "Tree") {
+            description += "a big tree. It looks climbable!";
+        } else {
+            description += "a " + terrain + " area";
+        }
+        
+        // Describe nearby kids
+        int nearbyKids = 0;
+        for(uint i=0; i<this.kids.length(); i++) {
+            if(i == this.playerKid) continue;
+            
+            double dist = (this.kids[i].pose - player.pose).length();
+            if(dist < 100) {
+                if(nearbyKids == 0) description += ". You can see ";
+                else description += ", ";
+                
+                description += this.kids[i].name;
+                nearbyKids++;
+            }
+        }
+        
+        if(nearbyKids > 0) description += " nearby";
+        
+        this.voice.speak(description);
+    }
+    
+    void update_npc(int idx, double dt) {
+        Kid@ npc = this.kids[idx];
+        
+        // Simple AI behaviors
+        if(npc.activity == EXPLORE) {
+            // Wander around
+            if(random(1, 100) == 1) {
+                double angle = random(0, 360) * 3.14159 / 180;
+                npc.face = vector(cosine(angle), 0, sine(angle));
+                npc.setState(walking);
+                npc.v = npc.face * npc.getSpeed();
+            }
+            
+            // Play footstep sounds for NPCs too
+            if(npc.state == walking && this.game_clock.frame % 15 == 0) {
+                double dist = (npc.pose - this.get_camera()).length();
+                if(dist < 100) { // Only play sounds for nearby NPCs
+                    this.play_step(npc.pose);
+                }
+            }
+        }
+        else if(npc.activity == FIND_FRIENDS) {
+            // Look for other kids
+            Kid@ nearest = null;
+            double minDist = 1000;
+            
+            for(uint i=0; i<this.kids.length(); i++) {
+                if(i == idx) continue;
+                double dist = (this.kids[i].pose - npc.pose).length();
+                if(dist < minDist) {
+                    minDist = dist;
+                    @nearest = this.kids[i];
+                }
+            }
+            
+            if(@nearest != null && minDist > 50) {
+                // Move toward nearest kid
+                vector dir = nearest.pose - npc.pose;
+                dir = dir / dir.length();
+                npc.face = dir;
+                npc.setState(walking);
+                npc.v = npc.face * npc.getSpeed();
+            }
+        }
+        else if(npc.activity == HOME) {
+            // Go home
+            vector homeDir = npc.home - npc.pose;
+            if(homeDir.length() > 50) {
+                homeDir = homeDir / homeDir.length();
+                npc.face = homeDir;
+                npc.setState(walking);
+                npc.v = npc.face * npc.getSpeed();
+            } else {
+                // Arrived home
+                npc.activity = EXPLORE;
+                npc.energy = 100;
+                npc.hunger = 100;
+            }
+        }
+        
+        // Stop if reached destination
+        if(npc.state == walking && random(1, 50) == 1) {
+            npc.v = vector(0, 0, 0);
+            npc.setState(WAIT);
+        }
+    }
+    
+    void tick(double dt) {
+        dt *= 0.001; // Convert to seconds
+        
+        // Update all kids
+        for(uint i=0; i<this.kids.length(); i++) {
+            this.kids[i].step(dt);
+            
+            if(i != this.playerKid) {
+                this.update_npc(i, dt);
+            }
+        }
+        
+        // Random events
+        if(random(1, 2000) == 1) {
+            this.trigger_random_event();
+        }
+        
+        // Time progression
+        if(this.game_clock.frame % 18000 == 0) { // Every 5 minutes real time
+            this.timeOfDay = (this.timeOfDay + 1) % 3;
+            this.update_time_of_day();
+        }
+        
+        // Update camera
+        vector camera = this.get_camera();
+        this.pool.update_listener_3d(camera.x, camera.y, camera.z);
+    }
+    
+    void trigger_random_event() {
+        if(this.possibleEvents.length() == 0) return;
+        
+        Event@ evt = this.possibleEvents[random(0, this.possibleEvents.length()-1)];
+        @this.currentEvent = evt;
+        
+        this.voice.speak("Event: " + evt.name + "! " + evt.description);
+        
+        // Handle event effects
+        if(evt.name == "Water Balloon Fight") {
+            // Make kids excited and start running around
+            for(uint i=0; i<this.kids.length(); i++) {
+                this.kids[i].setState(excited);
+                this.kids[i].activity = PLAY_GAME;
+            }
+        }
+        else if(evt.name == "Ice Cream Truck") {
+            // Play ice cream truck music
+            this.pool.play_stationary("sounds/icecream_truck.wav", false);
+        }
+    }
+    
+    void update_time_of_day() {
+        string[] times = {"Morning", "Afternoon", "Evening"};
+        this.voice.speak("It's now " + times[this.timeOfDay]);
+        
+        if(this.timeOfDay == 2) {
+            // Evening - some kids might need to go home
+            for(uint i=0; i<this.kids.length(); i++) {
+                if(random(1, 3) == 1) {
+                    this.kids[i].activity = HOME;
+                    this.voice.speak(this.kids[i].name + " has to go home for dinner");
+                }
+            }
+        }
+    }
+    
+    void start_game() {
+        this.generate_neighborhood();
+        this.spawn_kids();
+        
+        // Welcome message
+        this.voice.speak("Welcome to the neighborhood! Use arrow keys to move, space to jump, and M for menu.");
+        this.voice.speak("Go explore and make friends!");
+    }
+}
+
+// Helper function to generate kid names
+string generateKidName() {
+    string[] firstNames = {
+        "Alex", "Sam", "Jordan", "Casey", "Morgan", "Riley", "Avery", "Quinn",
+        "Emma", "Liam", "Olivia", "Noah", "Ava", "Ethan", "Sophia", "Mason",
+        "Isabella", "William", "Mia", "James", "Charlotte", "Benjamin"
+    };
+    
+    return firstNames[random(0, firstNames.length()-1)];
+}
+
+void main() {
+    NA game;
+    game.start_game();
+    game.start("Neighborhood Adventures");
+}

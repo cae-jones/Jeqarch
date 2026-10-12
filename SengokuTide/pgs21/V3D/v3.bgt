@@ -1,0 +1,12 @@
+/**
+* For more information, see the readme.htm file.
+*/
+
+const string v3_new = "int v3_new(float,float,float);";
+const string v3_set = "BOOL v3_set(int,float,float,float);";
+const string v3_free = "void v3_free(int);";
+
+/* array */
+const string v3_array_new = "int v3_array_new(int);";
+const string v3_array_set = "BOOL v3_array_set(int,int,float,float,float);";
+const string v3_get_count = "int v3_get_count();";

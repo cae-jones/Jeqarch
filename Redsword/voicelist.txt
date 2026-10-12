@@ -1,0 +1,47 @@
+Menus:
+Main Menu
+New Game
+Load Game
+Speaker Test
+Switch Language
+Configure Keyboard
+Configure Joystick
+Braille
+Exit
+slot select			(Something like "Choose the slot to play in.")
+overwrite			("There is already data in that slot. Do you want to overwrite it?")
+Go Back
+
+Confirmation:
+quit			("Do you want to quit?" I would mention data being saved or not, but the game saves automatically when you exit.)
+Yes
+No
+
+Configuration:
+pressbutton			(Something like "Press the button you want to use for this action.")
+left
+right
+up			("Jump, or climb or swim up.")
+down			("Crouch, or climb or swim down.")
+attack			(Could be "Basic attack", or just "attack", I'm not sure.)
+interact			("Interact with things like doors, ladders, and so on.")
+cursor			(I feel like this needs a description, but I'm not sure I can think of a decent one that is also brief. I don't want to call it "accessible camera," though.)
+health			("Speak health", "say health", "check health", something like that.)
+rage			("Speak rage level", etc)
+radar			("Toggle radar", or "activate and deactivate radar". I need a PR person.)
+
+Numbers: All the standards up to 100. I don't expect we'll need more than that. However, since the number_reader checks for English words, it seems that the filenames must be in English even when the audio is not.
+
+Enemies will need voices, but this isn't so important as the rest.
+
+Scenes: Short explanations or character appearances before each level. And I do mean short--one to three sentences, other than the very first and very last. Probably just named level*.ogg, in the language's directory.
+(I haven't actually thought through all the scenes yet. I expect something like this)
+level0			(Narration explaining the backstory. Currently, I have "You thought you had nothing left to lose, but that was before the red sword filled you with uncontrollable rage. Of course, you were the test subject; the killer they secretly intended to give the sword--before your rage destroyed the test facility--is still out there, still deadly, and does not mind the red sword\'s terrible side-effects. And, don\'t forget! There was originally a good reason they created the red sword.")
+level1			(Based on "Trial by Air", with something of a forest theme. We don't need a scene for every level, and I like the idea of this just being outside the place in level0--just to imply you were breaking out of the place where the sword was being tested.)
+level2			(Based on "Trial by Traps", so I want the killer who wants the sword/your rival to taunt you. A gruff or raspy sort of criminal voice. Maybe "Looking for someone? Better watch your step in here.")
+level3			(Probably a water level. Maybe your friend ran into trouble with the unspecified villains, managed to escape immediate danger, but is forced to hide in the middle of this place because there are too many enemies.)
+level4			(I'm not really sure, yet.)
+^see level4.
+ally1			(You meet up with a friend (not the friend from level3), who gives you a way to call for help when you have low health.)
+ally3			(When you meet your friend in the water level, they give you scuba gear so that you can survive under water for a longer time without drowning.)
+

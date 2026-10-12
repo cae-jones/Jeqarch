@@ -1,0 +1,181 @@
+/*
+This SoundManager should be used if you want to easily manage sounds but don't have to use geomtry calculations. If you wan to calculate sound counting on a geometry system (walls, ...) use the FMODSoundManager.
+*/
+#include "bass.bgt"
+#include "v3.bgt"
+#include "V3DVector.bgt"
+#include "V3DSoundManager.bgt"
+
+library bass, v3;
+
+V3DSoundManager@ SoundManager = cast<V3DSoundManager>(BASSSoundManager());
+
+
+class BASSSoundManager : V3DSoundManager
+{	
+	string path="";
+	
+	~BASSSoundManager()
+	{
+		if(bass.active)
+		{
+			bass.unload();
+		}
+		if(v3.active)
+		{
+			v3.unload();
+		}
+	}
+	
+	void setLoadingDirectory(string path)
+	{
+		this.path = path;
+	}
+	
+	bool load()
+	{
+		bool res;
+		res	= bass.load(this.path+"bass.dll");
+		
+		if(!res)
+		{
+			alert("WARNING", "Can't load BASS DLL!");
+			return res;
+		}
+		
+		res	= v3.load(this.path+"v3.dll");
+		
+		if(!res)
+		{
+			alert("WARNING", "Can't load v3 DLL!");
+			return res;
+		}
+		
+		init();
+		return true;
+	}
+	
+	void init()
+	{
+		dictionary@ result = bass.call(BASS_Init, -1,22050,BASS_DEVICE_3D,0,0);
+		int code;
+		result.get("0", code);
+		
+		if(code==0)
+		{
+			alert("ERROR", "Error while loading BASS environment!");
+			exit();
+		}
+	}
+	
+	void setListenerPosition(V3DVector@ pos, V3DVector@ ori=null)
+	{
+		int ph=0, oh=0;
+		if(@pos!=null)
+		{
+			ph=pos.getHandle();
+		}
+		if(@ori!=null)
+		{
+			oh=ori.getHandle();
+		}
+		
+		bass.call(BASS_Set3DPosition, ph, null, oh, null);
+	}
+	
+	void update()
+	{
+		bass.call(BASS_Apply3D);
+	}
+	
+	bool isActive()
+	{
+		return(bass.active && v3.active);
+	}
+	
+	//called by V3DSound to allocate a new sound and get the handle
+	uint[] newSound(string soundpath)
+	{
+		uint[] infos(3);
+		dictionary@ result;
+
+		//Load the sound
+		@result = bass.call(BASS_SampleLoad, FALSE, soundpath, 0,0, 0,1, BASS_SAMPLE_3D   | 
+																		 BASS_SAMPLE_MONO | 
+																		 BASS_SAMPLE_SOFTWARE);
+		
+		//Get the handle to control memory
+		result.get("0", infos[0]);
+		if(infos[0]==0)
+		{
+			alert("ERROR", "Coudn't load "+soundpath);
+		}
+		
+		
+		//Get the channel to control the sound
+		@result = bass.call(BASS_SampleGetChannel, infos[0], 0);
+		result.get("0", infos[1]);
+		
+		@result = bass.call(BASS_ChannelGetLength, infos[1], BASS_POS_BYTE);
+		result.get("0", infos[2]);
+		return infos;
+	}
+	
+	//Called by V3DSound to pause its sound
+	void pauseSound(V3DSound@ sound)
+	{
+		bass.call(BASS_ChannelPause, sound.getChannel());
+	}
+	
+	//Called by V3DSound to play its sound
+	void playSound(V3DSound@ sound, bool restart=false)
+	{
+		int rt;
+		if(restart)
+		{
+			rt=1;
+		}
+		else
+		{
+			rt=0;
+		}
+		bass.call(BASS_ChannelPlay, sound.getChannel(), rt);
+	}
+	
+	//Called by V3DSound to play its sound looped
+	void playLooped(V3DSound@ sound, bool restart=false)
+	{
+		dictionary@ result =  bass.call(BASS_ChannelFlags, sound.getChannel(), BASS_SAMPLE_LOOP, 0);
+		uint code;
+		result.get("0", code);
+		if(code!=BASS_SAMPLE_LOOP)
+		{
+			bass.call(BASS_ChannelFlags, sound.getChannel(), BASS_SAMPLE_LOOP, BASS_SAMPLE_LOOP);
+		}
+		playSound(@sound, restart);
+	}
+	
+	//Called by V3DSound to stop its sound
+	void stopSound(V3DSound@ sound)
+	{
+		bass.call(BASS_ChannelStop, sound.getChannel());
+	}
+	
+	//Called by V3DSound to seek in its sound
+	void seekSound(V3DSound@ sound, double pos)
+	{
+		alert("INFO", "Not implemented. Check for next versions.");
+	}
+	
+	//Called by V3DSound to destroy its sound
+	void destroySound(V3DSound@ sound)
+	{
+		bass.call(BASS_SampleFree, sound.getHandle());
+	}
+	
+	//Called by V3DSound to set its sound position
+	void setSound3DPosition(V3DSound@ sound, V3DVector@ position)
+	{
+		bass.call(BASS_ChannelSet3DPosition, sound.getChannel(), position.getHandle(),0,0);
+	}
+}

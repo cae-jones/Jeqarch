@@ -1,0 +1,59 @@
+
+The general rule with Sonic: When in doubt, hold right.
+A bit of warning, though: the sounds for most threats play every second or so. If you're moving so fast that you come up on something and it's timed rather horribly (which is very easy, actually), you can easily not hear a pit before you fall in it.
+
+If you want to check on what's coming up, press L. This will give you the slope you're standing on, and what's immediately to your left and right (when applicable; if you're at an edge, it'll leave out the one that isn't there).
+Press L when you start Green Hills Act 1, and you should hear two distinct chime-like sounds. One is a constant pitch, and the other starts low and makes its way upward.
+These are meant to give an idea of the track. In this case, you're on a section of flat ground, with an upward slope ahead. The upward and downward chimes will vary based on the angle of the slope. In this case, it's not that steep, but you'll need to start heading for it before you reach the end of the flat area if you want to run up it.
+Basically, you do not move at a constant speed in the specified direction. When running, you tell Sonic to accelerate, and he'll keep accelerating until he reaches his maximum running speed.
+It's possible to travel faster than the maximum running speed with help from gravity (such as running down a slope), but that shouldn't be necessary just yet.
+
+Now, you'll notice those clangy noises off to the right. Those are rings floating a bit above the track.
+If you press v, you will be able to look through a list of details that includes the position of each of those rings. And it tells you where Sonic is, too!
+If you'd rather not worry with precision, you can try just heading to the right, and jumping as the rings approach center to catch them. Or you can ignore them, but keep in mind that having rings protects you from death should you run into enemies or spikes.
+(Rings will do you no good against pits, though!)
+
+This first slope you climb leads to another section of flat ground. A plateau, if you will, what with there being a downward slope on the other end.
+This plateau features a pair of pits and a Buzz Bomber, though, so exercise caution!
+In particular, if you have just been holding right since the start of the level, there's a good chance you'll actually hit the plateau too quickly to jump the pits.
+
+An important detail to notice about movement is that you don't instantly change direction when you switch from holding right to left.
+You have to slow down and accelerate in the new direction.
+If you aren't holding a direction, and are on the ground, friction takes over. You'll know when friction has brought Sonic to a stop by the extremely electronic brake sound.
+If you want to be a little more clear on what that sound is, find a safe place (like the beginning of the level) and just tap right. Sonic shouldn't go very far before friction brings him to a halt, and you can hear the sound for yourself.
+(Oddly, Sega released a game called "Sonic Spinball", which is basically just a pinball game... with Sonic. Despite having much poorer quality sounds compared to the main Sonic games, the brakes in Sonic Spinball actually sound like cartoonish brakes. ... I like the electronic brakes better, somewhy.)
+
+So, we've established that rings are good, and you should hit the slope running, but probably not too fast.
+If you manage to stop and look around the plateau (use v if you want more specifics than you get from the sounds), you'll notice that there are more than just pits and an enemy.
+There happens to be a leafy platform (which is code for "a tree, but I'd rather lump all platforms into the same block of code") just to the left of the first pit, and it has a ring monitor on it to boot.
+It's a bit scary trying to get close enough to the pit to jump up there without falling in, even without enemies. Add the Buzz Bomber to the picture (who is, of course, trying to bomb you), and trying to reach that monitor takes on a whole new level of risk. But if you can pull it off, you get ten more rings.
+(Which, in theory, makes up for the three you probably just lost trying to get up there...)
+
+Regardless of what exactly you want to do on the plateau--bust a monitor, release the furry animal that is now a Buzz Bomber from cybernetic tyrany, stroll by the pits or just run and make a daring jump past it all--you'll eventually come down the other side.
+Downward slopes have gravity pulling at you, so if they are steep enough, gravity will overcome friction and slowly pull you downward whether you're moving or not.
+At the bottom of this slope, you'll find some more enemies, some more rings, and a bridge. In this level, bridges are just decorative (well, and hangouts for Choppers), but this might not always be the case...
+This valley is a little difficult to collect from, since you'll probably hit it at a high enough speed that you can jump the whole thing. If you really want those rings, though, beware the Chopper. And what Sonic calls "Choppers" are really just cyborg fish-things that like to swim up and down in one spot. You should watch out for the Moto Bug as well, but since it's slowly pacing and not near the rings, it's a bit less scary.
+
+The next slope upward taunts you with a platform that is more easily reachable than it seems, what with the fact that you have to be moving up or down a slope to get under it. ... Go for it if you want. Who knows, maybe there's something hidden up there...
+
+At the top of the slope is another plateau with pits, enemies and rings. There are three pits this time. It is much easier to die here by coming in too fast, or even by jumping the valley at high enough a speed that you literally don't land until reaching a pit. Which makes me think that Sonic's max speed should be decreased, but until then, be careful, and time your jumping strategicly.
+
+Things get easier from here, actually. The enemies chill out for a little while, leaving you with only the occasional collapsing platform and set of spikes to worry about.
+Ah, well, and that section of track that abruptly ends in a pit. There is a collapsing platform above the pit, but it's too high for you to jump to. There is a convenient springboard near the pit, though, so if you just jump on that, it will easily put you high enough to reach the platform and keep moving.
+(Something similar happens later with a wall.)
+
+With all those collapsing platforms and pits you come across, you'll just want to jump a little, then speed on through.
+You might eventually come to a section where you mysteriously stop, or something. Or at least, there are no audible objects, and you don't seem to be changing slopes. If you check out this section with v, you'll discover that the angle of the track is 2*pi, which basically means the track does a complete rotation.
+Or in this case, that represents a loop.
+Loops in this version are... confusing and unstable things that don't seem to work quite right (yet?). Just move back and forth a bit, maybe try to jump, and you'll be out of the loop in no time.
+You're rather safe after flying through the loop, until you hit the tunnel. The tunnel will spit you out above a bed of spikes, in a cloud of rings with Buzz Bombers ruining the otherwise awesome skydiving challenge.
+And there's a pit near there, too. I'll leave finding a way to survive this part to you.
+
+If you've made it this far, you can probably handle the remainder of this level on your own.
+I will mension, though, that it's possible (if not likely) that you'll hit the last section in the air, and therefore wind up completely missing the goal post. If you reach another silent spot, check to see where you are (either F1 or V will do). If you're somewhere around 15, 0, you're trying to leave without hitting the goal post. So just turn around and walk over to it (whenever you manage to slow down enough to change direction). And the level is done!
+
+If you made it with at least 50 rings, there might be something else waiting for you (It depends what updates have happened before you read this).
+
+If you're worried that this is shaping up to be a "hold right and occasionally jump" fest, remember that this is just the first level.
+... The next zone involves more volcanic cave-exploring. (If it ever gets made, anyway...)
+

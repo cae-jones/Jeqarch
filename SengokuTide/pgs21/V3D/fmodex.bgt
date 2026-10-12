@@ -1,0 +1,44 @@
+/**
+* BGT header file for the FMOD Ex library.
+* This file contains the signatures of some of the library functions.
+* For more information, see the documentation for the FMOD Ex library.
+*/
+
+const int FMOD_OK = 0;
+
+const uint FMOD_INIT_NORMAL=0;
+const uint FMOD_LOOP_NORMAL   =0x00000002;
+const uint FMOD_3D  =0x00000010;
+const uint FMOD_HARDWARE =0x00000020;
+const uint FMOD_SOFTWARE                  = 0x00000040;
+const int FMOD_CHANNEL_FREE = -1;
+
+const string FMOD_System_Create = "int FMOD_System_Create(int*);";
+const string FMOD_System_Init= "int FMOD_System_Init(int, int, unsigned int, void*);";
+const string FMOD_System_CreateSound = "int FMOD_System_CreateSound(int, char*, unsigned int, void*,int*);";
+const string FMOD_System_PlaySound = "int FMOD_System_PlaySound(int,int,int,int, int*);";
+const string FMOD_System_setPaused = "int FMOD_Channel_SetPaused(int, int);";
+const string FMOD_Channel_SetMode  = "int FMOD_Channel_SetMode(int, unsigned int);";
+const string FMOD_Channel_Set3DAttributes ="int FMOD_Channel_Set3DAttributes(int,int,int);";
+const string FMOD_System_Update = "int FMOD_System_Update(int);";
+const string FMOD_Channel_Stop = "int FMOD_Channel_Stop(int);";
+const string FMOD_Sound_Release = "int FMOD_Sound_Release(int);";
+const string FMOD_System_Close = "int FMOD_System_Close(int);";
+const string FMOD_System_Release = "int FMOD_System_Release(int);";
+const string FMOD_Channel_setPosition = "int FMOD_Channel_SetPosition(int, unsigned int, unsigned int);";
+const string FMOD_Sound_getLength = "int FMOD_Sound_GetLength(int, unsigned int, unsigned int);";
+
+const string FMOD_System_CreateGeometry          = "int FMOD_System_CreateGeometry(int,int,int,int*);";
+const string FMOD_System_SetGeometrySettings     = "int FMOD_System_SetGeometrySettings(int,float);";
+const string FMOD_Geometry_Release               = "int FMOD_Geometry_Release(int);";
+const string FMOD_Geometry_AddPolygon            = "int FMOD_Geometry_AddPolygon(int,float,float,int,int, int, int*);";
+const string FMOD_Geometry_GetNumPolygons        = "int FMOD_Geometry_GetNumPolygons(int, int*);";
+const string FMOD_Geometry_SetPosition = "int FMOD_Geometry_SetPosition(int,int);";
+const string FMOD_Geometry_SetActive = "int FMOD_Geometry_SetActive(int,int);";
+const string FMOD_Geometry_SetRotation = "int FMOD_Geometry_SetRotation(int,int,int);";
+
+/* Seeking constants (FMOD_TIMEUNIT)*/
+const uint FMOD_TIMEUNIT_MS =0x00000001;
+
+/* listener */
+const string FMOD_System_Set3DListenerAttributes = "int FMOD_System_Set3DListenerAttributes(int,int,int, int, int, int);";

@@ -1,0 +1,34 @@
+
+void main() {
+	tone_synth synth;
+	synth.set_edge_fades(50, 100);
+	synth.reverb=true;
+	synth.volume=synth.volume-8;
+/*	for(synth.waveform_type=1; synth.waveform_type<=4; synth.waveform_type=synth.waveform_type*2) {
+		float v=synth.volume;
+		synth.volume=v-8+(2*synth.waveform_type);
+		for(int i=1; i<=4; i++) {
+			synth.note_bend_ms("C" + (i+1), 1, 2000, 333, 1000);
+			synth.note_ms("F" + (i+1), 2000);
+			synth.volume=synth.volume-3;
+		}// octaves.
+		synth.volume=v;
+		if(synth.waveform_type==4) break;
+	}
+*/
+	
+	synth.waveform_type=4;
+	synth.volume=synth.volume-8;
+	//synth.freq_ms("499, 500, 501", 1000);
+	//synth.freq_bend_ms("495, 500, 502", 2, 1000, 0, 750);
+	synth.freq_bend_ms("485", 20, 2000, 0, 1500);
+	synth.freq_bend_ms("515", -20, 2000, 0, 1500);
+	synth.seek_ms(1.9);
+	synth.waveform_type=3;
+	synth.freq_bend_ms("485", 20, 2000, 0, 1500);
+	synth.freq_bend_ms("515", -20, 2000, 0, 1500);
+
+	sound@ snd=synth.write_wave_sound();
+	snd.play_wait();
+
+}

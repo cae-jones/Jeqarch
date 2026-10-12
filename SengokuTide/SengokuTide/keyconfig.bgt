@@ -1,0 +1,205 @@
+dictionary keynames;
+
+// Constants for auxiliary commands:
+const int KC_MOUSE1=-2, KC_MOUSE2=-3, KC_MOUSE3=-4, KC_MOUSE4=-5, KC_MOUSE5=-6, KC_MOUSE6=-7, KC_MOUSE7=-8, KC_MOUSE8=-9, KC_MOUSE9=-10;
+
+// Modifier constants:
+const uint8 alt=1, shift=2, ctrl=4;
+
+class keyconfig {
+	int[] keys;
+	bool[] flags;
+	uint8[] modifiers; // 2:43 AM 8/26/2018.
+	string[] names;
+	keyconfig() {
+		init_keynames();
+	}
+	keyconfig(int size) {
+		init_keynames();
+		this.keys.resize(size);
+		this.names.resize(size);
+		this.flags.resize(size);
+		this.modifiers.resize(size);
+		for(uint i=0; i<size; i++) this.modifiers[i]=0;
+	}
+	keyconfig(string txt) {
+		init_keynames();
+		this.load(txt);
+	}
+	
+	int getKey(int k) {
+		return this.keys.find(k);
+	}
+	int press(int k, uint8 mods=0) {
+		int index=this.keys.find(k);
+		if(index>=0 and this.modifiers[index]!=mods) {
+			for(uint i=index+1; i<this.keys.length(); i++) {
+				if(this.keys[i]==k and this.modifiers[i]==mods) {
+					index=i;
+					break;
+				}// match found.
+			}
+		}// With modifiers.
+		if(index>=0) {
+			if(this.flags[index]) return -1;
+			else {
+				this.flags[index]=true;
+				return index;
+			}
+		}
+		return index;
+	}
+	int release(int k, uint8 mods=0) {
+		int index=this.keys.find(k);
+		if(index<0) return index;
+		// Modifiers are important!
+		/*else if(this.flags[index]) {
+			this.flags[index]=false;
+			return index;
+		}
+		else return -1;
+		*/
+		for(uint i=index; i<this.keys.length(); i++) {
+			if(this.keys[i]==k and this.flags[i] and (mods==0 or mods==this.modifiers[i])) {
+				this.flags[i]=false;
+				index=i;
+			}
+			else if(index==i) index=-1; // So we can return -1 if nothing was released.
+		}
+		return index;
+	}
+	
+	bool key_down(int index) {
+		return (index>=0 and index<this.flags.length() and this.flags[index]);
+	}
+	bool key_up(int index) {
+		return !this.key_down(index);
+	}
+	int getKey(string name) {
+		return this.names.find(name);
+	}
+	
+	bool load(string txt) {
+		string[] lines=string_split(string_replace(txt, "\r", "\n", true), "\n", true);
+		uint index=0;
+		while(index<lines.length() and !string_is_digits(lines[index])) {index++;}
+		if(index>=lines.length()) {
+			alert("Error in keyconfig.load", "Number of elements was not found.");
+			return false;
+		}
+		uint l=string_to_number(lines[index]);
+		this.names.resize(l);
+		this.flags.resize(l);
+		this.keys.resize(l);
+		this.modifiers.resize(l);
+		for(uint i=1; i<=l; i++) {
+			if(index+i>=lines.length()) {
+				alert("Error in keyconfig.load", "Index out of bounds. Total lines: " + lines.length() + ", expected entries: " + l + ", starting index: " + index + ", i:" + i + ".");
+				return false;
+			}
+			string[] parts=string_split(lines[index+i], ":", true);
+			if(parts.length()<2) continue;
+			this.names[i-1]=parts[0];
+			this.keys[i-1]=key_code(parts[1]);
+			this.flags[i-1]=false;
+			if(parts[1].length()>1 and string_contains("+-=", string_right(parts[1], 1), 1)>=0) {
+				string c=string_right(parts[1], 1);
+				if(c=="+") this.modifiers[i-1]=shift;
+				else if(c=="-") this.modifiers[i-1]=ctrl;
+				else this.modifiers[i-1]=alt;
+			}
+			else this.modifiers[i-1]=0;
+		}
+		return true;
+	}
+	string to_string(string header="") {
+		uint l=this.keys.length();
+		string ret=header + "\r\n" + l + "\r\n";
+		for(uint i=0; i<l; i++) ret += this.names[i] + ":" + key_name(this.keys[i]) + mod_name(this.modifiers[i]) + "\r\n";
+		return ret;
+	}
+	bool save(string filename, string header="") {
+		file fout;
+		fout.open(filename, "w");
+		fout.write(this.to_string(header));
+		fout.close();
+		return true;
+	}
+	void update() {
+		int k;
+		for(uint i=0; i<this.keys.length(); i++) {
+			k=this.keys[i];
+			if(k<0) {
+				if(k>=-10 and k<-1) {
+					k=absolute(k+1); // Or is it +2?
+					this.flags[i]=mouse_down(k);
+				}
+				else if(k==-1) continue;
+			}// Mouse, etc.
+			else if(this.modifiers[i]==0 and key_pressed(k)) this.press(k);
+			else if(this.modifiers[i]!=0 and key_down(k) and !this.flags[i]) {
+				uint8 m=0;
+				if(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) m|=shift;
+				if(key_down(KEY_LCONTROL) or key_down(KEY_RCONTROL)) m|=ctrl;
+				if(key_down(KEY_LMENU) or key_down(KEY_RMENU)) m|=alt;
+				if(((this.modifiers[i])&m)==this.modifiers[i]) this.flags[i]=true;
+			}
+			else if(key_released(k)) this.flags[i]=false; //this.release(k);
+			else if(key_down(k) and !this.flags[i]) this.press(k);
+			else if(key_up(k) and this.flags[i]) this.flags[i]=false; //this.release(k);
+		}
+	}
+}
+
+
+void init_keynames() {
+	if(keynames.exists("A")) return;
+	// Let's do this the somewhat easy way:
+	int[] codes={KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_SPACE, KEY_LCONTROL, KEY_RCONTROL, KEY_LMENU, KEY_RMENU, KEY_LSHIFT, KEY_RSHIFT, KEY_COMMA, KEY_PERIOD, KEY_SLASH, KEY_BACK, KEY_BACKSLASH, KEY_RETURN, KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z, KEY_1, KEY_0, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_MINUS, KEY_ADD, KEY_NUMPAD0, KEY_NUMPAD1, KEY_NUMPAD2, KEY_NUMPAD3, KEY_NUMPAD4, KEY_NUMPAD5, KEY_NUMPAD6, KEY_NUMPAD7, KEY_NUMPAD8, KEY_NUMPAD9, KEY_HOME, KEY_PRIOR, KEY_NEXT, KEY_END, KEY_DELETE, KEY_LBRACKET, KEY_RBRACKET, KEY_TAB, KEY_EQUALS, KEY_MULTIPLY, KEY_DIVIDE, KEY_ESCAPE, KEY_SEMICOLON, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10, KEY_F11, KEY_F12, KEY_GRAVE, KC_MOUSE1, KC_MOUSE2, KC_MOUSE3, KC_MOUSE4, KC_MOUSE5, KC_MOUSE6, KC_MOUSE7, KC_MOUSE8, KC_MOUSE9};
+	string[] descs={"left", "right", "up", "down", "space", "lctrl", "rcrtl", "lalt", "ralt", "lshift", "rshift", ",", ".", "/", "back", "\\", "enter", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "1", "0", "2", "3", "4", "5", "6", "7", "8", "9", "-", "+", "#0", "#1", "#2", "#3", "#4", "#5", "#6", "#7", "#8", "#9", "home", "pgup", "pgdn", "end", "del", "[", "]", "tab", "=", "*", "#/", "esc", ";", "f1", "f2", "f3", "F4", "f5", "F6", "F7", "f8", "F9", "f10", "f11", "f12", "~", "MOUSE1", "MOUSE2", "MOUSE3", "MOUSE4", "MOUSE5", "MOUSE6", "MOUSE7", "MOUSE8", "MOUSE9"};
+	//string txt="Key mappings, for what it\'s worth:\r\n";
+	for(uint i=0; i<codes.length(); i++) {//txt += codes[i] + ", " + descs[i] + "\r\n";
+		keynames.set(string_to_upper_case(descs[i]), codes[i]);
+	}
+	//clipboard_copy_text(txt);
+}
+
+int key_code(string n) {
+	int ret=-1;
+	n=string_to_upper_case(n);
+	if(n.length()>1 and string_contains("+-=", string_right(n, 1), 1)>=0) n=string_trim_right(n, 1);
+	if(keynames.exists(n)) keynames.get(n, ret);
+	return ret;
+}
+
+string key_name(int k) {
+	// this one is going to hurt.
+	string[] keys=keynames.get_keys();
+	for(uint i=0; i<keys.length(); i++) {
+		int cur;
+		keynames.get(keys[i], cur);
+		if(cur==k) return keys[i];
+	}
+	return "";
+}
+
+keyconfig@ load_keyconfig(string filename) {
+	if(!file_exists(filename)) {
+		alert("Error in load_keyconfig", "The \'" + filename + "\' file could not be found. Check the spelling and try again.");
+		return null;
+	}
+	file fin;
+	fin.open(filename, "r");
+	keyconfig ret(fin.read(0));
+	fin.close();
+	return ret;
+}
+
+
+// 3:04 AM 8/26/2018: Update to support modifiers.
+string mod_name(uint8 m) {
+	if(m==shift)  return "+";
+	else if(m==ctrl) return "-";
+	else if(m==alt) return "=";
+	return "";
+}

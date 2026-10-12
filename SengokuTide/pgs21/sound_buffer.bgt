@@ -1,0 +1,66 @@
+
+class sound_buffer {
+	dictionary@ buffer=null;
+	string storage;
+	
+	sound_buffer() {
+		dictionary temp;
+		@(this.buffer)=temp;
+		this.storage=get_sound_storage();
+	}
+	V3DSound@ load_sound(string filename) {
+		if(this.buffer is null) {
+			dictionary temp;
+			@this.buffer=temp;
+		}
+		else if(this.buffer.exists(filename)) {
+			V3DSound@ ret=null;
+			this.buffer.get(filename, @ret);
+			//These don't replay for some reason. 6:30 AM 4/6/2021
+			if(@ret!=null) {
+				ret.close();
+				ret.load(filename);
+			}
+			return ret;
+		}
+		
+		V3DSound ret;
+		// Todo: pack support.
+		//if(file_exists(filename)) {
+		ret.load(filename);
+		//}
+		V3DSound@ temp=ret;
+		this.buffer.set(filename, @temp);
+		return temp;
+	}
+	
+	void clear() {
+		/* Closes all sounds and empties the buffer.*/
+	}
+	
+	void pause_all() {
+		dictionary@ s=this.buffer;
+		string[] keys=s.get_keys();
+		for(uint i=0; i<keys.length(); i++) {
+			V3DSound@ temp=null;
+			s.get(keys[i], @temp);
+			if(@temp!=null and temp.isPlaying()) temp.pause();
+		}
+	}
+	void resume_all() {
+		dictionary@ s=this.buffer;
+		string[] keys=s.get_keys();
+		for(uint i=0; i<keys.length(); i++) {
+			V3DSound@ temp=null;
+			s.get(keys[i], @temp);
+			if(@temp!=null) temp.play();
+		}
+	}
+}// sound buffer class.
+sound_buffer@ new_sound_buffer() {sound_buffer ret; return ret;}
+
+sound_buffer@ globalSB;
+sound_buffer@ getGlobalSB() {
+	if(globalSB is null) @globalSB=new_sound_buffer();
+	return globalSB;
+}

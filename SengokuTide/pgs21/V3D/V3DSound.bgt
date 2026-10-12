@@ -1,0 +1,110 @@
+#include "V3DVector.bgt"
+
+class V3DSound
+{
+	string path;
+	uint handle=0;
+	uint channel=0;
+	bool playing=false;
+	bool active=false;
+	int length=0;
+	
+	V3DSound(string soundpath="")
+	{
+		this.path = soundpath;
+		if(path!="")
+		{
+			this.load(this.path);
+		}
+	}
+	
+	~V3DSound()
+	{
+		if(handle!=0)
+		{
+			SoundManager.destroySound(@this);
+		}
+	}
+	
+	bool close()
+	{
+		SoundManager.destroySound(@this);
+		this.path="";
+		this.active=false;
+		
+		return true;
+	}
+	
+	void load(string soundpath)
+	{
+		uint[] infos = SoundManager.newSound(soundpath);
+			handle  = infos[0];
+			channel = infos[1];
+			length  = infos[2];
+			
+		if(handle!=0)
+		{
+			this.path=soundpath;
+			this.active=true;
+		}
+	}
+	
+	void pause()
+	{
+		if(this.playing)
+		{
+			SoundManager.pauseSound(@this);
+			this.playing=false;
+		}
+	}
+	
+	void play(bool restart=false)
+	{
+		if(!this.playing && this.path!="")
+		{
+			SoundManager.playSound(@this, restart);
+		}
+	}
+	
+	void play_looped(bool restart=false)
+	{
+		int rt;
+		if(restart)
+		{
+			rt=1;
+		}
+		else
+		{
+			rt=0;
+		}
+		SoundManager.playLooped(@this, restart);
+	}
+	
+	void seek(double pos)
+	{
+		SoundManager.seekSound(@this, pos);
+	}
+	
+	void stop()
+	{
+		if(this.playing)
+		{
+			SoundManager.stopSound(@this);
+			this.playing=false;
+		}
+	}
+	
+	void set3DPosition(V3DVector@ position)
+	{
+		SoundManager.setSound3DPosition(@this, position);
+	}
+	
+	string getPath() {return path;}
+	uint getHandle() {return handle;}
+	uint getChannel() {return channel;}
+	bool isActive() {return active;}
+	bool isPlaying()
+	{
+		return playing;
+	}
+}

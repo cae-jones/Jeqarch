@@ -1,0 +1,174 @@
+/*
+This SoundManager should be used if you want to have your sounds automatically calculated with the geometry of a map.
+*/
+#include "fmodex.bgt"
+#include "v3.bgt"
+#include "V3DVector.bgt"
+#include "V3DSoundManager.bgt"
+
+library fmodex, v3;
+
+V3DSoundManager@ SoundManager = cast<V3DSoundManager>(FMODExSoundManager());
+
+
+class FMODExSoundManager : V3DSoundManager
+{
+	string path="";
+	
+	int system;
+	int geometryRoot;
+	V3DVector@ upv;
+	
+	~FMODExSoundManager()
+	{
+		if(fmodex.active)
+		{
+			fmodex.unload();
+		}
+		if(v3.active)
+		{
+			v3.unload();
+		}
+	}
+	
+	void setLoadingDirectory(string path)
+	{
+		this.path = path;
+	}
+	
+	bool load()
+	{
+		bool res;
+		res	= fmodex.load(this.path+"fmodex.dll");
+		
+		if(!res)
+		{
+			alert("WARNING", "Can't load FMODEx DLL!");
+			return res;
+		}
+		
+		res	= v3.load(this.path+"v3.dll");
+		
+		if(!res)
+		{
+			alert("WARNING", "Can't load v3 DLL!");
+			return res;
+		}
+		
+		init();
+		return true;
+	}
+	
+	void init()
+	{
+		//Loading system
+		dictionary@ result = fmodex.call(FMOD_System_Create, system);
+		result.get("1", system);
+		
+		if(system==0)
+		{
+			alert("ERROR", "Error while loading FMODEx environment!");
+			exit();
+		}
+		
+		fmodex.call(FMOD_System_Init, system, 32, FMOD_INIT_NORMAL, 0);
+		
+		//Loading geometry system
+		@result = fmodex.call(FMOD_System_CreateGeometry, system, 1,4, geometryRoot);
+		result.get("4", geometryRoot);
+		
+		@upv=V3DVector(0,1,0);
+	}
+	
+	void setListenerPosition(V3DVector@ pos, V3DVector@ ori=null)
+	{
+		int ph=0, oh=0;
+		if(@pos!=null)
+		{
+			ph=pos.getHandle();
+		}
+		if(@ori!=null)
+		{
+			oh=ori.getHandle();
+		}
+		
+		fmodex.call(FMOD_System_Set3DListenerAttributes, system, 0, ph, 0, oh, upv.getHandle());
+	}
+	
+	void update()
+	{
+		fmodex.call(FMOD_System_Update ,system);
+	}
+	
+	bool isActive()
+	{
+		return(fmodex.active && v3.active);
+	}
+	
+	//called by V3DSound to allocate a new sound and get the handle
+	uint[] newSound(string soundpath)
+	{
+		uint[] infos(3);
+		
+		//load the sound
+		dictionary@ result = fmodex.call(FMOD_System_CreateSound, system, soundpath, FMOD_3D, 0, infos[0]);
+		result.get("5", infos[0]);
+		
+		//get a new channel
+		@result = fmodex.call(FMOD_System_PlaySound, system,FMOD_CHANNEL_FREE, infos[0], TRUE, infos[1]);
+		result.get("5", infos[1]);
+		
+		//get length
+		@result = fmodex.call(FMOD_Sound_getLength, infos[0], infos[2], FMOD_TIMEUNIT_MS);
+		result.get("2", infos[2]);
+		
+		return infos;
+	}
+	
+	//Called by V3DSound to pause its sound
+	void pauseSound(V3DSound@ sound)
+	{
+		fmodex.call(FMOD_System_setPaused, sound.getChannel(), TRUE);
+	}
+	
+	//Called by V3DSound to play its sound
+	void playSound(V3DSound@ sound, bool restart=false)
+	{
+		if(restart)
+		{
+			fmodex.call(FMOD_Channel_setPosition, sound.getChannel(), 0, FMOD_TIMEUNIT_MS);
+		}
+		fmodex.call(FMOD_System_setPaused, sound.getChannel(), FALSE);
+	}
+	
+	//Called by V3DSound to play its sound looped
+	void playLooped(V3DSound@ sound, bool restart=false)
+	{
+		fmodex.call(FMOD_Channel_SetMode, sound.getChannel(), FMOD_LOOP_NORMAL | FMOD_3D);
+		playSound(@sound, restart);
+	}
+	
+	//Called by V3DSound to stop its sound
+	void stopSound(V3DSound@ sound)
+	{
+		fmodex.call(FMOD_Channel_Stop, sound.getChannel());
+	}
+	
+	//Called by V3DSound to seek in its sound
+	void seekSound(V3DSound@ sound, double pos)
+	{
+		alert("INFO", "Not implemented. Check for next versions.");
+	}
+	
+	//Called by V3DSound to destroy its sound
+	void destroySound(V3DSound@ sound)
+	{
+		fmodex.call(FMOD_Sound_Release, sound.getHandle());
+	}
+	
+	//Called by V3DSound to set its sound position
+	void setSound3DPosition(V3DSound@ sound, V3DVector@ position)
+	{
+		fmodex.call(FMOD_Channel_Set3DAttributes, sound.getChannel(), position.getHandle(), 0);
+	}
+}

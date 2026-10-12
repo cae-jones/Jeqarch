@@ -1,0 +1,23 @@
+	pack_file pack;
+void main() {
+	string[] dirs=find_directories("*");
+
+	pack.create("sounds.dat");
+	for(uint i=0; i<dirs.length(); i++) {
+		if(string_contains(string_to_lower_case(dirs[i]), "include", 1)>=0) continue;
+		pack_dir(dirs[i]);
+	}
+	pack.close();
+	alert("Done", "Pack created.");
+}
+
+void pack_dir(string dir) {
+		string[] files=find_files(dir + "\\*");
+		for(uint j=0; j<files.length(); j++) {
+			string fn=dir + "\\" + files[j];
+			clipboard_copy_text(clipboard_read_text() + "\r\n" + fn);
+			pack.add_file(fn, fn);
+		}
+		string[] subs=find_directories(dir + "\\*");
+		for(uint i=0; i<subs.length(); i++) pack_dir(dir + "\\" + subs[i]);
+}

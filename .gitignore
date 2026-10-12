@@ -20,3 +20,14 @@ JLA/**/*.wav
 JLA/**/*.WAV
 JLA/**/*.ogg
 JLA/*.dat
+
+# Redsword: sounds.dat is rebuilt by pack.bgt; saves are local state
+Redsword/sounds.dat
+Redsword/*save*.dat
+
+# Sonic: music and sounds are not redistributable
+Sonic/**/*.wav
+Sonic/**/*.WAV
+Sonic/**/*.ogg
+Sonic/**/*.mp3
+Sonic/s1.dat

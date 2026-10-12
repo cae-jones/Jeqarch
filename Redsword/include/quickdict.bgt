@@ -1,0 +1,30 @@
+
+dictionary a;
+
+string gets(string key) {
+	string ret="";
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+
+int getn(string key) {
+	int ret=-1;
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+int geti(string key) {
+	int ret=-1;
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+float getf(string key) {
+	float ret=-1;
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+double getd(string key) {
+	double ret=-1;
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+

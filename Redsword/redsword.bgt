@@ -1,0 +1,3455 @@
+#include "sounds.dat"
+#include "c:\\bgIncludes\\quickdict.bgt"
+#include "c:\\winsim\\dynamic_menu.bgt"
+#include "c:\\bgIncludes\\KeyC.bgt"
+#include "c:\\bgIncludes\\FiniteStateMachine.bgt"
+#include "c:\\bgIncludes\\custom_voice.bgt"
+#include "c:\\bgIncludes\\clock.bgt"
+#include "number_speaker.bgt"
+
+
+sound bgm;
+string curbgm="", nextTrack="";
+KeyC@ key, joy;
+joystick pad;
+vector camera;
+
+const string savedir=DIRECTORY_APPDATA + "\\Jeqocon\\Redword";
+
+// Sounds. Will pack when everything works:
+const string sounds="sounds\\", jla="jla\\", sfx="sfx\\", sfx2="sfx2\\", steps="steps\\";
+// And so on.
+
+
+
+// Maps are divided into strips 30 tiles across. Behold:
+void newMap(string[] map, int x=0, string n="") {
+for(uint i=0; i<map.length(); i++) a.set(n + x + ", " + i, map[i]);
+}
+
+string last="";
+int lastx=-10, lasty=-10;
+string getC(int x, int y, string map="") {
+	int rx=x/30;
+	int sx=x%30;
+	if(rx!=lastx or y!=lasty) last=gets(map + rx + ", " + y);
+	//clipboard_copy_text("x" + x + ", rx " + rx + ", sx " + sx + ". Last: " + last);
+	lastx=rx;
+	lasty=y;
+	if(sx<0 or sx>=last.length()) return "-"; // ?
+	return last[sx];
+}
+
+vector getvector(string n) {
+	vector v(getd(n + ".x"), getd(n + ".y"), getd(n + ".z"));
+	return v;
+}
+void setVector(string n, vector v) {
+	a.set(n + ".x", v.x);
+	a.set(n + ".y", v.y);
+	a.set(n + ".z", v.z);
+}
+void setVector(string n, double x, double y, double z=0) {
+	vector v(x, y, z);
+	setVector(n, v);
+}
+
+const string solids="-|=^vV<>123456789Ll";
+bool isSolid(string n) {return (string_contains(solids, n, 1)>=0);}
+
+void stepChar(int index, double dt) {
+	vector me=getvector("" + index);
+	vector v=getvector(index + ".v");
+	double hp=getd(index + "hp");
+	
+	// Physics:
+	string below=getC(me.x, me.y+1);
+	bool grounded=isSolid(below);
+	if(grounded) {
+		if(v.y>0.0) {
+			//if(index==0) clipboard_copy_text("V.y" + v.y + ", below" + below + ". ");
+			v.y=0.0;
+			a.set(index + ".v.y", 0.0); // >.<
+			string terrain=gets("t" + below);
+			if(getd(index + ".hp")<=0.0 or getd(index + ".state")=="fall") pool.play_2d(getFall(gets("t" + below)), camera.x, camera.y, me.x, me.y, false);
+			else if(gets("t" + below)=="snow") pool.play_2d(steps + "snow\\run" + random(8, 9) + ".wav", camera.x, camera.y, me.x, me.y, false);
+			else if(pack.file_exists(steps + terrain + "\\run1.wav")) pool.play_2d(steps + terrain + "\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, false);
+			else if(pack.file_exists(jla + "steps\\" + terrain + "\\run1.wav")) pool.play_2d(jla + "steps\\" + terrain + "\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, false);
+			else pool.play_2d(steps + "stone\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, false);
+			if(last=="") hit(index, getd(index + ".hp"), jla + "FallWood" + random(1, 4) + ".wav");
+		}// landing.
+	}// below is solid.
+	else {
+		if(below=="#") {
+			// I haven't even thought about ladders, really.
+			if(round(me.y, 0) !=round(me.y+(v.y*dt), 0)) pool.play_2d(jla + "steps\\Roof\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y+(v.y*dt), false);
+		}// ladders.
+		else if(below=="~") {
+			// This is actually kinda tricky. Maybe it counts as grounded, so you can always swim up, but you still sink?
+			v.y=math_min(v.y+(8.0*dt), 4.0);
+			grounded=true;
+			// What about splashing? We should check to see if (x, y)==~, but only if we actually move. Hmm.
+			int y=me.y;
+			int ny=me.y+(v.y*dt);
+			if(ny!=y and getC(me.x, y)!="~") pool.play_2d(jla + "FallWater" + random(1, 4) + ".wav", camera.x, camera.y, me.x, me.y, false);
+		}// Water.
+		else {
+			v.y+=9.8*dt;
+			if(v.y>10.0) v.y=10.0;
+			//if(index==0) clipboard_copy_text("falling through " + below);
+		}// normal gravity.
+	}// Not on something solid.
+	
+	int x=me.x, y=me.y; // We'll want to know if these change.
+	
+	// Now, for horizontal movement? Or should we let you do some sneaky diagonal tricks to slip through not-at-all-slip-through-able cracks? Presumably by holding left/right while falling. Hmm.
+	if(v.x!=0.0 or v.y!=0.0) {
+		string next=getC(me.x+(v.x*dt), me.y+(v.y*dt));
+		
+		// This will get weird, but I want to avoid the problem that the Swamp Platformer had where it couldn't stop vy and made for awkward head-bumping.
+		bool bump=false;
+		if(isSolid(next)) {
+			bump=true;
+			if((next=="L" or next=="l") and v.x!=0.0) {
+				pool.play_2d(gets("b" + next), camera.x, camera.y, me.x+(v.x*dt), me.y+(v.y*dt), false);
+				string cur=last;
+				int dx=(v.x<0) ? -1 : 1;
+				string pn=getC(x+(dx*2), me.y);
+				int rx=me.x/30;
+				int x3=x+dx;
+				x3%=30;
+				//clipboard_copy_text("Pushing from " + x + ", " + y + ", to " + pn + ". dx is " + dx + ".");
+				if(isSolid(pn)) pool.play_2d(steps + gets("t" + pn) + "\\bump.ogg", camera.x, camera.y, me.x+dx, me.y, false);
+				else if(last!="") {
+					if(x3==0 and dx<0) {a.set((rx-1) + ", " + y, string_left(last, last.length()-1) + next); a.set(rx + ", " + y, pn + string_right(cur, cur.length()-1));}
+					else if(x3==29 and dx>0) {a.set((rx+1) + ", " + y, next + string_right(last, last.length()-1)); a.set(rx + ", " + y, string_left(cur, cur.length()-1) + pn);}
+					else if(dx>0) a.set(rx + ", " + y, string_left(last, x3) + pn + next + string_right(last, last.length()-x3-2));
+					else if(dx<0) a.set(rx + ", " + y, string_left(last, x3-1) + next + pn + string_right(last, last.length()-x3-1));
+					else clipboard_copy_text(clipboard_read_text() + "None of the options worked.");
+					bump=false;
+				}// pushed.
+			}// try to push.
+			
+			if(v.y<0.0) v.y=0.0; // You know, I could make it so that it 0s no matter what, and you could tap left/right to slowly slide down the wall... In fact, I like that enough I might just do it.
+			//else if(v.y>0.0) v.y=0.0; // Remove if it gets weird. I think this would block landing, actually.
+			else v.x=0.0;
+			
+		}// Failed.
+		else {
+			
+			// The only thing you need to watch out for is ladders, I guess.
+			//if(next=="~") v*=0.9; // Really?
+		}// The way might not be open, but it isn't solid.
+		
+		string terrain=gets("t" + next);
+		if(bump) {
+			//if(confirm("Bumped " + x + ", " + y + ", which is " + next + ", terrain " + terrain + ". Do you want to quit?")) a.set("loc", "main");
+			if(index==0) a.set("bumped", 1);
+			string b=gets("b" + next);
+			if(b!="" and pack.file_exists(b)) pool.play_2d(b, camera.x, camera.y, me.x+(v.x*dt), me.y+(v.y*dt), false);
+			else if(pack.file_exists(steps + terrain + "\\bump.ogg")) pool.play_2d(steps + terrain + "\\bump.ogg", camera.x, camera.y, me.x+(v.x*dt), me.y+(v.y*dt), false);
+			else if(pack.file_exists(steps + terrain + "\\bump.wav")) pool.play_2d(steps + terrain + "\\bump.wav", camera.x, camera.y, me.x+(v.x*dt), me.y+(v.y*dt), false);
+			else pool.play_2d(steps + "dirt\\bump.ogg", camera.x, camera.y, me.x+(v.x*dt), me.y+(v.y*dt), false);
+		}// bump.
+		else {
+			me.x+=v.x*dt;
+			me.y+=v.y*dt;
+			int nx=me.x;
+			if(index==0) {camera.x=me.x; camera.y=me.y;}
+			if(x!=nx or y!=round(me.y, 0)) getBraille();
+			if(nx!=x) {
+				// Catch things with unique step sounds.
+				if(string_contains(gets(index + ".name"), "Robot", 1)>=0) {
+					//string n=gets(index + ".name");
+					//if(n=="Robot") terrain="pipe";
+					terrain="pipe";
+				}// Robots walking.
+				else if(geti("stage")==5 and gets(index + ".name")=="Sapphire Helmsman") {terrain="stone"; pool.play_extended_2d(jla + "steps\\rock\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, 0, 0, 2, 0, false, 0, 0, 0, 75);}
+				
+				else terrain=gets("t" + below);
+				if(terrain!="" and pack.file_exists(steps + terrain + "\\run1.wav")) pool.play_2d(steps + terrain + "\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, false);
+				else if(terrain!="" and pack.file_exists(jla + "steps\\" + terrain + "\\run1.wav")) pool.play_2d(jla + "steps\\" + terrain + "\\run" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, false);
+				else if(next=="~") pool.play_2d(jla + "swim" + random(1, 4) + ".wav", camera.x, camera.y, me.x, me.y, false);
+				//else if(terrain!="") clipboard_copy_text("Terrain at " + below + " should be " + terrain);
+				if(index==0) {
+					int ny=me.y;
+					string cn=getC(nx, ny);
+					if(cn=="+") {
+						a.set("0.hp", math_min(100.0, getd("0.hp")+50));
+						last=string_left(last, (nx%30)) + " " + string_right(last, last.length()-(nx%30)-1);
+						int rx=nx/30;
+						a.set(rx + ", " + ny, last);
+					}// healing.
+					else if(cn=="\\") {v.x++; a.set(index + ".v.x", v.x);}
+					else if(cn=="/") {v.x--; a.set(index + ".v.x", v.x);}
+					int dx=(v.x<0.0) ? -1 : (v.x>0.0) ? 1 : 0;
+					int tries=0;
+					if(dx!=0 and grounded) for(int xx=me.x; xx!=(me.x+(dx*10)); xx+=dx) {
+						string cc=getC(xx, me.y+1);
+						if(!isSolid(cc) and cc!="~") {
+							if(xx==nx) pool.play_stationary((pack.file_exists(steps + terrain + "\\slide.wav")) ? (steps + terrain + "\\slide.wav") : (sfx2 + "downou.wav"), false);
+							else if(isSolid(getC(xx, me.y))) {xx=me.x+(10*dx); tries=15; break;}
+							else pool.play_2d(sounds + "Env\\drop1.wav", me.x, me.y, xx, me.y, false);
+							xx=me.x+(dx*10);
+							break;
+						}// drop.
+						tries++; if(tries>15) break;
+					}// loop.
+
+				}// Radar and edge detection and stuff.
+			}// step taken.
+		}// no bump.
+	}// move.
+	
+	// Have the player character run out of air in water?
+	if(index==0 and getC(me.x, me.y)=="~") {
+		double oxygen=getd("oxygen");
+		oxygen-=dt;
+		if(oxygen<=10.0) bgm.pitch=100.0*power(1.059463, round(10.0-oxygen, 0));
+		a.set("oxygen", oxygen);
+		if(oxygen<=0.0) {
+			pool.play_stationary(sfx2 + "acid.ogg", false);
+			fadeout();
+			a.set("0.hp", 0);
+		}// kill the player.
+		else if(fps.frame%30==0 and !water.playing) {water.stream(sfx + "uw" + random(1, 4) + ".wav"); water.play();}
+	}
+	else if(index==0) {a.set("oxygen", getd("maxox")); if(water.playing) water.stop(); if(bgm.pitch>100 and geti("stage")==3) bgm.pitch=100;}
+	
+	int s=geti(index + ".slot");
+	if(s>=0) {
+		if(pool.sound_is_playing(s)) pool.update_sound_2d(s, me.x, me.y);
+		else {pool.destroy_sound(s); a.set(index + ".slot", -1);}
+	}// tracking sounds.
+	double counter=getd(index + ".counter");
+	if(counter>0.0) {
+		counter-=dt;
+		if(counter<=0.0) {
+			counter=0.0;
+			string s=gets(index + ".state");
+			a.set(index + ".state", "");
+			if(index==0 and (s=="attack" or s=="crouch attack")) {
+				if(s=="crouch attack" and (key.isKeyPressed(KeyC_D) or joy.isKeyPressed(KeyC_D))) a.set("state", "crouch");
+				counter=-0.25;
+				int charsize=geti("charsize");
+				bool right=(geti(index + ".face")!=KeyC_L);
+				int nx=me.x, ny=me.y;
+				//clipboard_copy_text("Attacking...");
+				for(uint j=nx; ((right and j<=me.x+2) or (j>=me.x-2 and !right)); j+=(!right) ? -1 : 1) {
+					string cn=getC(j, ny);
+					if(last=="") break;
+					if(string_is_digits(cn)) {
+						cn="" + (string_to_number(cn)-1);
+						if(cn=="0") {cn=" "; pool.play_2d(sfx2 + "ManyRocks.ogg", me.x, me.y, j, me.y, false);}
+						else pool.play_2d(sfx + "axebullet.wav", camera.x, camera.y, j, ny, false);
+						int rx=j/30;
+						a.set(rx + ", " + ny, string_left(last, j%30) + cn + string_right(last, last.length()-(j%30)-1));
+					}// breakable.
+				}// Map interactions.
+				//clipboard_copy_text("Enemy loop...");
+				for(uint j=1; j<charsize; j++) {
+					vector enemy=getvector("" + j);
+					if(enemy.x<me.x xor !right) continue;
+					bool rageup=false;
+					if(absolute(enemy.x-me.x)<=2.0 and absolute(enemy.y-me.y)<=1.0) rageup=hit(j, (grounded) ? (s=="attack" and getd("0.rage")>=0) ? 5.0 : 7.0 : 2.5, sfx2 + "squish" + random(1, 2) + ".ogg");
+					if(rageup) a.set("0.rage", geti("0.rage")+random(2, 8));
+				}// enemy hit.
+				me=getvector("0"); // I think this might fix some level transitions.
+				if(geti("0.rage")>=100) a.set("0.rage", -random(10, 20));
+				if(geti("0.rage")<0) {a.set("0.rage", geti("0.rage")+1); a.set("0.face", (geti("0.face")==KeyC_L) ? KeyC_R : KeyC_L); a.set("0.state", "attack"); key.press(key.l); key.press(key.r); pool.play_stationary(sfx + "sword" + random(1, 6) + ".ogg", false); a.set("0.hp", math_min(100, getd("0.hp")+random(0, 10))); counter=0.25;}
+				//clipboard_copy_text("Attack done, refreshing braille...");
+				getBraille(me);
+			}// player's attack.
+			else if(string_contains(s, "attack", 1)>=0) {
+				// Is it crouchable?
+				bool crouching=(string_contains(s, "crouch", 1)>=0);
+				// Does direction matter? I feel like it should.
+				vector c=getvector("0");
+				int face=(c.x<me.x) ? KeyC_L : KeyC_R;
+				a.set(index + ".state", "");
+				a.set(index + ".counter", 0.2);
+				counter=0.2; // Umm. Should this depend on name or stage or something?
+				
+				if(geti(index + ".face")==face and absolute(me.x-c.x)<2.0 and absolute(me.y-c.y)<1.0) {
+					if(geti("0.face")!=face and gets("0.state")==s) {pool.play_2d(sfx + "clang" + random(0, 3) + ".ogg", camera.x, camera.y, (me.x+c.x)/2.0, me.y, false); a.set("0.state", "");}// block.
+					else hit(0, 5.0+geti("stage"), sfx2 + "squish" + random(1, 2) + ".ogg");
+				}// In range.
+				
+			}// Enemy's attack.
+			else if(s=="throw") {
+				vector c=getvector("0");
+				if(absolute(c.x-me.x)<=2.0 and (geti(index + ".face")==KeyC_L xor c.x>me.x)) {
+					hit(0, random(0, 5), steps + "carpet\\jump.wav", random(1.0, 5.0), "fall");
+					if(me.x>c.x) a.set("0.v.x", -7.0);
+					else a.set("0.v.x", 7.0);
+					a.set("0.v.y", -5.0*math_random()); // Not sure about that one.
+					pool.play_extended_2d(sounds + "MHI\\throw_weapon_mono.ogg", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, 75);
+				}// thrown.
+				counter=1.0;
+				v.x=0.0;
+				a.set(index + "v.x", v.x); a.set(index + ".counter", counter); a.set(index + ".state", "");
+			}// Throw.
+			else if(s=="quake") {
+				// Sound on this one is going to be tricky.
+				if(!grounded) {v.y++; a.set(index + ".v.y", v.y);}
+				int leftx=me.x-1, rightx=me.x+1;
+				int tries=0;
+				while(isSolid(getC(leftx, me.y+1)) and last!="" and tries<15) {leftx--; tries++;}
+				tries=0;
+				while(isSolid(getC(rightx, me.y+1)) and last!="" and tries<15) {rightx++; tries++;}
+				pool.play_extended_2d(jla + "smallquake.wav", camera.x, camera.y, me.x, me.y+1, me.x-leftx, rightx-me.x, 1, 1, false, 0, 0, 0, 99.5+math_random());
+				
+				vector c=getvector(0);
+				if(isSolid(getC(c.x, c.y+1))) {
+					pool.play_stationary(jla + "smallquake.wav", false);
+					string terr=gets("t" + getC(c.x, c.y+1));
+					string toplay=steps + terr + "\\slide.wav";
+					if(!pack.file_exists(toplay)) toplay=steps + terr + "\\jump.wav";
+					if(!pack.file_exists(toplay)) toplay = steps + getAlt(terr) + "\\slide.wav";
+					hit(0, random(0, 5), toplay, 3.0, "fall");
+					if(c.x>me.x) a.set("0.v.x", -absolute(getd("0.v.x")));
+					else a.set("0.v.x", absolute(getd("0.v.x")));
+				}// player hit.
+				counter=-1.5; a.set(index + ".counter", counter);
+			}// Quake.
+			else if(s=="charge") {
+				a.set(index + ".state", s);
+				counter=0.048;
+				int slot=geti(index + ".slot");
+				if(slot<0 or !pool.sound_is_playing(slot)) a.set(index + ".state", "throw");
+				else pool.update_sound_start_values(slot, 0, 0, pool.items[slot].start_pitch+1);
+				if(slot>=0 and pool.items[slot].start_pitch>=200) {a.set(index + ".rage", 20); a.set(index + ".state", "storm"); pool.destroy_sound(slot); a.set(index + ".slot", -1);}
+				a.set(index + ".counter", counter);
+			}// Charged blast.
+			else if(s=="storm") {
+				int rage=geti(index + ".rage");
+				rage--;
+				if(rage>0) {counter=0.15; a.set(index + ".state", "storm"); a.set(index + ".counter", counter);}
+				else {counter=-3.0; a.set(index + ".counter", counter);}
+				a.set(index + ".rage", rage);
+				a.set("pslot" + pv.length(), pool.play_extended_2d(jla + "LightningStream.wav", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, 95+random(0, 10),   true));
+				vector c=getvector(0);
+				vector tv=c-me;
+				tv=(7.0+(rage%4))*tv/tv.length();
+				vector p=me+(0.2*tv);
+				v.x=0.0; a.set(index + ".v.x", 0.0);
+				// Actually, maybe we should set v to the opposite of tv?
+				addProjectile(p.x, p.y, tv.x, tv.y, random(1, 15), false);
+				projectiles[pv.length()-1].z=4;
+				pv[pv.length()-1].z=4;
+			}// Storm.
+			
+		}// 0 from above.
+	}// descending.
+	else if(counter<0.0) {
+		counter+=dt;
+		if(counter>=0.0) {
+			counter=0.0;
+		}// 0 from below.
+	}// ascending.
+	else if(counter==0.0 and getd(index + ".hp")>0) {
+		if(gets(index + ".state")=="climb") {
+			if(getC(me.x, me.y)!="#") a.set(index + ".state", "");
+		}// climbing.
+		
+		if(index!=0) {
+			string name=gets(index + ".name");
+			vector c=getvector("0");
+			if(name=="Shotgun Guard" and (((fps.frame/2)%10)==index%10)) {
+				pool.play_2d(jla + "pistol.wav", camera.x, camera.y, me.x, me.y, false);
+				counter=2.0;
+				int dx=(c.x<=me.x) ? -1 : 1;
+				if(c.x-me.x<=16.0) addProjectile(me.x+dx, me.y, 10.0*dx, 0, random(1, 5), math_random()>0.2, true);
+			}// shotguns.
+			else if(name=="Uzi Guard" and (((fps.frame/2)%10)==index%10)) {
+				counter=1.0;
+				pool.play_2d(jla + "Uzi.wav", camera.x, camera.y, me.x, me.y, false);
+				int dx=(c.x<=me.x) ? -1 : 1;
+				if(c.x-me.x<=16.0) addProjectile(me.x+dx, me.y, 10.0*dx, 0, random(1, 10), math_random()>0.2, true);
+			}// Uzi Guard.
+			else if(name=="Ninja" and absolute(c.y-me.y)<=5) {
+				int act=random(0, 4);
+				if(act<2 and grounded) {
+					// If the player is too close, jump, too.
+					counter=1.0; // Either way.
+					if(grounded and random(0, 5)>2 and (me-c).length()<2.0) {
+						v.y=-random(4, 10); // Hmm.
+						a.set(index + ".v.y", v.y);
+						string ter=gets("t" + below);
+						string toplay=steps + "carpet\\jump.wav";
+						if(pack.file_exists(steps + ter + "\\jump.wav")) toplay=steps + ter + "\\jump.wav";
+						else if(ter=="pipe") toplay=steps + "metal\\jump.wav";
+						else if(below=="~") toplay=sfx2 + "waterstrike0.wav";
+						pool.play_2d(toplay, camera.x, camera.y, me.x, me.y, false);
+						counter=math_random();
+					}// Jump.
+					// Locate the edges of the platform in the direction in question.
+					int dx=(act==0) ? -1 : 1;
+					int xx=me.x;
+					int tries=0;
+					while(absolute(me.x-xx)<6.0 and isSolid(getC(xx, me.y+1)) and last!="" and tries<15) {xx+=dx; tries++;}
+					v.x=math_max(math_min(0.75*(xx-me.x), 4.0), -4.0); // Don't go too far.
+					a.set(index + ".v.x", v.x);
+				}// move.
+				else if(grounded and act==2) {
+						v.x=0.0; a.set(index + ".v.x", v.x); // I only want to do the ground check once.
+						v.y=-random(4, 10); // Hmm.
+						a.set(index + ".v.y", v.y);
+						string ter=gets("t" + below);
+						string toplay=steps + "carpet\\jump.wav";
+						if(pack.file_exists(steps + ter + "\\jump.wav")) toplay=steps + ter + "\\jump.wav";
+						else if(ter=="pipe") toplay=steps + "metal\\jump.wav";
+						else if(below=="~") toplay=sfx2 + "waterstrike0.wav";
+						pool.play_2d(toplay, camera.x, camera.y, me.x, me.y, false);
+						counter=1.0;
+						if(absolute(me.y-c.y)<=1.0) counter=0.25;
+				}// jump.
+				else {
+					v.x=0.0; a.set(index + ".v.x", v.x);
+					vector p(4.5+math_random(), 0);
+					// If the player is above, and not jumping, jump and quickly attack.
+					if(!grounded and c.y>=me.y) {
+						// If the player is below, throw at a downward angle.
+						p.x-=1.5;
+						p.y=2.75; // Umm.
+					}// downward.
+					if(c.x<me.x) {p.x*=-1; a.set(index + ".face", KeyC_L);}
+					else a.set(index + ".face", KeyC_R);
+					a.set("pslot" + projectiles.length(), pool.play_2d(sounds + "MHI\\throw_weapon_mono.ogg", camera.x, camera.y, me.x, me.y, false, true));
+					if(v.x<0 and p.x<0) p.x--;
+					else if(v.x>0 and p.x>0) p.x++;
+					addProjectile(me.x+((c.x<me.x) ? -1 : 1), me.y, p.x, p.y, random(1, 8), random(1, 7)!=4);
+					counter=1.0;
+				}// shuriken
+				a.set(index + "counter", counter);
+			}// Ninja.
+			else if(name=="Ninja Master") {
+				// Resurrections take priority, but randomly.
+				int res=random(index-4, index-1);
+				if(getd(res + ".hp")<=0.0 and c.y>me.y) {
+					pool.play_2d("voice\\" + name + "\\kiai_m" + random(0, 8) + ".wav", camera.x, camera.y, me.x, me.y, false);
+					a.set(res + ".name", "Ninja"); a.set(res + ".hp", 10); a.set(res + ".x", random(95, 119)); a.set(res + ".y", 5); a.set(res + ".state", "");
+					vector nin=getvector(res); pool.play_2d(sfx2 + "downou.wav", camera.x, camera.y, nin.x, nin.y, false);
+					a.set(res + ".counter", 1.0+math_random()); counter=-1.0;
+					if(c.y<=7 and random(0, 4)==3 and curbgm!="music\\kickass.ogg" and c.x>95) nextTrack="music\\kickass.ogg";
+				}
+				else {
+					// Pretty much always retreats from the player, but is supposed to stay on the platform.
+					if(me.x>=112) {v.x=0.0; if(absolute(c.x-me.x)<=2.0) v.x=-4.0;}
+					else if(me.x<=107 and absolute(me.x-c.x)<=1.0) v.x=3.0+math_random(); // Please don't fall...
+					a.set(index + ".v.x", v.x); // BEWARE.
+					double targx=me.x+(0.3*v.x)+(0.3*getd("0.v.x"));
+					string cs=gets("0.state");
+					// Can throw shurikens.
+/*					if(floor(c.y)<=floor(me.y) and random(1, 7)==4 and fps.frame%60==index and absolute(c.x-targx)>2.0 and string_contains(cs, "attack", 1)<0) {
+						a.set("pslot" + pc.length(), pool.play_2d(sounds + "MHI\\throw_weapon_mono.ogg", camera.x, camera.y, me.x, me.y, false, true));
+						addProjectile((v.x>0) ? me.x-1.5 : me.x+1.5, me.y, -1.3*v.x, 0, random(1, 8), true);
+						double hp=getd(index + ".hp"); // I am so sick of this crap.
+						projectileStep(pc.length()-1, dt*2.0);
+						a.set(index + ".hp", hp);
+						counter=1.0;
+						a.set(index + ".counter", counter);
+					}// Shurikens.
+					// Try to block if the player is too close? Hmm.
+					else if(random(1, 5)==4 and c.y<=me.y) {
+						double cc=getd("0.counter");
+						if(cc<=0.3 and cs>=0.2 and string_contains(cs, "attack", 1)>=0) targx=me.x+(cc*v.x)+(cc*getd("0.v.x"));
+						a.set(index + ".face", (c.x<me.x) ? KeyC_L : KeyC_R);
+						if(absolute(c.x-targx)<=2.0) {
+							int slot=geti(index + ".slot");
+							if(slot>=0) pool.destroy_sound(slot);
+							a.set(index + ".slot", pool.play_2d("voice\\Ninja Master\\kiai_m" + random(0, 8) + ".wav", camera.x, camera.y, me.x, me.y, false, true));
+							counter=random(18, 30)*0.01;
+							if(string_contains(cs, "attack", 1)<0) cs=(math_random()>=0.5) ? "attack" : "throw";
+							a.set(index + ".state", cs);
+							a.set(index + ".counter", counter);
+							pool.play_2d((cs=="throw") ? (steps + "leaves\\slide.wav") : (sfx + "sword" + random(1, 6) + ".ogg"), camera.x, camera.y, me.x, me.y, false);
+						}
+					}// Block.*/
+				}// Ninja master moves.
+			}// Ninja master.
+			else if(name=="Robot") {
+				int act=random(1, 4);
+				if(act==4 and (c-me).length()<random(10, 15)) {
+					a.set("pslot" + projectiles.length(), pool.play_2d(sounds + "CSM\\Laser " + random(1, 3) + ".WAV", camera.x, camera.y, me.x, me.y, false, true));
+					//clipboard_copy_text(clipboard_read_text() + "\r\nLaser" + projectiles.length() + ", slot is " + geti("pslot" + projectiles.length()) + ". ");
+					addProjectile(me.x+((c.x<me.x) ? -1.5 : 1.5), me.y, (me.x>c.x) ? -6.0 : 6.0, 0.0, random(1, 10), true); // Hmm.
+					v.x=0.0; a.set(index + ".v.x", 0.0); // do not run into it.
+					a.set(index + ".counter", 1.0); counter=1.0;
+				}// Lasers.
+				else if(act==1 and geti(index + ".slot")<0) a.set(index + ".slot", pool.play_2d(sounds + "CSM\\Robot Beep.WAV", camera.x, camera.y, me.x, me.y, false, true));
+				else if(grounded) {
+					v.x=act-2;
+					// Look for edges, so as to avoid them.
+					int xx=me.x;
+					int tries=0;
+					while(absolute(me.x-xx)<6.0 and isSolid(getC(xx, me.y+1)) and tries<15) {xx+=(v.x<0) ? -1 : 1; tries++;}
+					if(absolute(xx-me.x)<=absolute(v.x)) v.x=0.0; // Hmm.
+					setVector(index + ".v", v);
+				}// Move.
+				//if(!grounded) {v.y=-1.0; v.x*=-1; setVector(index + ".v", v);} // Hmm.
+			}// Robots are kinda like ninjas who don't jump.
+			else if(name=="Big Robot") {
+				int act=random(0, 5);
+				bool playbgm=(curbgm!="music\\psibeat1.ogg" and nextTrack!="music\\psibeat1.ogg");
+				if(c.x<54 or c.x>69 or c.y>=me.y+1) {int sl=geti(index + ".slot"); if(sl>=0 and pool.sound_is_playing(sl)) pool.destroy_sound(sl); a.set(index + ".slot", -1); playbgm=false;}
+				// Shoot at the player.
+				else if(act==5) {
+					a.set("pslot" + projectiles.length(), pool.play_2d(jla + "rocket1.wav", camera.x, camera.y, me.x, me.y, true));
+					addProjectile(me.x+((c.x<me.x) ? -1 : 1), me.y, (c.x<me.x) ? -7 : 7, 0, random(1, 10), getd("0.v.x")==0.0);
+					projectiles[pd.length()-1].z=2;
+					a.set(index + ".counter", 1.0); counter=math_random();
+				}// shoot.
+				// Blow up one of the ceiling tiles.
+				else if(act==4) {
+					pool.play_2d(sfx2 + "EXPLOSIO.WAV", camera.x, camera.y, c.x, 3, false);
+					addProjectile(c.x, 3.24, 0, -1, 1, true);
+					projectiles[pd.length()-1].z=2;
+					a.set(index + ".counter", 1.0); counter=1.0;
+					for(int cry=1; cry<c.y; cry++) {if(string_to_number(getC(c.x, cry))>0) {
+						int rx=c.x/30;
+						a.set(rx + ", " + cry, string_left(last, c.x%30) + " " + string_right(last, last.length()-(c.x%30)-1));
+					}}// 9:29 AM 1/2/2017: I am sick of this not working.
+				}// ceiling.
+				// Walk
+				else {
+					v.x=random(-3, 3);
+					if(me.x<58 or (me.x<67 and absolute(me.x-c.x)<=2)) v.x=absolute(v.x)+random(0, 1);
+					else if(me.x>66 and absolute(me.x-c.x)<=2) v.x=-absolute(v.x);
+					a.set(index + ".v.x", v.x);
+					int slot=geti(index + ".slot");
+					for(uint j=0; j<pool.highest_slot; j++) {
+						if(pool.items[j].filename=="voice\\Big Robot\\walk.wav") {slot=j; a.set(index + ".slot", j); break;}
+					}// I AM SO SICK OF THIS BUG!!!!!!
+					if(slot<0) a.set(index + ".slot", pool.play_2d("voice\\Big Robot\\walk.wav", camera.x, camera.y, me.x, me.y, true));
+					counter=0.0; // Too much?
+					counter=math_random(); // better. I think.
+				}// Meh.
+				if(playbgm) nextTrack="music\\psibeat1.ogg";
+			}// Big Robot.
+			else if(name=="Cohere") {
+				if(getd(index + ".hp")<25) {a.set(index + ".hp", 0); a.set("Cohere", geti("Cohere")-1); pool.play_2d("voice\\Cohere\\die.wav", camera.x, camera.y, me.x, me.y, false);}
+				else {
+					a.set("0.hp", getd("0.hp")+1);
+					a.set(index + ".hp", getd(index + ".hp")-1);
+					if(c.x<me.x) v.x=-4;
+					else if(c.x>me.x) v.x=4;
+					else v.x=0;
+					if(c.y<me.y and grounded) v.y=-15;
+					// Target enemies.
+					int num=geti("charsize");
+					vector target(-100, -100);
+					for(uint j=index+1; j<num; j++) {
+						vector temp=getvector(j);
+						if((temp-c).length()<(target-c).length()) target=temp;
+					}// target loop.
+					if((target-me).length()<=30) {
+						// If the player is in the way, try to get to their other side.
+						if(c.x>me.x and target.x>c.x) {v.x=6.0; me.y=target.y;} // Teleportation! What fun!
+						else if(c.x<me.x and target.x<c.x) {v.x=-6; me.y=target.y;}
+						else {
+							counter=1.0; a.set(index + ".counter", 1.0);
+							float flang=0.05*random(-20, 20);
+							if(!blast1.active) {blast1.load(sfx2 + "EXPLOSIO.WAV"); blast2.load(sfx2 + "EXPLOSIO.WAV");}
+							blast1.pitch=100+flang;
+							blast2.pitch=100-flang;
+							blast1.stop(); blast2.stop();
+							a.set("pslot" + projectiles.length(), pool.play_2d(sfx2 + "EXPLOSIO.WAV", camera.x, camera.y, me.x, me.y, false, true));
+							blast1.play(); blast2.play();
+							
+/*							pool.play_extended_2d(sfx2 + "EXPLOSIO.WAV", camera.x, camera.y, me.x, me.y, 1, 1, 0, 0, false, 0, 0, -5, 100.0+flang); // Flangers make these sound like blasts!
+							pool.play_extended_2d(sfx2 + "EXPLOSIO.WAV", camera.x, camera.y, me.x, me.y, 1, 1, 0, 0, false, 0, 0, -5, 100.0+flang);*/
+							v.x=0.0; // Do not run into it and die like the enemies do.
+							vector p(me.x, me.y);
+							if(target.x>me.x) p.x+=2.0;
+							else p.x-=2.0;
+							if(round(c.x, 0)==round(p.x, 0) or (c.x<p.x and p.x<me.x) or (c.x>p.x and p.x>me.x)) {p.x=(c.x<target.x) ? c.x+2.0+(dt*2.0*getd("0.v.x")) : c.x-2.0-(2.0*dt*getd("0.v.x")); if(getd("0.counter")==0.0) a.set("0.state", "crouch");}
+							//p.x=3.0*(c-target)/(c-target).length();
+							addProjectile(p.x, target.y, (target.x>p.x) ? 7.5 : -7.5, 0.0, random(1, 10), true);
+							//alert("Blst", "Player: " + c.x + ", " + c.y + "\nCohere: " + me.x + ", " + me.y + "\nTarget: " + target.x + ", " + target.y + "\nBlast: " + projectiles[pd.length()-1].x + ", " + projectiles[pd.length()-1].y + "\nBlast speed: " + pv[pv.length()-1].x);
+						}// This is way too deep.
+					}// in range.
+				}// Ugh.
+				setVector(index + ".v", v);
+			}// Cohere, your desperation attack.
+			//else if(name=="Drone") {
+			//	// These float up and down.
+			//	//If you get too close, they will try to force you back or down.
+			//}// Drones.
+			else if(name=="Silver Guardian" or name=="Steel Guardian") {
+				// First, get legal areas, because I don't think edge detection is going to work so well.
+				int leftx=30, rightx=45, yy=4;
+				if(me.x>=60 and me.x<90) {leftx+=30; rightx+=30;}
+				else if(name=="Steel Guardian" and geti("stage")==3) {leftx=101; rightx=119; yy=5; if(me.x>111) yy=7;}
+				else if(me.x>133 and name=="Steel Guardian" and geti("stage")==4) {leftx=135; rightx=148; yy=15;}
+				else if(me.x>=120) {leftx+=90; rightx+=90; yy=4;}
+				
+				// If the player is not in range, they slowly heal?
+				if(c.x>=leftx and c.x<=rightx and c.y<=yy) {
+					// If out of bounds, teleport.
+					vector targ(c.x, yy-1);
+					int act=random(1, 5);
+					if(me.x<=leftx+1) targ.x=rightx-2;
+					else if(me.x>=rightx-1) targ.x=leftx+2;
+					if(me.y>yy) targ.y=yy-1;
+					if(act==1 or targ.x!=c.x or targ.y<me.y) {
+						pool.play_2d("voice\\Silver Guardian\\teleport.wav", camera.x, camera.y, me.x, me.y, false);
+						pool.play_extended_2d("voice\\Silver Guardian\\teleport.wav", camera.x, camera.y, targ.x, targ.y, 0, 0, 0, 0, false, 0, 0, 0, 111);
+						me=targ;
+						setVector(index + "", targ);
+						counter=0.5+(0.5*math_random()); a.set(index + ".counter", counter);
+					}// Teleport.
+					else if(act==3 and absolute(c.x-me.x)<=2.0) {
+						a.set(index + ".state", (name=="Silver Guardian") ? "attack" : "crouch attack");
+						a.set(index + ".face", (c.x<me.x) ? KeyC_L : KeyC_R); // Should that be less reliable? The idea is to jump over them or run past them or something.
+						counter=0.3;
+						a.set(index + ".counter", counter);
+						pool.play_extended_2d(sfx + "sword" + random(1, 6) + ".OGG", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, random(90, 106));
+						v.x=0.0; a.set(index + ".v.x", v.x); // ?
+						//voice.speak("Attack");
+					}// melee.
+					else if(act==4) {
+						if(c.x-me.x<-0.75) v.x=-5.0;
+						else if(c.x-me.x>0.75) v.x=5.0;
+						else v.x=0.0;
+						a.set(index + ".state", "throw");
+						counter=(v.x==0.0) ? 0.3 : 1.0; a.set(index + ".counter", counter);
+						// Should we have it hit anyway, if in range?
+						int slot=geti(index + ".slot");
+						if(slot>=0) pool.destroy_sound(slot);
+						slot=pool.play_2d("voice\\" + name + "\\throw.ogg", camera.x, camera.y, me.x, me.y, false, true);
+						a.set(index + ".slot", slot);
+					}// charge and throw.
+					else if(act==2 and name=="Steel Guardian") {
+						if(c.x>111 and me.x<111) {
+						v.x=0.0; a.set(index + ".v.x", v.x);
+						a.set("tL", "concrete"); // Meh.
+						getC(c.x, 0);
+						int lx=random(21, 29);
+						a.set("3, 0", string_left(last, lx) + "l" + string_right(last, last.length()-lx-1));
+						counter=2.0; a.set(index + ".counter", counter);
+						pool.play_2d("voice\\" + geti("lang") + "\\sgdrop" + random(1, 3) + ".ogg", camera.x, camera.y, me.x, me.y, false);
+						pool.play_2d(sfx + "sq_rockramp_01a.wav", camera.x, camera.y, 90+lx, 0, false);
+						}// Drop stuff.
+						else if(absolute(me.x-c.x)>2.5) {
+							// Throw sword?
+							pool.play_2d("voice\\Steel Guardian\\throwsword.ogg", camera.x, camera.y, me.x, me.y, false);
+							a.set("pslot" + pc.length(), pool.play_extended_2d(sfx + "sword" + random(1, 6) + ".ogg", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, true, 0, 0, 0, random(75, 90), true));
+							v.x=0.0; a.set(index + "0.v.x", v.x);
+							counter=1.0;
+							vector p=c-me;
+							p=(p/p.length())*(4.0+math_random());
+							addProjectile(me.x+(0.1*p.x), me.y+(0.1*p.y), p.x, p.y, random(5, 10), false);
+						}// He's not threatening enough!
+						else {a.set(index + ".state", "crouch attack"); counter=0.25; pool.play_2d(sfx + "sword" + random(1, 6) + ".ogg", camera.x, camera.y, me.x, me.y, false);}
+					}// Steel Guardian can do some other stuff.
+					else {
+						if(name=="Steel Guardian" and getC(me.x, me.y)=="~") a.set(index + ".hp", getd(index + ".hp")+dt);
+						// If the player is attacking in this direction, retreat.
+						int face=(me.x<targ.x) ? KeyC_L : KeyC_R;
+						v.x=(targ.x<me.x) ? -3.0 : 3.0;
+						if(absolute(c.x-me.x)<=2.0 and geti("0.face")==face and string_contains(gets("0.state"), "attack", 1)>=0) v.x*=-1;
+						a.set(index + ".face", (face==KeyC_L) ? KeyC_R : KeyC_L);
+						a.set(index + ".v.x", v.x);
+						counter=0.5;
+					}// Walk.
+				}
+				else {v.x=0; v.y=0; setVector(index + ".v", v);}
+			}// Silver Guardian.
+			else if(name=="Drone") {
+				// Gravity should not work on them?
+				if(!grounded) v.y=round(v.y, 0);
+				if(v.y<0) v.y=4.0; else v.y=-4.0;
+				if((c-me).length()<3.0) {
+					a.set(index + ".state", "throw");
+					v=c-me+getvector("0.v"); // Should this actually work? This is a "definitely wind up in the same spot if the player's velocity remains constant" move.
+					//v.x+=0.025; // Get to the right?
+					setVector(index + ".v", v);
+					counter=1.0;
+					a.set(index + ".counter", counter);
+					pool.play_2d(sfx + "robolaser.wav", camera.x, camera.y, me.x, me.y, false); // Should it track?
+					if((c-me).length()<=square_root(2.0)) hit(0, random(1, 10), sfx2 + "ABATTERY.WAV", math_random(), "fall");
+				}// Attack.
+				else pool.play_2d(sfx2 + "waterstrike0.wav", camera.x, camera.y, me.x, me.y, false);
+				counter=1.0; // Always?
+			}// drones.
+			else if(name=="Timberwolf" or name=="Alpha Wolf") {
+				bool alpha=(name=="Alpha Wolf");
+				if(absolute(c.x-me.x)>15) {counter=random(1, 3); a.set(index + ".counter", counter);}
+				else if(absolute(me.x-c.x)<=1.0) {
+					a.set(index + ".state", "crouch attack");
+					counter=0.5;
+					a.set(index + ".counter", counter);
+					int slot=geti(index + ".slot");
+					if(slot>=0) pool.destroy_sound(slot);
+					a.set(index + ".slot", pool.play_extended_2d("voice\\wolf\\wolf_attack_0" + random(1, 5) + ".wav", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, ((alpha) ? 90 : 100), true));
+					v.x=0.0; a.set(index + ".v.x", 0.0);
+				}// wolf attack.
+				else if(alpha and random(6, 10)==9) {
+					for(uint i=0; i<=index+1; i++) {
+						if(getd(i + ".hp")<=0.0 and gets(i + "name")=="Timberwolf") {
+							a.set(i + ".x", random(math_max(122, c.x-5), math_min(149, c.x+5)));
+							uint tries=0;
+							do {a.set(i + ".y", random(math_max(0, c.y-5), c.y)); tries++;} while(tries<15 and isSolid(getC(getn(i + ".x"), getn(i + ".y"))));
+							a.set(i + ".hp", random(5, 20));
+							a.set(i + ".state", "");
+							a.set(i + ".counter", 0.0);
+							pool.play_2d(steps + "snow\\jump.wav", camera.x, camera.y, getd(i + ".x"), getd(i + ".y"), false);
+							pool.play_2d("voice\\wolf\\wolf_howl_0" + random(1, 5) + ".wav", camera.x, camera.y, me.x, me.y, false);
+							counter=2.0;
+							a.set(i + ".counter", counter);
+							i=index+2;
+						}// Resurrected.
+					}// Loop.
+				}// Summons.
+				else {
+					int slot=geti(index + ".slot");
+					if(slot>=0 and !pool.sound_is_playing(slot)) {pool.destroy_sound(slot); slot=-1;}
+					if(slot<0) a.set(index + ".slot", pool.play_extended_2d("voice\\wolf\\wolf_growl_0" + random(1, 6) + ".wav", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, ((alpha) ? 90 : 100), true));
+					if((c.y<me.y or string_contains(gets("0.state"), "attack", 1)>=0) and v.y<=0) { v.y=random(-4, -1); a.set(index + ".v.y", v.y); pool.play_2d(steps + "snow\\jump.wav", camera.x, camera.y, me.x, me.y, false); counter=0.3; a.set(index + ".counter", counter);}
+					else if(c.x<me.x) v.x=-5;
+					else if(c.x>me.x) v.x=5;
+					a.set(index + ".v.x", v.x);
+					a.set(index + ".face", (v.x<0) ? KeyC_L : KeyC_R);
+				}// running.
+			}// wolves.
+			else if(name=="Jovian Accolite" or name=="Gold Guardian") {
+				bool gold=(name=="Gold Guardian");
+				// look for pits.
+				bool pitleft=(grounded and (isSolid(getC(me.x-1, me.y+1))==false or !isSolid(getC(me.x-2, me.y+1))));
+				bool pitright=(grounded and (isSolid(getC(me.x+1, me.y+1))==false or !isSolid(getC(me.x+2, me.y+1))));
+				int act=random(1, 4); // Hm?
+				if(absolute(c.x-me.x)>15) v.x=0.0;
+				else if(act==4) {
+					int slot=geti(index + ".slot");
+					if(absolute(c.x-me.x)<=2.0) {
+						a.set(index + ".state", (gold) ? "crouch attack" : "attack");
+						if(slot>=0) pool.destroy_sound(slot);
+						a.set(index + ".slot", pool.play_2d("voice\\" + name + "\\attack" + random(1, 3) + ".ogg", camera.x, camera.y, me.x, me.y, false, true));
+						pool.play_2d(sfx + "sword" + random(1,6) + ".ogg", camera.x, camera.y, me.x, me.y, false); // Would be neat if they didn't all make sword sounds, hmm?
+						counter=0.25;
+						a.set(index + ".counter", counter);
+						if(pitleft or pitright) {v.x=0.0; a.set(index + ".v.x", v.x);}
+					}// melee.
+					else {
+						//if(geti("pslot" + pc.length())>=0) pool.destroy_sound(geti("pslot" + pc.length())); // Is that a good idea?
+						a.set("pslot" + pc.length(), pool.play_2d(sfx + ((gold) ? "ignite_0" + random(1, 3) : "fire_large_0" + random(1, 2)) + ".wav", camera.x, camera.y, me.x, me.y, false, true));
+						vector p(me.x, me.y);
+						if(c.x<me.x) {p.x=me.x-2; v.x=absolute(v.x);}
+						else {p.x=me.x+2; v.x=-absolute(v.x);}
+						if(pitleft or pitright) v.x=0.0;
+						addProjectile(p.x, p.y, (c.x<me.x) ? -6 : 6, (grounded) ? (floor(c.y)<floor(me.y)) ? -3 : 0 : 3, (gold) ? 10 : random(1, 10), !gold);
+						projectiles[pc.length()-1].z=3;
+						counter=1.0; a.set(index + ".counter", counter);
+					}// fireball.
+				}// attack.
+				else if(act==1 and gold and c.y<me.y+1) {
+					v.x=c.x-me.x;
+					if(v.x<-6) v.x=-6; else if(v.x>6) v.x=6;
+					a.set(index + ".state", "throw");
+					int slot=geti(index + ".slot"); if(slot>=0) pool.destroy_sound(slot);
+					a.set(index + ".slot", pool.play_2d("voice\\" + name + "\\throw.ogg", camera.x, camera.y, me.x, me.y, false, true));
+					double vn=(v.x+getd("0.v.x"));
+					if(absolute(vn)<0.1) vn=4.0; // Umm?
+					counter=absolute((c.x-me.x)/vn);
+					if(counter>2.5) counter=2.5;
+					else if(counter<0.25) counter=0.25;
+					else if(absolute((c.x-me.x)+(vn*0.5))<3.0 and counter>0.5) counter=0.5;
+					a.set(index + ".counter", counter);
+				}// throw.
+				else {
+					int slot=geti(index + ".slot");
+					if(slot>=0 and !pool.sound_is_playing(slot)) {pool.destroy_sound(slot); slot=-1;}
+					if(slot<0) a.set(index + ".slot", pool.play_2d("voice\\" + name + "\\taunt" + geti("lang") + random(1, 3) + ".ogg", camera.x, camera.y, me.x, me.y, false, true));
+					counter=0.5;
+					if(grounded and absolute(c.x-me.x)<=2.0 and string_contains(gets("0.state"), "attack", 1)>=0) {
+						v.y=-5;
+						string terrain=gets("t" + getC(me.x, me.y+1));
+						if(!pack.file_exists(steps + terrain + "\\jump.wav")) terrain=getAlt(terrain);
+						pool.play_2d(steps + "terrain\\jump.wav", camera.x, camera.y, me.x, me.y, false);
+						// That all?
+					}// jump.
+					else if(act<3 or pitright) v.x=-4.0;
+					else if(!pitleft) act=4.0;
+					else v.x=0.0;
+					a.set(index + ".counter", counter);
+				}// walk.
+				setVector(index + ".v", v);
+				a.set(index + ".face", (c.x<me.x) ? KeyC_L : KeyC_R);
+			}// Jovian, Gold
+			else if(name=="Lady Juno") {
+				vector tv=(c-me);
+				tv=5.0*tv/tv.length(); // ?
+				if(absolute(me.x-c.x)<1.0 or math_random()>0.5) {
+					v.x=0.0;
+					counter=0.6+math_random(); // Uh Oh!
+					vector p=me+(tv/2.5);
+					string toplay="voice\\Big Robot\\die.wav";
+					sound snd; snd.load(toplay); //These need to be close together.
+					for(uint i=0; i<3; i++) {
+						a.set("pslot" + pc.length(), pool.play_extended_2d(toplay, camera.x, camera.y, p.x, p.y, 0, 0, 0, 0, false, 0, 0, 0, 199.5+math_random()));
+						addProjectile(p.x, p.y, tv.x, tv.y, 1.0, false);
+						projectiles[pc.length()-1].z=i+1;
+					}
+				}// Magic Missile.
+				else if(c.x<me.x) v.x=-4;
+				else if(c.x>me.x) v.x=4;
+				a.set(index + ".v.x", v.x);
+				if(v.x!=0.0 and counter<=0.0) counter=0.5+(0.5*math_random());
+				else if(v.x!=0.0) a.set(index + ".hp", math_min(getd(index + ".hp")+3.0, 100.0));
+				a.set(index + ".counter", counter);
+			}// Lady Juno.
+			else if(name=="Sapphire Helmsman") {
+				if(c.y<5 and c.x<12 and getd((index-1) + ".hp")>0 and random(0, 5)!=4) {
+					counter=1.0;
+				}// Shouldn't get quakes so much if you're up with the steel guardian.
+				else if((!grounded or c.y<me.y) and math_random()>0.5) {
+					a.set(index + ".state", "quake");
+					counter=1.5; //?
+					a.set(index + ".counter", counter);
+					if(grounded) {v.y=-3; a.set(index + ".v.y", v.y); pool.play_2d("voice\\" + name + "\\jump.wav", camera.x, camera.y, me.x, me.y, false); v.x=0.0;}
+				}// Quake.
+				else {
+					a.set(index + ".state", "attack");
+					counter=0.25;
+					if(c.y>7 and me.y<8) {a.set(index + ".face", KeyC_R); a.set(index + ".v.x", 4.0); v.x=4.0;} // STOOOP THAAAAT!
+					else if((me.x<=122.0 or (me.x<127 and me.y>10)) and v.x<=0.0) {a.set(index + ".face", KeyC_R); v.x=1.0; counter=1.0;}
+					else if(me.x>125 and grounded and v.x>=0 and (me.x>138.0 or !isSolid(getC(me.x+1, me.y+1)))) {a.set(index + ".face", KeyC_L); v.x=-1.0; counter=1.0; }
+					else if(geti(index + ".face")==KeyC_L) v.x=-4.0;
+					else v.x=4.0;
+					a.set(index + ".v.x", v.x);
+					a.set(index + ".counter", counter);
+				}// Normal.
+			}// UNSTOPPABLE
+			else if(name=="Master Jupiter") {
+				int slot=geti(index + ".slot");
+				if(slot>=0 and !pool.sound_is_playing(slot)) {pool.destroy_sound(slot); slot=-1;}
+				if(slot<0) for(uint i=0; i<pool.highest_slot; i++) {if(pool.items[i].filename==sfx2 + "ABATTERY.WAV") {slot=i; a.set(index + ".slot", i);}} // FFFFFFFFFUUUUUUUUUUUUUUUUUUUUUUU!!!!!
+				int act=random(0, 5);
+				// Forcefield.
+				if(act==0 and slot<0) {
+					slot=pool.play_2d(sfx2 + "ABATTERY.WAV", camera.x, camera.y, me.x, me.y, true);
+					a.set(index + ".slot", slot);
+					counter=math_random()*2.0;
+				}
+				// Blasts.
+				else if(act<2 or (act==2 and math_random()<0.5)) {
+					for(int i=0; i<3; i++) {
+						a.set("pslot" + pv.length(), pool.play_extended_2d(jla + "LightningStream.wav", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, 99.5+math_random(), true));
+						vector tv=c-me;
+						tv=((fps.frame%4)+7.0)*(tv/tv.length());
+						vector p=me+(tv/7.0); // Hmm.
+						addProjectile(p.x, p.y, tv.x, tv.y, random(2, 10), false);
+						projectiles[projectiles.length()-1].z=4;
+						pv[pv.length()-1].z=4;
+					}// blasts.
+					counter=math_random();
+				}// blasts.
+				// Moving?
+				else if(act==2) {
+					counter=math_random();
+					if(!grounded or me.x<160 or me.x>170 or me.y>15) {v.y=-10.0; counter=1.0+math_random(); a.set("pslot" + pv.length(), pool.play_2d(jla + "LightningStream.wav", camera.x, camera.y, me.x, me.y, false, true)); addProjectile(me.x, me.y+1.5, 0.0, random(7, 10), random(1, 10), false);}
+					if(me.x<165) v.x=3.0;
+					else if(me.x>165) v.x=-3.0;
+					else v.x=random(-4, 4);
+					setVector(index + ".v", v);
+					a.set(index + ".counter", counter);
+				}// Moving is weird for him.
+				// Power up for lots of blasts.
+				else if(act==3) {
+					counter=0.048;
+					a.set(index + ".state", "charge");
+					if(slot<0) slot=pool.play_2d(sfx2 + "ABATTERY.WAV", camera.x, camera.y, me.x, me.y, true);
+					a.set(index + ".slot", slot);
+					pool.update_sound_start_values(slot, 0, 0, 50);
+				}// Doom Charge.
+				// Teleport blocks over the player's head, if there isn't one already there.
+				else if(c.y>0 and act==4 and floor(c.x+getd("0.v.x"))!=floor(me.x)) {
+					counter=math_random(); a.set(index + ".counter", counter);
+					int y;
+					for(y=c.y-1; y>=0; y--) {
+						string cn=getC(c.x, y);
+						if(isSolid(cn)) {
+							pool.play_2d(jla + "elechit.ogg", camera.x, camera.y, c.x, y, false);
+							if(string_is_digits(cn)) {addProjectile(c.x, c.y-1, 0.0, (y-c.y)*3.0, math_random(), true);}
+							else {
+								int rx=c.x/30;
+								int x3=c.x; x3%=30;
+								a.set(rx + ", " + y, string_left(last, x3) + "L" + string_right(last, last.length()-x3-1));
+							}
+							break;
+						}// Solid.
+					}// Loop.
+				}// Drops.
+				// Summon minions.
+				else {
+					counter=math_random(); a.set(index + ".counter", counter);
+					int res=random(2, index-1);
+					vector r=getvector(res);
+					if(r.x>150) res=random(2, index-1);
+					if(gets(res + ".name")=="Sapphire Helmsman") {a.set(res + ".name", "Gold Guardian"); a.set(res + ".hp", random(5, 50));}
+					a.set(res + ".hp", math_max(getd(res + ".hp"), random(5, 30)));
+					r.x=random(152, 178);
+					int tries=0;
+					do {tries++; r.y=random(0, 17);} while(isSolid(getC(r.x, r.y)) and tries<20);
+					string n=gets(res + ".name");
+					a.set(res + ".state", "");
+					a.set(res + ".coutner", math_random());
+					if(string_contains(n, "Guardian", 1)>0) pool.play_2d("voice\\Silver Guardian\\teleport.wav", camera.x, camera.y, r.x, r.y, false);
+					else if(pack.file_exists("voice\\" + n + "\\enter.wav")) pool.play_2d("voice\\" + n + "\\enter.wav", camera.x, camera.y, r.x, r.y, false);
+					else pool.play_2d(sfx + "robolaser.wav", camera.x, camera.y, r.x, r.y, false);
+					setVector(res, r);
+					if(slot>=0) {pool.destroy_sound(slot); slot=-1; a.set(index + ".slot", -1);}
+				}// Meh.
+				
+			}// Master Jupiter.
+			else if(name=="Swordkiller") {
+				// Approach, block, retreat, antiair, sometimes charge and throw but not often.
+				int slot=geti(index + ".slot");
+				if(slot>=0 and !pool.sound_is_playing(slot)) {pool.destroy_sound(slot); slot=-1;}
+				
+				if(grounded and floor(c.y)<floor(me.y) and (c-me).length()<8.0) {
+					// Aim carefully. Where will the player be by the time he can reach them?
+					if(slot>=0) pool.destroy_sound(slot);
+					slot=pool.play_extended_2d(sfx + "sword" + random(1, 6) + ".ogg", camera.x, camera.y, me.x, me.y, 2, 2, 0, 0, true, 0, 0, 0, random(150, 200));
+					a.set(index + ".slot", slot);
+					a.set(index + ".state", "attack");
+					double t=0.01*random(25, 100);
+					vector tc(c.x+(t*getd("0.v.x")), c.y+(getd("0.v.y")*t)+(4.9*t*t));
+					if(tc.y>me.y) tc.y=me.y;
+					vector tv(tc.x-me.x, ((tc.y-me.y)-(4.9*t*t))/5);
+					v=tv;
+					setVector(index + ".v", v);
+					counter=t;
+					a.set(index + ".counter", counter);
+					a.set(index + ".state", "attack");
+				}// antiair.
+				else if(random(0, 4)==2) {
+					v.x=math_min(6.0, math_max(-6.0, c.x-me.x));
+					if(slot>=0) pool.destroy_sound(slot);
+					slot=pool.play_2d("voice\\Killer\\throw.ogg", camera.x, camera.y, me.x, me.y, false, true);
+					a.set(index + ".slot", slot);
+					counter=1.0;
+					if(absolute(v.x)<4) counter=0.5;
+					a.set(index + ".state", "throw");
+					
+				}// throw?
+				else if(me.x>c.x+2) v.x=-4.0;
+				else if(me.x<c.x-2) v.x=4.0;
+				else {
+					counter=0.25;
+					a.set(index + ".state", "attack");
+					if(slot>=0) pool.destroy_sound(slot);
+					slot=pool.play_2d("voice\\Killer\\attack" + random(1, 4) + ".ogg", camera.x, camera.y, me.x, me.y, false, true);
+					if(math_random()>0.5) {pool.play_2d(sfx2 + "crouch.wav", camera.x, camera.y, me.x, me.y, false); a.set(index + ".state", "crouch attack"); counter=0.35;}
+					pool.play_2d(sfx + "sword" + random(1, 6) + ".ogg", camera.x, camera.y, me.x, me.y, false);
+					a.set(index + ".counter", counter);
+					v.x*=math_random();
+				}// Attack. That's it?
+				if(me.x>c.x) a.set(index + ".face", KeyC_L); else a.set(index + ".face", KeyC_R);
+				setVector(index + ".v", v);
+				if(gets(index + ".state")=="" and slot<0) {slot=pool.play_2d("voice\\Killer\\taunt" + random(0, 5) + "_" + geti("lang") + ".ogg", camera.x, camera.y, me.x, me.y, false, true); a.set(index + ".slot", slot);}
+				if(measure>0 and measure%8==0) {
+					string[] tracks={"level3.ogg", "level5.ogg", "darkshit.ogg", "kickass.ogg", "orchestral5.ogg", "orchestral8.ogg", "slowbangin.ogg", "psibeat1.ogg"};
+					for(uint i=0; i<tracks.length(); i++) tracks[i]="music\\" + tracks[i];
+					tracks.insert_last(curbgm);
+					nextTrack=tracks[random(0, tracks.length()-1)];
+					measure=0;
+					if(nextTrack==curbgm) bgm.volume=getd("BGMVolume");
+				}
+				else if(measure%8>3) bgm.pitch=105.9463;
+				else bgm.pitch=100.0;
+				if(nextTrack==curbgm) bgm.volume=getf("BGMVolume"); // 9:17 AM 1/2/2017, this is annoying in this fight.
+			}// Killer.
+			else if(name=="pipe") {
+				if(getd(index + ".hp")<2000) {
+					if(c.x<me.x-1 or c.y<me.y-3) a.set(index + ".hp", 2005.0);
+					else {
+						pool.play_2d("voice\\Big Robot\\hit" + random(1, 5) + ".wav", camera.x, camera.y, me.x, me.y, false);
+						a.set(index + ".name", "leak");
+						a.set(index + ".hp", 999001);
+						a.set(index + ".counter", 1.0);
+						a.set("t-", "water");
+					a.set("leak", 19);
+						a.set("lslot", pool.play_extended_2d(jla + "brook1.wav", camera.x, camera.y, 60, 20, -5, 30, 1, 5, true, 0, 0, 0, random(90, 111)));
+						// trickle?
+					}// break.
+				}// hit?
+			}// pipe.
+			else if(name=="leak") {
+				a.set(index + "hp", 999001);
+				int rx=me.x; rx/=30;
+				int yy=me.y;
+				int ly=geti("leak");
+				getC(me.x, ly);
+				if(last=="" and ly<18) {me.x+=30; a.set(index + ".x", me.x);}
+				else a.set(rx + ", " + ly, string_replace(string_replace(last, " ", "~", true), "*", "~", true));
+				if(me.x<90) ly--;
+				else ly++;
+				a.set("leak", ly);
+				pool.update_sound_2d(geti("lslot"), me.x, ly);
+				counter=1.0;
+				a.set(index + ".counter", counter);
+				// More sounds, though?
+			}// leak.
+		}// enemies, unless there are NPC allies... which there should be?
+		else {
+			if(getd("0.hp")<=25.0 and geti("Cohere")>0) {
+				pool.play_2d("voice\\Cohere\\arrive.ogg", camera.x, camera.y, me.x, me.y, false);
+			a.set("1.name", "Cohere"); // So, if we're in the final level...?
+			a.set("1.hp", random(50, 100)); // Wait, what?
+			setVector("1", me);
+			setVector("1.v", v);
+			}// Cohere to the rescue.
+			else if(fps.frame%60==1 and geti("Nia")>0) {
+				bool used=false;
+				if(!grounded) {getC(me.x, me.y+2); if(last=="") {pool.play_2d(sounds + "CSM\\Twang.WAV", camera.x, camera.y, me.x, me.y, false); v.y-=10; used=true;}}
+				if(!used) for(uint i=0; i<pc.length(); i++) {
+					if((me-projectiles[i]).length()<=2.0) {
+						used=true;
+						pool.play_extended_2d(sounds + "CSM\\Twang.WAV", camera.x, camera.y, projectiles[i].x, projectiles[i].y, 0, 0, 0, 0, false, 0, 0, 0, random(95, 105));
+						pv[i]*=-1;
+						projectileStep(i, dt*2); // So it doesn't hit more than once.
+					}// found.
+				}// deflecting projectiles.
+				if(!used and geti("stage")==4 and me.y<4 and me.x>120 and (getvector(geti("charsize")-2)-me).length()<=3) {
+					hit(geti("charsize")-2, random(25, 100), sounds + "CSM\\Twang.WAV", 2.5, "fall");
+					me=getvector("0"); setVector("0", me);
+				}// So you don't have to kill the alpha wolf.
+				if(used) a.set("Nia", geti("Nia")-1);
+				if(geti("Nia")<=0) {hit(0, -50, sfx2 + "beacon.wav"); if(curbgm=="music\\kickass.ogg") {bgm.pitch=bgm.pitch*1.059463; measure=0;} else if(me.x>120 and me.y<15) nextTrack="music\\kickass.ogg";}
+			}
+		}// Player stuff.
+	}// AI or whatever.
+	
+	int s2=geti(index + ".slot");
+	//if(s!=s2) {
+		//clipboard_copy_text(clipboard_read_text() + "\r\n" + gets(index + ".name") + " switched slots: " + s + " to " + s2);
+		//if(s>=0 and s2>=0) clipboard_copy_text(clipboard_read_text() + "\r\n-- original: " + pool.items[s].filename + ", " + pool.sound_is_playing(s) + ", " + pool.items[s].looping + ", " + pool.items[s].persistent + "\r\n-- Current: " + pool.items[s2].filename + ", " + pool.sound_is_playing(s2) + ", " + pool.items[s2].looping + ", " + pool.items[s2].persistent);
+
+	//}// Sound bugs are annoying the crap out of me.
+	a.set(index + ".counter", counter);
+	setVector("" + index, me);
+	setVector(index + ".v", v);
+}// Step Char.
+
+
+void playsong(string fn) {
+	if(curbgm!=fn) {
+		bgm.load(fn);
+		bgm.volume=getd("BGMVolume");
+		curbgm=fn;
+	}
+	if(!bgm.playing) bgm.play_looped();
+}
+
+void keycheck() {
+	int[] keys=keys_pressed();
+	for(uint i=0; i<keys.length(); i++) keyPressed(keys[i]);
+	keys=keys_released();
+	for(uint i=0; i<keys.length(); i++) keyReleased(keys[i]);
+	if(pad.active) {
+		keys=pad.buttons_pressed();
+		for(uint i=0; i<keys.length(); i++) keyPressed(keys[i]);
+		keys=pad.buttons_released();
+		for(uint i=0; i<keys.length(); i++) keyReleased(keys[i]);
+		if(pad.x<-10) {keyPressed(joy.l); keyReleased(joy.r); keyReleased(key.r);}
+		else if(pad.x>10) {keyPressed(joy.r); keyReleased(joy.l); keyReleased(key.l);}
+		else {keyReleased(joy.l); keyReleased(joy.r);}
+		if(pad.y<-10) {keyPressed(joy.u); keyReleased(joy.d);}
+		else if(pad.y>10) {keyPressed(joy.d); keyReleased(joy.u);}
+		else {keyReleased(joy.u); keyReleased(joy.d);}
+		
+	}// joystick.
+}
+
+void save_exit() {
+	string txt=KeyC_save(key) + "\n" + KeyC_save(joy) + "\n" + getd("BGMVolume") + ", " + geti("lang");
+	file fout;
+	fout.open(savedir + "\\settings.cfg", "w");
+	fout.write(txt);
+	fout.close();
+	if(geti("slot")>0) {
+		// 7:18 PM 4/12/2016: remove sound slots, since they will no lonber be valid when you load, and that can result in sound glitches.
+		for(int i=0; i<geti("charsize"); i++) a.set(i + ".slot", -1);
+		for(int i=0; i<projectiles.length(); i++) {if(a.exists("pslot" + i)) a.set("pslot" + i, -1);}
+		txt=string_encrypt(serialize(a), "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+		fout.open(savedir + "\\save" + geti("slot") +".dat", "wb");
+		fout.write(txt);
+		fout.close();
+	}// save game.
+	pool.destroy_all();
+	for(uint i=0; i<50; i++) {bgm.volume=bgm.volume-1; wait(20);}
+	exit();
+}
+
+void loadSettings() {
+	voice.load_config(savedir + "\\voice.cfg");
+	voice.config_path=savedir + "\\voice.cfg";
+	if(!file_exists(savedir + "\\settings.cfg")) return;
+	file fin;
+	fin.open(savedir + "\\settings.cfg", "r");
+	string txt=fin.read(0);
+	fin.close();
+	string[] lines=string_split(txt, "\n", true);
+	if(lines.is_empty()) return;
+	@key=KeyC_load(lines[0]);
+	if(lines.length()>1) @joy=KeyC_load(lines[1]);
+	if(lines.length()>2) {
+		string[] parts=string_split(lines[2], ", ", true);
+		a.set("BGMVolume", string_to_number(parts[0]));
+		if(parts.length()>1) a.set("lang", string_to_number(parts[1]));
+	}// Language and BGM volume.
+}
+
+bool loadGame(int slot) {
+	if(!file_exists(savedir + "\\save" + slot + ".dat")) return false;
+	file fin;
+	fin.open(savedir + "\\save" + slot + ".dat", "rb");
+	a=deserialize(string_decrypt(fin.read(0), "https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
+	fin.close();
+	camera=getvector("0");
+	return true;
+}
+
+void setup_menus() {
+	int lang=geti("lang");
+	string ext="";
+	if(pack.file_exists("voice\\" + lang + "\\one.wav")) ext=".wav";
+	else if(pack.file_exists("voice\\" + lang + "\\one.ogg")) ext=".ogg";
+	reader.prepend="voice\\" + lang + "\\";
+	reader.append=ext;
+	//alert("Ext", ext + "\n" + pad.x + ", " + pad.y);
+	string[] mitems={
+ "New Game",
+ "Load Game",
+ "Speaker Test",
+ "Switch Language",
+ "Configure Keyboard",
+ "Configure Joystick",
+ "Braille " + geti("braille"),
+ "learn sounds",
+ "Exit"
+};
+	mainmenu.item_list.resize(0);
+	if(ext=="" or !pack.file_exists(reader.prepend + "main" + ext)) {for(uint i=0; i<mitems.length(); i++) mainmenu.add_item_tts(mitems[i], mitems[i]);}
+	else {for(uint i=0; i<mitems.length(); i++) mainmenu.add_item("voice\\" + lang + "\\" + string_replace(mitems[i], " ", "_", true) + ext, mitems[i]);}
+	conf.item_list.resize(0);
+	if(ext=="" or !pack.file_exists(reader.prepend + "yes" + ext)) {conf.add_item_tts(((lang==1) ? "Yes" : "Si"), "y"); conf.add_item_tts("No", "n");}
+	else {conf.add_item("voice\\" + lang + "\\yes" + ext, "y"); conf.add_item("voice\\" + lang + "\\no" + ext, "n");}
+	numbers.item_list.resize(0);
+	if(ext=="") {numbers.add_item_tts("Go back", "back"); for(uint i=1; i<10; i++) numbers.add_item_tts("" + i, "" + i);}
+	else {numbers.add_item("voice\\" + lang + "\\back" + ext, "back"); for(uint i=1; i<10; i++) numbers.add_item("voice\\" + lang + "\\" + number_to_words(i, false) + ext, "" + i);}
+	
+	learnsounds.item_list.resize(0);
+	string[] ls={"Drop ahead", "wall ahead, or cursor finds normal block", "platform above", "Pit", "radar finds pit", "health up", "Door, switch, or person", "spikes", "Air, or falling block", "breakable block", "moving platform", "key", "fire", "lava", "floating block", "sliding block", "you get thrown",  "Guardian teleports",  "go back"};
+	string[] lsfn={sounds + "env\\drop1.wav", 
+ sounds + "env\\high.wav",
+ sounds + "env\\platform1.wav",
+ sfx2 + "old_windy.wav",
+ sounds + "env\\drop3.wav",
+sounds + "CSM\\Pop.WAV",
+ sounds + "env\\path.wav",
+ sounds + "MHI\\metal_scrape1.ogg",
+ sounds + "env\\brownsweep.wav",
+ sounds + "env\\rockbump.wav",
+ jla + "robotwalk.wav",
+ sfx2 + "key2.wav",
+ sfx + "bp_fire_0" + random(1, 6) + ".wav",
+ sfx + "pitch_smelter_02.wav",
+ sfx2 + "waterwake2.ogg",
+ sfx + "sq_rockramp_01a.wav",
+ "throw",
+ "voice\\Silver Guardian\\teleport.wav",
+ "back"};
+	for(uint i=0; i<ls.length(); i++) learnsounds.add_item_tts(ls[i], lsfn[i]);
+	mainmenu.set_callback(main_callback, "main");
+	conf.set_callback(main_callback, "conf");
+	numbers.set_callback(main_callback, "numbers");
+	learnsounds.set_callback(main_callback, "learnsounds");
+	if(pad.active and @joy!=null) {
+		mainmenu.configure_joystick(pad, joy.a, (joy.a==1) ? 0 : 1);
+		conf.configure_joystick(pad, joy.a, (joy.a==1) ? 0 : 1);
+		numbers.configure_joystick(pad, joy.a, (joy.a==1) ? 0 : 1);
+		learnsounds.configure_joystick(pad, joy.a, (joy.a==1) ? 0 : 1);
+	}
+	mainmenu.set_tts_object(voice);
+	conf.set_tts_object(voice);
+	numbers.set_tts_object(voice);
+	learnsounds.set_tts_object(voice);
+	
+}// Setup menus.
+
+custom_voice voice;
+sound_pool pool;
+number_speaker reader;
+dynamic_menu mainmenu, conf, numbers, learnsounds;
+clock fps(50);
+void main() {
+	set_sound_storage("*");
+	if(!directory_exists(savedir)) {
+		directory_create(savedir);
+		@key=KeyC_load(KEY_LEFT + " " + KEY_RIGHT + " " + KEY_UP + " " + KEY_DOWN + " " + KEY_SPACE + " " + KEY_RETURN + " " + KEY_G + " " + KEY_H + " " + KEY_O + " " + KEY_R + " " + KEY_ESCAPE);
+		@joy=KeyC_load("-1 -2 -3 -4 2 3 6 4 0 5 9");
+		voice.config_path=savedir + "\\voice.cfg";
+		a.set("BGMVolume", -10);
+		a.set("lang", 1);
+		a.set("slot", -1);
+	}
+	else loadSettings();
+	pack.open("*");
+	
+	// This needs a better title.
+	show_game_window("Redsword");
+	if(!pad.active) pad.set(0);
+	int stick=0;
+	if(!pad.active) {pad.set(1); stick=1;}
+	//if(pad.active) {string[] sticks=pad.list_joysticks(); alert(sticks[stick], pad.x + ", " + pad.y);}
+	//else stick=-1;
+	if(geti("lang")==2) show_game_window("Espata Rojo");
+	
+	a.set("loc", "main");
+	setup_menus();
+	pool.volume_step*=1.5;
+
+	while(true) {
+		systemKeys();
+		string loc=gets("loc");
+		if(loc=="main") {
+			if(curbgm!="music\\rockshit.ogg") playsong("music\\rockshit.ogg");
+			int lang=geti("lang");
+		if(!directory_exists("voice\\" + lang)) voice.speak("Weird error.");
+			int n=mainmenu.run(((pack.file_exists("voice\\" + lang + "\\main.ogg")) ? "voice\\" + lang + "\\main.ogg" : (pack.file_exists("voice\\" + lang + "\\main.wav")) ? "voice\\" + lang + "\\main.wav" : "main menu"), !pack.file_exists("voice\\" + lang + "\\main.ogg"));
+			string name=mainmenu.get_item_name(n);
+			if(name=="Exit" or name=="exit") save_exit();
+			else if(name=="New Game") {
+				int slot=runNumbers();
+				if(file_exists(savedir + "\\save" + slot + ".dat") and !confirm("overwrite")) continue;
+				// Fade music?
+				if(slot<=0) continue;
+				if(!setDifficulty()) continue;
+				a.set("slot", slot);
+				setStage(0);
+				a.set("loc", "game");
+				
+			}// new.
+			else if(name=="Load Game") {
+				int slot=runNumbers();
+				if(slot<=0) continue;
+				if(!file_exists(savedir + "\\save" + slot + ".dat")) {if(file_exists("voice\\" + lang + "\\nofile.ogg")) {sound snd; snd.load("voice\\" + lang + "\\nofile.ogg"); snd.play_wait();} else voice.speak_wait("There is no data in that slot.");}
+				else {loadGame(slot); nextTrack="music\\level" + geti("stage") + ".ogg"; a.set("loc", "game");} // Maybe a cutscene would have been better?
+			}// load.
+			else if(name=="Speaker Test") {
+				pool.play_2d(sfx + "sword1.ogg", 0, 0, -6, 0, false);
+				wait(500);
+				pool.play_2d(sfx + "sword2.ogg", 0, 0, 6, 0, false);
+				wait(500);
+			}
+			else if(name=="Switch Language") {
+				lang=(lang==1) ? 2 : 1;
+				setup_menus();
+				a.set("lang", lang);
+			}// switch language.
+			else if(string_contains(name, "raille", 1)>0) {
+				int brl=geti("braille");
+				brl=braillesize[(braillesize.find(brl)+1)%braillesize.length()];
+				a.set("braille", brl);
+				//name=mainmenu.get_item_name(n);
+				if(pack.file_exists("voice\\" + lang + "\\braille_" + brl + ".ogg")) {sound snd; snd.stream("voice\\" + lang + "\\braille_" + brl + ".ogg"); snd.play_wait();}
+				else voice.speak_interrupt_wait("Braille " + brl);
+				setup_menus();
+			}// braille.
+			// Configuration... Ugh.
+			else if(string_contains(name, "onfig", 1)>0) {
+				string o=name;
+				dynamic_menu config;
+				string[] descs={"Jump, or climb/swim up", "crouch, or climb/swim down", "Move left", "Move right", "Guard, advance dialog, interact, or activate menu items", "Vertical attack", "Horizontal attack", "Jump", "Information (hold and press action buttons for radar, stats, etc)", "Auxiliary button", "Pause, advance dialog", "Reset", "Go Back"};
+				string[] names={"U", "D", "L", "R", "A", "B", "C", "X", "Y", "Z", "start", "cancel", "done"};
+				config.set_tts_object(voice);
+				config.wrap=true;
+				config.enable_home_and_end=false;
+				config.allow_escape=false;
+				config.configure_joystick(pad, joy.a, (joy.a==0) ? 1 : 0);
+				config.set_callback(main_callback, o);
+				for(uint i=0; i<names.length(); i++) {config.add_item_tts(descs[i], names[i]);}
+				string old=o;
+				do {
+					n=config.run("Select the button to modify", true);
+					pool.play_stationary("sfx\\sword" + random(1, 6) + ".ogg", false);
+					o=config.get_item_name(n);
+					if(o=="cancel") {
+						string[] lines={KEY_LEFT + " " + KEY_RIGHT + " " + KEY_UP + " " + KEY_DOWN + " " + KEY_F + " " + KEY_G + " " + KEY_H + " " + KEY_R + " " + KEY_T + " " + KEY_Y + " " + KEY_SPACE,
+ "-1 -1 -1 -1 2 1 3 0 4 5 9"
+						};
+						if(file_exists(savedir + "\\settings.cfg")) {file fin; fin.open(savedir + "\\config.cfg", "rb"); lines=string_split(fin.read(0), "\n", true);}
+						if(old=="Configure Keyboard") @key=KeyC_load(lines[0], key);
+						else if(lines.length()>1) @joy=KeyC_load(lines[1], joy);
+					}// cancel, restore defaults.
+					else if(o!="done") {
+						keys_pressed();
+						if(@pad!=null and pad.active) pad.buttons_pressed();
+						if(old=="Configure Keyboard" or n>4) voice.speak_interrupt("Press the button to use");
+						else voice.speak_interrupt("Center joystick and press any button to callibrate.");
+						while(true) {
+							if(old=="Configure Keyboard") {int[] keys=keys_pressed(); if(keys.length()>0) {
+ // Oh, to heck with this. This should have been its own function.
+ int k=keys[0];
+ if(o=="U") key.u=k;
+ else if(o=="D") key.d=k;
+ else if(o=="L") key.l=k;
+ else if(o=="R") key.r=k;
+ else if(o=="A") key.a=k;
+ else if(o=="B") key.b=k;
+ else if(o=="C") key.c=k;
+ else if(o=="X") key.x=k;
+ else if(o=="Y") key.y=k;
+ else if(o=="Z") key.z=k;
+ else key.start=k;
+								break;
+								}
+							}
+							else if(@pad==null or !pad.active) {pool.play_stationary(jla + "menu/error.wav", false); voice.speak_interrupt_wait("Joystick unavailable");}
+							else {int[] keys=pad.buttons_pressed(); if(keys.length()>0) {int k=keys[0];
+ if(string_contains("LRUD", o, 1)>=0) {joy.l=pad.x-1; joy.r=pad.x-1; joy.u=pad.y-1; joy.d=pad.y-1;}
+ else if(o=="A") joy.a=k;
+ else if(o=="B") joy.b=k;
+ else if(o=="C") joy.c=k;
+ else if(o=="X") joy.x=k;
+ else if(o=="Y") joy.y=k;
+ else if(o=="Z") joy.z=k;
+ else joy.start=k;
+								break;
+								}
+							}// joystick.
+							//system_keys();
+							wait(10);
+						}// evil loop.
+
+					}// else.
+					else if(old=="Configure Joystick") {
+						mainmenu.configure_joystick(pad, joy.a, joy.b);
+						conf.configure_joystick(pad, joy.a, joy.b);
+						numbers.configure_joystick(pad, joy.a, joy.b);
+						config.configure_joystick(pad, joy.a, (joy.a==joy.b) ? joy.start : joy.b);
+					}// configure joysticks.
+				} while(o!="cancel" and o!="done");
+
+			}// Control configuration.
+			else if(name=="learn sounds") { // why isn't the space an _?
+				string o=name;
+				while(o!="back" and o!="") {
+					o=learnsounds.get_item_name(learnsounds.run("Select a sound to learn", true));
+					sound snd;
+					if(o=="throw") {snd.load(sounds + "MHI\\throw_weapon_mono.ogg"); snd.pitch=75;}
+					else if(!snd.load(o)) {clipboard_copy_text(o); continue;}
+					if(snd.length>5000) {snd.play(); wait(2000);}
+					else snd.play_wait();
+					}// Loop.
+			}// learn sounds.
+			else alert(name, name);
+		}// main menu.
+		else {
+			keycheck();
+			reader.speak_next();
+		}// game.
+		
+		step(fps.delay*0.001);
+		fps.tick();
+		//wait(5);
+	}// main loop.
+}
+
+void systemKeys() {
+	if(key_pressed(KEY_F4) and (key_down(KEY_LMENU) or key_down(KEY_RMENU))) save_exit();
+	else if(key_down(KEY_LCONTROL) or key_down(KEY_RCONTROL)) {voice.stop(); reader.stop();}
+	else if(key_pressed(KEY_F9) or key_pressed(KEY_PRIOR)) {float v=getf("BGMVolume")+2; if(v>0) v=0; a.set("BGMVolume", v); bgm.volume=v;}
+	else if(key_pressed(KEY_F8) or key_pressed(KEY_NEXT)) {float v=getf("BGMVolume"); v-=2; if(v<=-50) v=-50; bgm.volume=v; a.set("BGMVolume", v);}
+	else if(key_pressed(KEY_F5)) voice.options_menu();
+	//else if(key_pressed(KEY_F1)) alert("Debug information", "Joystick: " + pad.x + ", " + pad.y + "\nLanguage: " + geti("lang") + "\nloc: " + gets("loc") + "\nStage: " + geti("stage") + "\nCamera: " + camera.x + ", " + camera.y + ", " + camera.z + "\nPlayer: counter " + getd("0.counter") + ", state " + gets("0.state") + ", x " + getd("0.x") + ", y " + getd("0.y") + ", v: " + getd("0.v.x") + ", " + getd("0.v.y") + "\nCharsize: " + geti("charsize"));
+	else if(key_pressed(KEY_F2)) {a.set("0.x", string_to_number(input_box("X", "Jump to X:", "" + getd("0.x")))); a.set("0.y", string_to_number(input_box("Y", "Jump to Y:", "" + getd("0.y")))); camera=getvector("0");}
+	else if(key_pressed(KEY_F3)) {string report="Sound Pool:"; for(uint i=0; i<pool.highest_slot; i++) {report += "\r\n" + i + ": " + pool.items[i].filename + ", " + pool.sound_is_playing(i) + ", " + pool.items[i].looping + ", " + pool.items[i].persistent;} report += "\r\n\r\nProjectiles: " + projectiles.length(); for(int i=0; i<pc.length(); i++) {report += "\r\n" + i + ", at " + projectiles[i].x + ", " + projectiles[i].y + ", slot " + geti("pslot" + i);} int num=geti("charsize"); report += "\r\nChars: " + num; for(int i=0; i<num; i++) {report += "\r\n" + gets(i + ".name") + ", at " + geti(i + ".x") + ", " + geti(i + ".y") + ", slot " + geti(i + ".slot");} clipboard_copy_text(report);}
+	else if(key_pressed(KEY_F6)) {sonifier=!sonifier; if(!sonifier) for(uint i=0; i<tones.length(); i++) {if(@tones[i]!=null and tones[i].active) tones[i].stop();}}
+	else if(key_pressed(KEY_F1) or (pad.active and pad.button_pressed(geti("joyf1")))) {
+		int mx=0;
+		bgm.volume=bgm.volume-5;
+		pool.pause_all();
+		voice.speak_interrupt("Use up and down to view actors.");
+		int num=geti("charsize");
+		while(!key_pressed(key.a) and !key_pressed(key.b) and !key_pressed(key.start) and (!pad.active or pad.buttons_pressed().is_empty())) {
+			bool speakme=true;
+			if(key_pressed(key.d) or key_pressed(key.r) or (pad.active and (pad.x>10 or pad.y>10))) mx++;
+			else if(key_pressed(key.u) or key_pressed(key.l) or (pad.active and (pad.x<-10 or pad.y<-10))) mx--;
+			else speakme=false;
+			if(mx<0) mx=num+projectiles.length()-1;
+			else if(mx>=num+projectiles.length()) mx=0;
+			vector v=getvector(mx);
+			if(mx>=num) v=projectiles[mx-num];
+			if(speakme) {
+				pool.play_2d(sfx2 + "beacon.wav", camera.x, camera.y, v.x, v.y, false);
+				// This will be hard to set up verbally. Because of all the loops.
+				string tosay=gets(mx + ".name") + ", at " + round(v.x, 0) + ", " + round(v.y, 0) + ", hp" + geti(mx + ".hp");
+				if(mx>=num) {
+					tosay="bullet";
+					int slot=geti("pslot" + (mx-num));
+					if(v.z==2) tosay="Missile";
+					else if(v.z==3) tosay="Fireball";
+					else if(v.z==4 or (slot>=0 and pool.items[slot].filename==jla + "LightningStream.wav")) {tosay="Jupiter Bolt"; v.z=4;} // WTF? WTAF?
+					else if(slot>=0) {
+						if(pool.items[slot].filename==sounds + "MHI\\throw_weapon_mono.ogg") tosay="Shuriken";
+						else if(string_contains(pool.items[slot].filename, "Laser ", 1)>0) tosay="Energy beam";
+						else if(string_contains(pool.items[slot].filename, "EXPLOSIO", 1)>0) tosay="Explosive Blast";
+						else if(string_contains(pool.items[slot].filename, "sword", 1)>=0) tosay="flying sword";
+						else tosay=pool.items[slot].filename; // These throwing stars have confused any hell I had left out of me.
+						if(pool.sound_is_playing(slot)==false) {removeProjectile(mx-num); pool.destroy_sound(slot); /*a.set("pslot" + (mx-num), -1);*/} // Sigh.
+					}// By filename.
+					tosay += ", at " + round(v.x, 0) + ", " + round(v.y, 0) + ", ID" + v.z;
+				}// Projectiles are hard.
+				voice.speak_interrupt(tosay);
+				if(geti("braille")>0) show_game_window(tosay);
+			}// speak.
+			fps.tick();
+		}// loop.
+		bgm.volume=bgm.volume+5;
+		pool.resume_all();
+	}// Enemy list.
+}
+
+int main_callback(dynamic_menu@ menu, string data) {
+	systemKeys();
+	if(nextTrack!="") {bgm.volume=bgm.volume-1; if(bgm.volume<=-50) {playsong(nextTrack); nextTrack="";}}
+	if(menu.menu_position>0 and menu.menu_position<=menu.item_list.length() and geti("braille")>0) show_game_window(menu.get_item_name(menu.menu_position));
+	return 0;
+}
+
+
+void step(double dt) {
+	//clipboard_copy_text("" + dt);
+	string loc=gets("loc");
+	
+	if(loc=="game") {
+		int num=geti("charsize");
+		
+		if(key.isKeyPressed(KeyC_L) or key.isKeyPressed(KeyC_R) or joy.isKeyPressed(KeyC_L) or joy.isKeyPressed(KeyC_R)) {
+			double maxSpeed=4.0; // y/n?
+			vector me=getvector("0");
+			vector v=getvector("0.v");
+			string cn=getC(me.x, me.y+1);
+			bool grounded=(last!="" and isSolid(cn));
+			//if(!grounded) maxSpeed=3.0;
+			//else {
+
+			//}// terrain-specific issues.
+			if(getd("0.counter")!=0.0 or key.isKeyPressed(KeyC_C) or joy.isKeyPressed(KeyC_C) or geti("bumped")==1) {maxSpeed=absolute(v.x); /*clipboard_copy_text("Absolutely");*/}
+			if(v.x<maxSpeed and (key.isKeyPressed(KeyC_R) or joy.isKeyPressed(KeyC_R))) {v.x+=4.0*dt; if(!grounded) v.x+=4.0*dt; a.set("0.face", KeyC_R);}
+			else if(v.x>-maxSpeed and (key.isKeyPressed(KeyC_L) or joy.isKeyPressed(KeyC_L))) {v.x-=4.0*dt; if(!grounded) v.x-=4.0*dt; a.set("0.face", KeyC_L);}
+			//if(absolute(v.x)>maxSpeed) {v.x=(v.x<0) ? -maxSpeed : maxSpeed; }
+			a.set("0.v.x", v.x);
+		}// movement.
+		else {
+			double vx=getd("0.v.x");
+			if(vx!=0.0) {
+				//clipboard_copy_text("Decelerating.");
+				string cn=getC(getd("0.x"), getd("0.y")+1);
+				string ter=gets("t" + cn);
+				if(ter=="") ter="stone";
+				double fs=1.0;
+				if(ter=="metal") fs=0.4;
+				else if(ter=="pipe") fs=0.6;
+				else if(ter=="snow" or ter=="ice") fs=0.1;
+				else if(ter=="wood") fs=0.75; // This one was confusing.
+				else if(ter=="dirt" or ter=="sand") fs=0.75; // Umm.
+				if(cn=="~") fs=0.2; // Umm.
+				//clipboard_copy_text("Decelerating. Friction: " + fs + ", vx: " + vx);
+				if(vx<0.0) {vx+=5.0*fs*dt; if(vx>0.0) vx=0.0;}
+				else if(vx>0.0) {vx-=5.0*fs*dt; if(vx<0.0) vx=0.0;}
+				// I'd like to make a sliding sound on stop, but that would be confused with falling off the edge.
+				a.set("0.v.x", vx);
+			}// moving.
+		}// deceleration.
+		
+		for(uint i=0; i<num; i++) {
+			stepChar(i, dt);
+		}// step chars.
+		
+		for(uint i=0; i<projectiles.length(); i++) projectileStep(i, dt);
+		
+		// Step the map.
+		int x=fps.frame%42; // 60 if we want to be wider.
+		x+=getd("0.x")-20;
+		getC(x, 0);
+		bool brl=true;
+		for(int y=0; last!=""; y++) {
+			int rx=x/30; // We have _at_least_ 4 moving tiles, possibly more, so let's not repeat this more than we must.
+			string cn=getC(x, y);
+			if(cn=="+") {pool.play_2d(sounds + "CSM\\Pop.WAV", camera.x, camera.y, x, y, false); if(x==geti("0.x") and y==geti("0.y")) {a.set(rx + ", " + y, string_left(last, x%30) + " " + string_right(last, last.length()-(x%30)-1)); a.set("0.hp", math_min(getd("0.hp")+50, 100.0));}}
+			else if(cn=="@") pool.play_2d(sounds + "Env\\path.wav", camera.x, camera.y, x, y, false); // Huh, I don't have any door sounds in convenient directories by default?
+			else if(cn=="<") {
+				string next=(x>0) ? getC(x-1, y) : "-";
+				pool.play_extended_2d(jla + "robotwalk.wav", camera.x, camera.y, x, y, 1, 0, 0, 0, false, 0, 0, 0, 98+(0.01*random(0, 400)));
+				if(next!=" " and next!="~") {
+					string ter=gets("t" + next);
+					pool.play_2d(steps + ter + "\\bump.ogg", camera.x, camera.y, x-1, y, false);
+					if(x%30==0) {getC(x, y); last=">" + string_right(last, last.length()-1); a.set(rx + ", " + y, last);}
+					else {last=string_left(last, x%30) + ">" + string_right(last, last.length()-(x%30)-1); a.set(rx + ", " + y, last);}
+				}// turn around.
+				else {
+					if(x%30==0) {
+						last=string_left(last, last.length()-1) + "<"; a.set((rx-1) + ", " + y, last);
+						getC(x, y);
+					last=next + string_right(last, last.length()-1); a.set(rx + ", " + y, last);
+					}// this one kinda hurts.
+					else {
+						last=string_left(last, (x%30)-1) + cn + next + string_right(last, last.length()-(x%30)-1); a.set(rx + ", " + y, last);
+					}// the easy version.
+					// And we need to move any chars standing on this platform.
+					for(uint j=0; j<num; j++) {if(geti(j + ".x")==x and geti(j + ".y")==y-1) a.set(j + ".x", getd(j + ".x")-1);}
+					camera=getvector(0);
+				}// move.
+			}// moving platform, left.
+			else if(cn==">") {
+				string next=getC(x+1, y);
+				pool.play_extended_2d(jla + "robotwalk.wav", camera.x, camera.y, x, y, 0, 1, 0, 0, false, 0, 0, 0, 100+(0.01*random(0, 400)));
+				if(next!=" " and next!="~") {
+					string ter=gets("t" + next);
+					pool.play_2d(steps + ter + "\\bump.ogg", camera.x, camera.y, x+1, y, false);
+					if(last=="") {getC(x, y); last=string_left(last, last.length()-1) + "<"; a.set(rx + ", " + y, last);}
+					else {last=string_left(last, x%30) + "<" + string_right(last, last.length()-(x%30)-1); a.set(rx + ", " + y, last);}
+				}// turn around.
+				else {
+					if(x%30==29) {
+						last=">" + string_right(last, last.length()-1); a.set((rx-1) + ", " + y, last);
+						getC(x, y);
+					last=string_left(last, last.length()-1) + next; a.set(rx + ", " + y, last);
+					}// this one kinda hurts.
+					else {
+						last=string_left(last, x%30) + next + cn + string_right(last, last.length()-(x%30)-2); a.set(rx + ", " + y, last);
+					}// the easy version.
+					// And we need to move any chars standing on this platform.
+					for(uint j=0; j<num; j++) {if(geti(j + ".x")==x and geti(j + ".y")==y-1) a.set(j + ".x", getd(j + ".x")+1);}
+					fps.frame++; // !!!!!!! But we don't want them moving to the right that quickly, do we?
+					camera=getvector(0);
+				}// move.
+			}// moving platform, right.
+			else if(cn=="v" or cn=="V") {
+				int x3=x%30;
+				string next=getC(x, y+1);
+				bool all=(last=="");
+				getC(x, y);
+				string cur=last;
+				getC(x, y+1);
+				pool.play_extended_2d(jla + "robotwalk.wav", camera.x, camera.y, x, y, 0, 0, 0, 1, false, 0, 0, 0, 95-math_random());
+				
+				if(!all) {
+					all=true;
+					for(int xx=0; xx<cur.length(); xx++) {if(cur[xx]!=cn or last[xx]!=next) {all=false; xx+=30;}}
+				}// Check for the easy version.
+				if(next=="~" or next==" ") {
+					if(all) {a.set(rx + ", " + y, string_replace(cur, cn, next, true)); a.set(rx + ", " + (y+1), string_replace(last, next, cn, true));}
+					else {
+						a.set(rx + ", " + y, string_left(cur, x3) + next + string_right(cur, cur.length()-x3-1));
+						a.set(rx + ", " + (y+1), string_left(last, x3) + cn + string_right(last, last.length()-x3-1));
+					}// Ugh.
+					for(uint i=0; i<num; i++) {if(geti(i + ".x")==x and geti(i + ".y")==y-1) a.set(i + ".y", getd(i + ".y")+1);}
+					//y++; // Skip the next row, because otherwise these will jump to the bottom immediately.
+					y--; // Actually, I'm tired of these not moving together, since I think that's killing me.
+					x++;
+					camera=getvector(0);
+				}// move.
+				else {
+					pool.play_2d(steps + gets("t" + next) + "\\bump.ogg", camera.x, camera.y, x, y+1, false);
+					if(all) {
+						a.set(rx + ", " + y, string_replace(cur, cn, "^", true));
+					}// easy.
+					else a.set(rx + ", " + y, string_left(cur, x3) + "^" + string_right(cur, cur.length()-x3-1));
+				}// turn around.
+			}// moving platform, down.
+			else if(cn=="^") {
+				int x3=x%30;
+				string next=getC(x, y-1);
+				bool all=(last=="");
+				getC(x, y);
+				string cur=last;
+				getC(x, y-1);
+				pool.play_extended_2d(jla + "robotwalk.wav", camera.x, camera.y, x, y, 0, 0, 1, 0, false, 0, 0, 0, 105+math_random());
+				
+				if(!all) {
+					all=true;
+					for(int xx=0; xx<cur.length(); xx++) {if(cur[xx]!=cn or last[xx]!=next) {all=false; xx+=30;}}
+				}// Check for the easy version.
+				//if(rx==1) clipboard_copy_text("^, " + x + ", " + y + ", " + all + next + "\r\n" + last + "\r\n" + cur);
+				if(next=="~" or next==" ") {
+					all=false; // EEK! Need to fix that string_replace, for it is evil.
+					if(all) {a.set(rx + ", " + y, string_replace(cur, cn, next, true)); a.set(rx + ", " + (y-1), string_replace(last, next, cn, true));}
+					else {
+						a.set(rx + ", " + y, string_left(cur, x3) + next + string_right(cur, cur.length()-x3-1));
+						a.set(rx + ", " + (y-1), string_left(last, x3) + cn + string_right(last, last.length()-x3-1));
+					}// Ugh.
+					for(uint i=0; i<num; i++) {if(geti(i + ".x")==x and geti(i + ".y")==y-1) a.set(i + ".y", getd(i + ".y")-1);}
+					camera=getvector("0"); // WHY! WON'T! THIS! WORK!
+					//if(geti("0.y")==y-2) alert("MOVE THE FORGETTING CAMERA!", "You: " + getd("0.y") + "\nCamera: " + camera.y + "\nWe have " + (camera.y!=getd("0.y")) + " problems, here.");
+				}// move.
+				else {
+					pool.play_2d(steps + gets("t" + next) + "\\bump.ogg", camera.x, camera.y, x, y+1, false);
+					if(all) {
+						a.set(rx + ", " + y, string_replace(cur, cn, "v", true));
+					}// easy.
+					else a.set(rx + ", " + y, string_left(cur, x3) + "v" + string_right(cur, cur.length()-x3-1));
+				}// turn around.
+			}// moving platform, up.
+			else if(cn=="%") {
+				pool.play_2d(sfx2 + "key2.wav", camera.x, camera.y, x, y, false);
+				vector me=getvector("0");
+				if(absolute(me.x-x)<=1.0 and absolute(me.y-y)<=1.0) {
+					a.set(rx + ", " + y, string_left(last, x%30) + " " + string_right(last, last.length()-(x%30)-1));
+					a.set("keys", math_max(1, geti("keys")+1));
+				}// got.
+			}// Keys.
+			else if(cn=="!") {
+				pool.play_2d(sounds + "MHI\\metal_scrape1.ogg", camera.x, camera.y, x, y, false);
+				vector me=getvector("0");
+				int mx=me.x, my=me.y;
+				if(mx==x and my==y) hit(0, random(25, 50), sfx2 + "squish" + random(1, 2) + ".ogg");
+			}// Spikes.
+			else if(cn=="l" or cn=="L") {
+				string cur=last;
+				int x3=x%30;
+				string next=getC(x, y+1);
+				if(last!="" and !isSolid(next)) {
+					if(next=="~") {
+						// This is a lot like standard horizontal floaters. Is it clear to the left/right? If so, move there. If not, turn around.
+						int dx=(cn=="L") ? -1 : 1;
+						next=getC(x+dx, y);
+						if(next==" " and ((x3>0 and dx<0) or (x3<29 and dx>0))) {
+							a.set(rx + ", " + y, string_left(last, x3+((dx<0) ? -1 : 0)) + ((dx<0) ? cn : next) + ((dx<0) ? next : cn) + string_right(last, last.length()-x3-1-((dx>0) ? 1 : 0)));
+							for(int j=0; j<num; j++) {if(geti(j + ".x")==x and geti(j + ".y")==y-1) a.set(j + ".x", getd(j + ".x")+dx);}
+						}
+						else {a.set(rx + ", " + y, string_left(last, x3) + ((cn=="L") ? "l" : "L") + string_right(last, last.length()-x3-1)); fps.frame++;}
+						if(key_down(KEY_C)) {getC(x, y); cur=last; getC(x, y-1); alert("Floating", cur + "\n" + last);}
+						pool.play_2d(sfx2 + "waterwake2.ogg", camera.x, camera.y, x, y, false);
+						fps.frame++; // I'm confused.
+					camera=getvector(0);
+					}// floating. The horror.
+					else {
+						cur=string_left(cur, x3) + next + string_right(cur, cur.length()-x3-1);
+						last=string_left(last, x3) + cn + string_right(last, last.length()-x3-1);
+						pool.play_2d(sounds + "Env\\brownsweep.wav", camera.x, camera.y, x, y, false); // Need something better!
+						a.set(rx + ", " + y, cur);
+						a.set(rx + ", " + (y+1), last);
+						for(uint i=0; i<num; i++) {if(geti(i + ".x")==x and geti(i + ".y")==y+1) hit(i, geti(i + ".hp"), sfx + "rock_nailsperson_01.wav", 1.0, "fall");}
+						next=getC(x, y+2);
+						if(next=="~") pool.play_2d(sfx + "rock_water_0" + random(1, 8) + ".wav", camera.x, camera.y, x, y+1, false);
+						else if(isSolid(next)) pool.play_2d(sfx + "rockmiss_0" + random(1, 9) + ".wav", camera.x, camera.y, x, y+1, false);
+						y++; // Oops.
+					}// air or something.
+				}// Falling.
+				//getBraille();
+			}// Pushables.
+			else if(cn=="*") {
+				pool.play_2d(sfx + "smallfire_" + ((x%6<3) ? "A" : "B") + "_0" + random(1, 6) + ".wav", camera.x, camera.y, x, y, false);
+				vector me=getvector("0");
+				int mx=me.x, my=me.y;
+				if(mx==x and my==y) hit(0, random(25, 100), sfx + "bp_ignite_01.wav");
+			}// Fire.
+			else if(string_is_alphabetic(cn)) {
+				vector c=getvector(0);
+				if(c.x>=x) {
+					string name="Gold Guardian";
+					if(cn=="S" or cn=="s") name="Steel Guardian";
+					if(cn=="W" or cn=="w") name="Lady Juno";
+					else if(cn=="J" or cn=="j") {name="Sapphire Helmsman"; if(getd("0.x")>150) {cn="m"; name="Gold Guardian";}}
+					else if(cn=="R") {
+						name="Big Robot";
+						if(c.x>68) continue;
+						for(uint br=3; br<geti("charsize"); br++) {if(getf(br + ".name")=="Big Robot") {
+							if(geti("stage")<4) name="Robot";
+							// Can we have two in the last level?
+						}}// Duplicates? Sounds dangerous!
+				}
+					addEnemy(name, x, y, (cn=="J") ? 10000 : 100);
+					a.set(num + ".counter", 2.0);
+					int rx=x/30;
+					a.set(rx + ", " + y, string_left(last, x%30) + " " + string_right(last, last.length()-(x%30)-1));
+					if(pack.file_exists("voice\\" + name + "\\enter.wav")) pool.play_2d("voice\\" + name + "\\enter.wav", camera.x, camera.y, x, y, false);
+					if(cn=="J" or cn=="j") {nextTrack="music\\darkshit.ogg"; a.set(num + ".counter", 3.5);}
+					else if((cn=="W" or cn=="w") and x<90) {addEnemy("pipe", 62, 17, 2015); a.set((num+1) + ".slot", pool.play_extended_2d(jla + "trickle.ogg", camera.x, camera.y, 62, 17, 1, 1, 5, 10, true, 0, 0, 0, 100));}
+						else if(cn=="m") {nextTrack="music\\orchestral8.ogg"; } // WTFUCKINGF!!!
+					setVector("checkpoint", getvector("0"));
+				}
+			}// Enemy spawners.
+			else if(sonifier) sonify(x, y, cn);
+			else brl=false;
+		}// loop.
+		if(brl) {camera=getvector("0"); getBraille();}
+		
+		if(getd("0.hp")<=0.0) {
+				if(nextTrack=="") nextTrack=curbgm;
+				bgm.stream("music\\youdie.ogg");
+				curbgm="music\\youdie.ogg";
+				playsong(curbgm);
+				bgm.play();
+				wait(1000);
+				a.set("keys", 0);
+				setStage(geti("stage"));
+				a.set("0.state", "");
+		}// dead player.
+		else pool.update_listener_2d(camera.x, camera.y); // Wow, I forgot this for, like, days.
+		
+		if(radaron) radar(dt);
+	}// game.
+		
+	if(nextTrack!="" and fps.frame%2==1) {
+		bgm.volume=bgm.volume-1;
+		if(bgm.volume<=-50 or !bgm.playing) {playsong(nextTrack); nextTrack="";}
+	}// next track.
+	else if(bgm.playing and bgm.position<=fps.delay*1.06 and geti("stage")!=3) {
+		measure++; if(random(1, 20)==measure%20 or (bgm.pitch>100 and math_random()>0.5)) bgm.pitch=(bgm.pitch==100) ? 105.9463 : 100.0;
+		// So sick of these slot conflicts!
+		if(pool.highest_slot>15) {
+			int num=geti("charsize");
+			int l=pd.length();
+			for(uint i=0; i<num; i++) {
+				int slot=geti(i + ".slot");
+				if(slot<0) continue;
+			if(!pool.sound_is_active(slot) or !pool.items[slot].persistent) a.set(i + ".slot", -1);
+				for(uint j=i+1; j<num; j++) {
+					int s2=geti(j + ".slot");
+					if(slot==s2) {
+						//alert("Slot conflict", gets(i + ".name") + i + ", and " + gets(j + ".name") + j + ", share the same slot: " + slot + ". ");
+						if(pool.items[slot].persistent==false) a.set(j + ".slot", -1);
+					}// Slot conflict.
+				}
+				if(measure%2==0) for(uint j=0; j<l; j++) {
+					int s2=geti("pslot" + j);
+					if(slot==s2) {
+						//alert("Slot Conflict", gets(i + ".name") + i + ", and the projectile in slot " + j + ", have the same slot: " + s2);
+						if(pool.items[s2].filename==sounds + "CSM\\Robot Beep.WAV") a.set("slot" + j, -1);
+						else a.set(i + ".slot", -1);
+					}// Conflict.
+				}
+			}// leaks.
+			
+			// Now for the ugly part.
+			string report="";
+			if(measure%4==0) for(uint i=15; i<pool.highest_slot; i++) {
+				if(@(pool.items[i])==null) continue;
+				if(pool.items[i].persistent) {
+					int x=pool.items[i].x;
+					int y=pool.items[i].y;
+					bool clean=true;
+					for(uint j=0; (clean and j<num); j++) {if(i==geti(j + ".slot")) clean=false;}
+					for(uint j=0; (clean and j<l); j++) {if(i==geti("pslot" + j)) clean=false;}
+					if(clean) {//report += i + " was destroyed.";
+						pool.destroy_sound(i); continue;
+					}
+				}// I AM SICK AND TIRED OF THESE GAME-MUTING SOUNDS IN THIS GAME-SUPPORTING POOL!
+				//report += i + ": " + pool.items[i].filename + ", at " + pool.items[i].x + ", " + pool.items[i].y + ". Looping:" + pool.items[i].looping + ", playing:" + pool.sound_is_playing(i) + ", persistent:" + pool.items[i].persistent + "\r\n";
+			}
+			//if(report!="") clipboard_copy_text("Sound Pool status from index 15 to " + pool.highest_slot + ":\r\n" + report);
+		}// clean up sound leaks.
+	}
+}// step.
+
+void keyPressed(int k) {
+	int c=key.press(k);
+	if(c==KeyC_none and pad.active) c=joy.press(k);
+	if(c==KeyC_none) return;
+	if(gets("loc")=="game") {
+		vector v=getvector("0.v");
+		if(c==KeyC_START) {
+			bgm.volume=bgm.volume-5; pool.pause_all();
+			string fn="voice\\" + geti("lang") + "\\quit";
+			if(pack.file_exists(fn + ".wav")) fn=fn + ".wav";
+			else if(pack.file_exists(fn + ".ogg")) fn = fn + ".ogg";
+			else fn="";
+			int n=conf.run((fn=="") ? "Do you want to quit? Your progress will not be saved." : fn, fn=="");
+			if(string_to_lower_case(conf.get_item_name(n))=="y") {a.set("loc", "main"); pool.destroy_all(); playsong("music\\rockshit.ogg");}
+			else {pool.resume_all(); bgm.volume=bgm.volume+5;}
+			return;
+		}// start. Pause. Thing.
+		else if(c!=KeyC_C and (key.isKeyPressed(KeyC_C) or joy.isKeyPressed(KeyC_C))) {
+				if(c==KeyC_START or c==KeyC_B) {a.set("loc", "paused"); bgm.volume=bgm.volume-4; pool.pause_all();}
+				access_cursor(c);
+			return; // Oops.
+		}// cursor.
+		else if(c==KeyC_C) {a.set("acam.x", getn("0.x")); a.set("acam.y", getn("0.y"));}
+		
+		double counter=getd("0.counter");
+		// can we do anything if counter is not 0? Like... can we walk, even? Hmm.
+		// (Ahem. Berserker rage.)
+		if(c==KeyC_U) {
+			bool grounded=false;
+			vector me=getvector("0");
+			string cn=getC(me.x, me.y+1);
+			grounded=(isSolid(cn) or cn=="~" or (cn=="#" and gets("0.state")=="climb"));
+			if(last=="") grounded=false;
+			double vy=getd("0.v.y");
+			if(vy<0.0 and cn!="~") grounded=false; // Wait, should swimming... thing... huh?
+			if(grounded) {
+				vy=-15; // Adjust as needed.
+				a.set("0.v.y", vy);
+				string toplay="";
+				if(cn=="~") {toplay=jla + "swim" + random(1, 4) + ".wav"; vy/=2;} // Hmm.
+				else if(cn=="#") {vy=-4.0; toplay=jla + "steps\\roof\\run" + random(1, 6) + ".wav";}
+				else {
+					string ter=gets("t" + cn);
+					if(!pack.file_exists(steps + ter + "\\jump.wav")) ter=getAlt(ter);
+					toplay=steps + ter + "\\jump.wav";
+					if(getC(me.x, me.y)=="~") toplay=jla + "swim" + random(1, 3) + ".wav";
+				}// jump sound.
+				if(toplay!="") pool.play_stationary(toplay, false);
+				a.set("0.v.y", vy); // oops.
+			}// jump.
+		}// jump.
+		else if(c==KeyC_L or c==KeyC_R) {
+			if(counter==0.0 and c!=geti("0.face")) {pool.play_stationary(sounds + "MHI\\flag" + random(1, 4) + ".ogg", false);
+				if(counter==0.0) a.set("0.face", c);
+				a.set("0.v.x", getd("0.v.x")*0.25); // needs momentum, but it's way too much as is.
+			}// turning.
+			a.set("bumped", 0);
+		}// turn. ... And walk, but mostly turn.
+		else if(c==KeyC_D) {
+			vector me=getvector("0");
+			if(gets("0.state")=="climb") a.set("0.v.y", 4.0);
+			else if(counter==0.0 and isSolid(getC(me.x, me.y+1))) {a.set("0.state", "crouch"); pool.play_stationary(sfx2 + "crouch.wav", false);}
+		}// Crouch.
+		else if(c==KeyC_A and counter==0.0) {
+			// Is there a condition where we'd prefer otherwise? Combos, for example?
+			//alert("Attacking", "attacking, " + counter + ", " + gets("0.state") + ". ");
+			string s=gets("0.state");
+			vector me=getvector("0");
+			if(s=="" or s=="crouch") {
+				if(s!="") {
+					s += " ";
+					if(bgm.pitch!=100.0 and geti("stage")==1 and getd("0.rage")>75 and getd("0.y") <=2.0 and geti("0.x")==10 and geti("0.face")!=KeyC_L) {
+						pool.play_stationary(sfx + "axebullet.wav", false);
+						pool.play_stationary(sfx2 + "old_windy.wav", false);
+						for(uint x=getd("0.x"); x<91; x++) {
+							pool.play_extended_2d(sfx + "axebullet.wav", x, 3, x, random(2, 4), 0, 0, 0, 0, false, 0, 0, 0, random(95, 105));
+							pool.update_listener_2d(x, 3);
+							step(0.1);
+							wait(100);
+						}
+						setVector("0", 91, 5);
+						nextTrack="music\\kickass.ogg";
+						a.set("0.rage", random(0, 75));
+					}// CHEATER!
+				}
+				s += "attack";
+				pool.play_stationary(sfx + "sword" + random(1, 6) + ".ogg", false);
+				a.set("0.state", s);
+				counter=0.22;
+				if(!isSolid(getC(me.x, me.y+1))) counter=0.2;
+				else if(s=="crouch attack") counter=0.3;
+				a.set("0.counter", counter);
+
+				getBraille(me);
+			}
+		}// attack.
+		else if(c==KeyC_X) {
+			reader.speak(round(getd("0.hp"), 0));
+		}// hp.
+		else if(c==KeyC_Y) radaron=!radaron;
+		else if(c==KeyC_Z) {
+			reader.speak(round(getd("0.rage"), 0));
+		}// rage.
+		else if(c==KeyC_B) {
+			vector me=getvector("0");
+			string cn=getC(me.x, me.y);
+			if(cn=="#") a.set("0.state", "climb"); // DANGER!
+			else if(cn=="@") {
+				pool.play_stationary(sounds + "Env\\frontdoor_open2012.ogg", false);
+				int stage=geti("stage");
+				if(stage==0) setStage(1);
+				else if(stage==1 and me.x<90) {
+					fadeout(25);
+					nextTrack=curbgm;
+					playsong("music\\bonus1.ogg");
+					bgm.volume=bgm.volume-4;
+					a.set("0.hp", 200.0);
+					sound snd;
+					voice.stop();
+					int pitch=voice.pitch; voice.pitch+=2;
+					if(pack.file_exists("voice\\" + geti("lang") + "\\bonus1.ogg")) {snd.load("voice\\" + geti("lang") + "\\bonus1.ogg"); snd.play();}
+					else voice.speak("Haven\'t seen you in a while. You look like you\'ve had it pretty rough. Hold onto this, and Cohere will be able to help you if you\'re badly hurt.");
+					while(snd.playing or voice.speaking()) {systemKeys();
+					if((pad.active and (pad.button_pressed(joy.a) or pad.button_pressed(joy.b))) or key_pressed(key.a) or key_pressed(key.b)) {voice.stop(); snd.stop();}
+					fps.tick();}
+					voice.pitch=pitch;
+					a.set("Cohere", 4); // You get him until he runs out of health, but he loses a chunk of health every time he uses his laser attack, and disappears for a while every time hp%25<5.
+				}// Bonus 1.
+				else if(stage==2) {
+					int keys=geti("keys");
+					if(me.x>85 and me.x<90) {me.x=49.0; me.y=8.0; setVector("0", me); a.set("keys", geti("keys")+1);}
+					else if(keys<1) pool.play_stationary(sounds + "CSM\\Reject.WAV", false);
+					else {
+						keys--; a.set("keys", keys);
+						if(me.x<30) me.x=31.0;
+						else if(me.x<50) {me.x=88; me.y=17; addEnemy("Robot", 61, 17, random(10, 25));}
+						else if(me.x<70 and me.x>=60) {me.x=118; me.y=17; addEnemy("Robot", 91, 17, random(10, 30));}
+						else if(me.x>90) {me.x=75; me.y=13; addEnemy("Robot", 51, 13, random(10, 30)); addEnemy("Robot", 63, 13, random(10, 30)); addEnemy("Big Robot", 55, 5, 100);}
+						else {setStage(3); me=getvector("0");}
+						setVector("0", me);
+						camera=me;
+						setVector("last_door", me);
+					}
+				}// Teleporter maze of annoying.
+				else if(stage==3) {
+					if(me.x<90 and getd("maxox")<40) {
+						int pitch=voice.pitch;
+						sound snd;
+						//playsong("music\\bonus1.ogg");
+						bgm.volume=bgm.volume-5;
+						fadeout(20);
+						playsong("music\\bonus1.ogg");
+						if(snd.load("voice\\" + geti("lang") + "\\scuba.ogg")) snd.play();
+						else voice.speak_interrupt("This scuba gear should let you stay under water much longer. Now get rid of those guards!");
+						while(snd.playing or voice.speaking()) {systemKeys(); if(key_pressed(key.a) or key_pressed(key.b) or pad.button_pressed(joy.a) or pad.button_pressed(joy.b)) {snd.stop(); voice.stop();} fps.tick();}
+						a.set("maxox", getd("maxox")+20.0);
+						a.set("0.hp", 100.0);
+						voice.pitch=pitch;
+						nextTrack="music\\level3.ogg";
+					}// Scuba gear.
+					else if(me.x>90) {
+						if(geti("keys")<1) pool.play_stationary(sounds + "CSM\\Reject.WAV", false);
+						else {me.x=111; a.set("0.x", me.x); camera.x=me.x; a.set("keys", geti("keys")-1); addEnemy("Steel Guardian", 118, 3, 200); nextTrack="music\\slowbangin.ogg";}
+					}
+					else {
+						int pitch=voice.pitch;
+						voice.pitch+=3;
+						if(pack.file_exists("voice\\" + geti("lang") + "\\waitingfor.ogg")) pool.play_2d("voice\\" + geti("lang") + "\\waitingfor.ogg", camera.x, camera.y, me.x, me.y, false);
+						else voice.speak_interrupt_wait("What are you waiting for?");
+						voice.pitch=pitch;
+						a.set("0.hp", 100.0); // This isn't as useful as it seems?
+					}// Redundant.
+				}// Water
+				else if(stage==4) {
+					if(geti("keys")<1) pool.play_stationary(sounds + "CSM\\Reject.WAV", false);
+					else {
+						fadeout(20);
+						playsong("music\\rockshit.ogg");
+						sound snd;
+						if(snd.load("voice\\" + geti("lang") + "\\bonus3.ogg")) snd.play();
+						else voice.speak("Oh, it\'s you. We\'re busy holding off Master Jupiter, but Nia might be able to help you.");
+						a.set("Nia", 10);
+						while(voice.speaking() or snd.playing) {
+							systemKeys();
+							if(key_pressed(key.a) or key_pressed(key.b) or (pad.active and (pad.button_pressed(joy.a) or pad.button_pressed(joy.b) or pad.button_pressed(joy.start)))) {snd.stop(); voice.stop();}
+							fps.tick();
+						}
+						a.set("0.hp", 200.0);
+						nextTrack="music\\level4.ogg";
+					}// I should have made a scene function a long time ago.
+				}// Nia, mostly.
+				else if(stage==5) {
+					int keys=geti("keys");
+					// exceptions?
+					if(keys<1) pool.play_2d(sounds + "CSM\\Reject.WAV", camera.x, camera.y, me.x, me.y, false);
+					else if(me.x>30 and me.x<40) {a.set("Cohere", math_max(2, geti("Cohere"))); pool.play_stationary(sfx + "robolaser.wav", false);}
+					else if(me.x>50 and me.x<60 and me.y>15) {pool.play_stationary(sfx2 + "TURNOFF.WAV", false); addEnemy("Gold Guardian", 5, 3, 150.0); addEnemy((math_random()>0.5) ? "Jovian Accolite" : "Ninja", 22, 3, 20); addEnemy("Jovian Accolite", 29, 8, random(5, 25));}
+					else if(me.x<5) {setVector(0, 58, 15); addEnemy("Big Robot", 59, 5, 100); addEnemy("Robot", 55, 13, 10);}
+					else if(me.x>60 and me.x<88) {a.set("Nia", geti("Nia")+7); pool.play_stationary(sounds + "CSM\\Twang.WAV", false);}
+					else if(me.x>80 and me.x<120) {pool.play_stationary(sfx2 + "TURNOFF.WAV", false); for(int j=0; j<geti("charsize"); j++) {if(gets(j + ".name")=="leak") a.set(j + ".name", "Big Robot"); j+=10;} hit(0, -50, sfx2 + "TURNOFF.WAV"); a.set("t-", "stone");}
+					else {
+						fadeout();
+						playsong("music\\orchestral5.ogg");
+						nextTrack="music\\orchestral8.ogg";
+						me.x=random(160, 170); me.y=10;
+						setVector("checkpoint", me);
+						setVector("0", me);
+						addEnemy("Master Jupiter", 165, 10, 100);
+						if(pool.play_2d("voice\\Master Jupiter\\enter" + geti("lang") + ".ogg", camera.x, camera.y, me.x, me.y, false)<0) voice.speak("The future is one led by Jovians. None can oppose me.");
+					camera=me; pool.update_listener_2d(me.x, me.y);
+					wait(3000);
+					sound snd; snd.load(jla + "LightningStream.wav"); snd.play_wait();
+					}// The last door.
+					if(keys>0) {
+						keys--;
+						int rx=me.x/30;
+						int x3=me.x; x3%=30;
+						a.set(rx + ", " + floor(me.y), string_left(last, x3) + "+" + string_right(last, last.length()-x3-1));
+					}// use.
+				}// Gah.
+				else setStage(stage+1);
+		}// doors.
+		}
+	}// game.
+	else if(gets("loc")=="paused") {
+		
+		if(c==KeyC_START or c==KeyC_B) {a.set("loc", "game"); bgm.volume=bgm.volume+4; pool.resume_all();}
+		else access_cursor(c);
+		camera=getvector("0"); // Seems a bit excessive, but that's been getting on my nerves.
+	}// paused?
+}// Key Pressed.
+
+void keyReleased(int k) {
+	int c=key.release(k);
+	if(c==KeyC_none) c=joy.release(k);
+	
+	if(gets("loc")=="game") {
+		if(c==KeyC_U and getd("0.v.y")<0.0) a.set("0.v.y", getd("0.v.y")*0.5); // Hmm.
+		else if(c==KeyC_D) { if(gets("0.state")=="crouch") a.set("0.state", ""); else if(gets("0.state")=="climb" and getd("0.v.y")>0) a.set("0.v.y", 0.0);}
+	}// game.
+}
+
+bool confirm(string fn) {
+	string tosay=fn;
+	if(geti("braille")>0) show_game_window(tosay);
+	int lang=geti("lang");
+	if(pack.file_exists("voice\\" + lang + "\\" + fn + ".ogg")) tosay="voice\\" + lang + "\\" + fn + ".ogg";
+	else if(pack.file_exists("voice\\" + lang + "\\" + fn + ".wav")) tosay="voice\\" + lang + "\\" + fn + ".wav";
+	else if(fn=="overwrite") tosay="There is already data in that slot. Do you want to overwrite it?";
+	else tosay = " " + tosay;
+	keys_pressed();
+	if(pad.active) pad.buttons_pressed();
+	int n=conf.run(tosay, (tosay[0]!="v"));
+	return string_to_lower_case(conf.get_item_name(n))=="y";
+}
+
+int runNumbers() {
+	bool isTTS=!directory_exists("voice\\" + geti("lang"));
+	fps.tick();
+	keys_pressed();
+	if(pad.active) pad.buttons_pressed();
+	//alert("Running", "Running numbers");
+	int n=numbers.run(((isTTS) ? "Choose the slot to play in" : ("voice\\" + geti("lang") + "\\select_slot.ogg")), isTTS);
+	//alert("Done", "Numbers done. Result was " + n + ".");
+	if(n<0) n=numbers.run(((isTTS) ? "Choose the slot to play in" : ("voice\\" + geti("lang") + "\\select_slot.ogg")), isTTS);
+	return string_to_number(numbers.get_item_name(n)); // I don't remember if it's 0 or 1 based, but it shouldn't matter.
+}
+
+void setStage(int s) {
+	// Ugh, and I just realized that you'll need to reset ambience when you load the game.
+	projectiles.resize(0); pd.resize(0); pc.resize(0); pv.resize(0);
+	for(uint i=0; a.exists("pslot" + i); i++) a.set("pslot" + i, -1);
+	// 4:57 PM 5/28/2016: Clear map, because broken map stuff is being problematic. I mean, it's kinda cool, but, yeah.
+	for(uint x=0; a.exists(x + ", 0"); x++) {for(uint y=0; a.exists(x + ", " + y); y++) {a.delete(x + ", " + y);}}
+	if(s==0) {
+		string[] diag={
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"---------------               ",
+"---------------               ",
+"---------------    ======     ",
+"---------------               ",
+"---------------               ",
+"---------------               ",
+"---------------       ========",
+"---------------               ",
+"---------------               ",
+"------------------------------"
+		};
+		a.set("charsize", 0);
+		addEnemy("Redsword", 0.25, 4, 100.0);
+		addEnemy("Shotgun Guard", 28, 10, 1);
+		addEnemy("Shotgun Guard", 20, 13, 1); // Beware: we don't want them both shooting on the same pattern.
+		a.set("2.counter", 0.5);
+		newMap(diag, 0);
+		a.set("t-", "stone");
+		a.set("t=", "metal");
+		a.set("t|", "pipe");
+		a.set("b|", steps + "metal\\fall1.ogg");
+		string[] diag2={
+"           =                 -",
+"           =                 -",
+"           =                 -",
+"           =  ||||||      ++ -",
+"           =       |   ||||||-",
+"           =       |         -",
+"           ======  |         -",
+"                   |         -",
+"                   |         -",
+"--------------------         -",
+"---------------              -",
+"---------------   ===========-",
+"---------------               ",
+"---------------               ",
+"------------------------------"
+		};
+		addEnemy("Uzi Guard", 44, 2, 5);
+		addEnemy("Uzi Guard", 50, 10, 5);
+		addEnemy("Shotgun Guard", 59, 13, 1);
+		newMap(diag2, 1);
+		string[] diag3={
+"                  -          -",
+"                  -          -",
+"                  -          -",
+"                  -@         -",
+"                  ------  ----",
+"                       =     -",
+"                       =     -",
+"                       ==||| -",
+"                   ---  =    -",
+"||||                 --     |-",
+"         ========     -|     -",
+"                       |     -",
+"    =====              -------",
+"                            +-",
+"------------------------------"
+		};
+		addEnemy("Uzi Guard", 83, 3, 10);
+		newMap(diag3, 2);
+		// EEEEEE I need to make a level every hour and I want to have 9 levels.
+		if(geti("stage")!=s) {
+			playsong("music\\youdie.ogg");
+			voice.speak_wait("You thought you had nothing left to lose, but that was before the red sword filled you with uncontrollable rage. Of course, you were the test subject; the killer they secretly intended to give the sword--before your rage destroyed the test facility--is still out there, still deadly, and does not mind the red sword\'s terrible side-effects. And, don\'t forget! There was originally a good reason they created the red sword.");
+		}// cutscene.
+	}// stage 0.
+	else if(s==1) {
+		string[] diag={
+"                              ",
+"                              ",
+"        |||||||  ||||||    <<-",
+"                           ||-",
+"                             -",
+" +                          -",
+"---------------  =======     -",
+"                 ==          -",
+"                 ==          -",
+"                 ==  +       -",
+"                 ==  ----    -",
+"       ||||||||vv==          -",
+"              -  ==          -",
+"    |         -  ==          -",
+"    ||        -  ==           ",
+"     ||       -  ==           ",
+"      ||||||  -  ==           ",
+"              -               ",
+"              -               ",
+"---------------               "
+		};
+		pool.destroy_all();
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 16, 19, 0, 24, 0, 2, true, 0, 0, 0, random(75, 105));
+		a.set("charsize", 0);
+		addEnemy(gets("0.name"), 0.25, diag.length()-2, 100);
+		addEnemy("Shotgun Guard", 14, diag.length()-2, random(3, 7));
+		a.set("1.counter", 4.0);
+		addEnemy("Shotgun Guard", 9, 10, 5);
+		addEnemy("Ninja", 20, 1, 10);
+		addEnemy("Ninja", 11, 1, 10);
+		a.set("3.counter", 0.95); // They should not get in sync.
+		newMap(diag, 0);
+		a.set("t-", "leaves");
+		a.set("t|", "wood");
+		a.set("t=", "dirt");
+		a.set("t<", "metal");
+		a.set("t>", "metal");
+		a.set("t^", "metal");
+		a.set("tv", "metal");
+		a.set("tV", "metal");
+		
+		string[] diag2={
+"                    =         ",
+"                    =         ",
+"                    =         ",
+"====== ======^^======         ",
+"===            ==      =======",
+"==             ==             ",
+"=              ==             ",
+"               == |||        -",
+"               ==            -",
+"               ==            -",
+"               ==            -",
+"                       ----  -",
+"                             -",
+"                             -",
+"               ^^-----        ",
+"                     -        ",
+"                     |        ",
+"                    +|        ",
+"                     |        ",
+"           ====  |||||     <--"
+		};
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 42, 20, 0, 1, 0, 1, true, 0, 0, 0, random(100, 125));
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 53, 20, 0, 4, 0, 1, true, 0, 0, 0, random(75, 115));
+		addEnemy("Shotgun Guard", 50, diag2.length()-2, 5);
+		addEnemy("Ninja", 58, 3, 10);
+		newMap(diag2, 1);
+		string[] diag3={
+"             ==              |",
+"             ==            ++|",
+"             ==              |",
+"             ==              |",
+"----    <<   ==            @ |",
+"   -         ==       ||||||||",
+"         <<====              |",
+"--v           = <>           |",
+"              =               ",
+"              =               ",
+"              =               ",
+"              =    |||||||    ",
+"              =           ||  ",
+"              =            |  ",
+"              =            || ",
+"              =|||          = ",
+"                            ==",
+"                             -",
+"                             -",
+"-- ---><>       ------       -"
+		};
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 70, 20, 0, 5, 0, 1, true, 0, 0, 0, random(75, 110));
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 72, 19, 0, 6, 0, 2, true, 0, 0, 0, random(50, 115));
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 62, 19, 0, 0, 0, 2, true, 0, 0, 0, 125);
+		newMap(diag3, 2);
+		string[] diag4={
+"       ---  ++                ",
+"        ----                  ",
+"           --------------     ",
+"-                             ",
+"-                             ",
+"-                           ++",
+"-       +          +==========",
+"-    ================         ",
+"-                             ",
+"-                             ",
+"-                           ++",
+"-=======               <>>----",
+" --                    +      ",
+"  -                ||||||    ",
+"                              ",
+"                              ",
+"=====        ||||||||         ",
+"======      +                 ",
+"=======     +                 ",
+"---------------               "
+		};
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 15, 19, 0, 16, 0, 2, true, 0, 0, 0, random(50, 100));
+		addEnemy("Ninja", 102, diag4.length()-2, 10);
+		addEnemy("Shotgun Guard", 103, diag4.length()-5, 10);
+		for(uint i=0; i<4; i++) {addEnemy("Ninja", random(95, 115), 5, 10); a.set((geti("charsize")-1) + ".counter", 0.3333*i);}
+		addEnemy("Ninja Master", 103, 1, 35); // Ouch. Are you sure?
+		newMap(diag4, 3);
+		
+		if(geti("stage")!=1) voice.speak_wait("Watch out for pits. Some of these platforms move.");
+		else if(curbgm=="music\\kickass.ogg" or nextTrack=="music\\kickass.ogg") setVector("0", 100, diag4.length()-3); // Checkpoints!
+	}// stage 1.
+	else if(s==2) {
+		
+		string[] diag={
+"    !                        -",
+"##  !                       +-",
+"##--------             -------",
+"##-                    9     -",
+"##--                   8     -",
+"## --                  7     -",
+"##  --                 6     -",
+"##   --                5     -",
+"##    -                4    @-",
+"##    ------------------------",
+"##                       #   -",
+"##                       #   -",
+"##                       #   -",
+"##       !      !    96  #   -",
+"----------------------   #   -",
+"          1              #   -",
+"          1              #   -",
+"          1              #   -",
+"%         1    +         #   -",
+"------ -----------------------"
+		};
+		a.set("charsize", 0);
+		addEnemy("Redsword", 2, diag.length()-7, 100.0);
+		pool.destroy_all();
+		pool.play_extended_2d(sfx2 + "rope2.ogg", camera.x, camera.y, 0, 0, 0, 2, 0, 14, true, 0, 0, 0, 100);
+		pool.play_extended_2d(sfx2 + "rope2.ogg", camera.x, camera.y, 25, diag.length()-2, 0, 1, 8, 0, true, 0, 0, 0, 100+random(1, 5));
+		pool.play_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 6, diag.length(), true);
+		addEnemy("Ninja", 15, diag.length()-2, 5);
+		addEnemy("Ninja", 25, 0, 10);
+		a.set("t-", "stone");
+		a.set("t#", "roof");
+		for(uint i=1; i<10; i++) {a.set("t" + i, "rock"); a.set("b" + i, sounds + "Env\\rockbump.ogg");}
+		a.set("tl", "concrete");
+		a.set("bl", sfx + "sq_rockramp_01a.wav");
+		a.set("bL", sfx + "sq_rockramp_01a.wav");
+		a.set("tL", "concrete");
+		newMap(diag, 0);
+		string[] diag2={
+"              ##----         +",
+"%   !    +    ##----    -|||||",
+"--------------##----    -lllll",
+"              ##----|   -11111",
+"              ##----          ",
+"              ##-----         ",
+"              ##    -         ",
+"              ##    -         ",
+"      !       ##   @-   -11111",
+"--------------##-----   - @   ",
+"     -llll-   ##  -   --------",
+"     222222   ##  -           ",
+"     -lllll-  ##  -           ",
+"      44444   ##  -           ",
+"-             ##--------------",
+"              ##             -",
+"              ##             -",
+"              ##             -",
+"   l +  l     ##           % -",
+"------------------      ------"
+		};
+		newMap(diag2, 1);
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 48, diag2.length(), 0, 7, 1, 0, true, 0, 0, 0, random(95, 105));
+		pool.play_extended_2d(sfx2 + "rope2.ogg", camera.x, camera.y, 44, 0, 0, 1, 0, diag.length()-2, true, 0, 0, 0, 95.0+(math_random()*10.0));
+		//addEnemy("Shotgun Guard", 44, diag2.length()-6, 15);
+		addEnemy("Shotgun Guard", 30, diag2.length()-7, 5);
+		addEnemy("Ninja", random(30, 40), 1, 10);
+		string[] diag3={
+"-       -        --          -",
+"-       -        --++L       -",
+"llllllll-        -777777-    -",
+"11111111-        -  llll-    -",
+"4       -        - 55555-    -",
+"4       --       --          -",
+"4       --       --          -",
+"4 R     --       --          -",
+"11111111--      +--       l9 -",
+"        --      %--     ------",
+"----------     <+--          -",
+"                 --          -",
+"                 --          -",
+" !!      !!      --   L      -",
+"-------------------------    -",
+"                             -",
+"                             -",
+"                            @-",
+"---@ !  !-----        --------",
+"--------------~~~~~~~~--------"
+		};
+		pool.play_extended_2d(sfx + "pitch_smelter_02.wav", camera.x, camera.y, 74, diag.length()-1, 0, 8, 0, 0, true, 0, 0, 0, 100);
+		newMap(diag3, 2);
+		addEnemy("Shotgun Guard", 78, 4, 15);
+		// Add the robot when you use the door.
+		// The door in diag1 takes you to the other side of the wall. The door in diag2 takes you to the door on the right side of diag3, which you can use to go back in case you missed one of the keys. The door on the left of diag3 takes you to the bottom right of diag4, and the door on the left of that takes you to the top left area of diag3.
+		string[] diag4={
+"     !      !!!-++           +",
+"               -++           +",
+"               -              ",
+"   ! @ !       -              ",
+"||||||||||||   -              ",
+"------------   -+     %!      ",
+"               -|||||||||     ",
+"               ------         ",
+"               ------         ",
+"        |||-----              ",
+"        --- !!!        |||||||",
+"      ---                     ",
+"      -                       ",
+"      -                       ",
+"      -                       ",
+"  -----   -llllllllll---      ",
+"          -1111111123- -      ",
+"          -          ---      ",
+"        !  +         ---      ",
+"------------         ---------"
+		};
+		newMap(diag4, 3);
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 102, diag.length(), 0, 8, 1, 1, true, 0, 0, 0, random(90, 100));
+		addEnemy("Shotgun Guard", 112, diag.length()-4, 50);
+		addEnemy("Ninja", 108, 5, 10);
+		addEnemy("Robot", 112, 5, random(15, 30));
+		if(s!=geti("stage")) {
+			fadeout(40);
+			playsong("music\\youdie.ogg");
+				bgm.volume=bgm.volume-4;
+			sound snd;
+			int pitch=voice.pitch; voice.pitch-=2;
+			if(pack.file_exists("voice\\" + geti("lang") + "\\level" + s + ".ogg")) {snd.load("voice\\" + geti("lang") + "\\level" + s + ".ogg"); snd.play();}
+			else voice.speak("Looking for someone? Watch your step. I\'d prefer not to reach through spikes when I take the Redsword from your corpse.");
+			while(snd.playing or voice.speaking()) {systemKeys();
+				if((pad.active and (pad.button_pressed(joy.a) or pad.button_pressed(joy.b))) or key_pressed(key.a) or key_pressed(key.b)) {voice.stop(); snd.stop();}
+				fps.tick();
+			}
+			voice.pitch=pitch;
+			nextTrack="music\\level" + s + ".ogg";
+			a.set("0.hp", 0.0); // Yeah, this is hacky and really shouldn't be used.
+		}// Cutscene.
+		else if(curbgm=="music\\psibeat1.ogg" or nextTrack=="music\\psibeat1.ogg") {
+			a.set("0.x", 53.5); a.set("0.y", 7.0); nextTrack="music\\psibeat1.ogg"; addEnemy("Big Robot", 66, 5, 100.0);
+			 a.set("keys", 1);
+			// But... when... why... how... I HAVE SO MANY QUESTIONS!
+		}// Wait, what?
+		else if(a.exists("last_door.x")) {
+			setVector("0", getvector("last_door"));
+		}// Checkpoints.
+		//else alert("Traps", "No checkpoint found.");
+	}// Stage 2.
+	//else if(s==3) {setStage(2); return;} // Temporary, because I broke the save.
+	else if(s==3) {
+		// Yay, water levels.
+		string[] diag={
+"                             -",
+"                             -",
+"                             -",
+"                             -",
+"--------------               -",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~++-",
+"~~~~~~------------------------",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"------------------------------"
+		};
+		a.set("charsize", 0);
+		addEnemy("Redsword", 1, 3, 100.0);
+		addEnemy("Robot", 12, 3, 7.0); // Crouch attacks ftw? Hmm.
+		a.set("1.counter", 2.5); // Don't get shot as soon as the level starts.
+		pool.destroy_all();
+		a.set("1.slot", pool.play_2d(sounds + "CSM\\Robot Beep.WAV", camera.x, camera.y, 12, 3, true));
+		a.set("t-", "dirt");
+
+		newMap(diag);
+		string[] diag2= {
+"                             =",
+"                             =",
+"                             =",
+"!!                         ++=",
+"==============        =======-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|",
+"~~~~~~||||||||||-|||||||||||||",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"------------------------------"
+		};
+		a.set("t=", "metal");
+		a.set("t|", "pipe");
+		addEnemy("Silver Guardian", 38, 3, 50);
+		addEnemy("Robot", 24, 23, 10);
+		addEnemy("Robot", 24, 17, 15);
+		addEnemy("Robot", 10, 17, 15);
+		addEnemy("Robot", 50, 16, 20);
+		addEnemy("Robot", 70, 17, 15);
+		addEnemy("Robot", 90, 23, 20);
+		newMap(diag2, 1);
+		string[] diag3={
+"                    -!9999999-",
+"                    -        -",
+"                    -        -",
+"                    -        -",
+"--------------      -      @ -",
+"~~~~~~~~~~~~~~~~~~~~-~~LLLLLL-",
+"~~~~~~~~~~~~~~~~~~~~9~~-------",
+"~~~~~~~~~~~~~~~~~~~~8~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~7~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~7~~~~~~ll-",
+"~~~~~~~~~~~~~~~~~~~~7~44~~l---",
+"~~~~~~~~~~~~~~~~~~~~765l321~~-",
+"~~~~~~~~~~~~~~~~~~-~~~~5~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~4~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~----~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"||||||------------------------",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+"--------~~~~~~----------------"
+		};
+		newMap(diag3, 2);
+		
+		string[] diag4={
+"           |                 -",
+"         @ |                 -",
+"       |||||                 -",
+"           |!                -",
+"-------    |!                -",
+"~~~~~~~~~~~===========~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~=~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~=~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~=~~~~~~~|",
+"~~~~~~~~~~~~~~~~~~~~~========-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-",
+"|||||||==~~~~~~~~~~~~~~~~~~~~-",
+"~~~~~~~~===========|||||||~~~=",
+"~~~~~~~~~~~~!~!~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~=",
+"~~~~~~~~~~---------||||||||||-"
+		}; // Adjust the size of this one as needed to be beatable but urgent.
+		addEnemy("Robot", 104, 17, 15);
+		addEnemy("Robot", 100, 16, 15);
+		addEnemy("Drone", 45, 20, random(1, 7));
+		addEnemy("Drone", 90, 20, random(1, 7));
+		addEnemy("Drone", 32, 10, random(1, 7));
+		addEnemy("Drone", 58, 12, random(1, 7));
+		addEnemy("Drone", 115, 21, random(1, 7));
+		
+		a.set("tL", "..\\jla\\steps\\dirt"); // Hmm.
+		
+		newMap(diag4, 3);
+		
+		pool.destroy_all();
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 15, 5, 0, 14, 1, 0, true, 0, 0, 0, 100);
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 45, 5, 0, 8, 1, 0, true, 0, 0, 0, 99.5);
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 75, 5, 0, 8, 1, 0, true, 0, 0, 0, 100);
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 97, 5, 0, 4, 1, 0, true, 0, 0, 0, 100.5);
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 90, 24, 0, 10, 0, 0, true, 0, 0, 0, 95);
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 110, 24, 0, 10, 0, 0, true, 0, 0, 0, 95.5);
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 68, 24, 0, 6, 0, 1, true, 0, 0, 0, 94.5);
+		pool.play_extended_2d(sfx + "ledge2.ogg", camera.x, camera.y, 81, 2, 0, 2, 1, 4, true, 0, 0, 0, 100);
+		
+		if(geti("stage")!=3) {
+			fadeout(40);
+			playsong("music\\bonus1.ogg");
+			bgm.volume=bgm.volume-6;
+			a.set("maxox", 25.0);
+			sound snd;
+			int pitch=voice.pitch;
+			voice.pitch=voice.pitch+3; // Is that appropriate? I kinda feel like it might should be higher, even.
+			if(!snd.load("voice\\" + geti("lang") + "level3.ogg")) voice.speak("Where have you been? I had to break out of that place without you! They can\'t find me, but there are too many drones outside.");
+			else snd.play();
+		while(snd.playing or voice.speaking()) {
+				systemKeys();
+			if(key_pressed(key.a) or key_pressed(key.b) or (pad.active and (pad.button_pressed(joy.a) or pad.button_pressed(joy.b) or pad.button_pressed(joy.start)))) {voice.stop(); snd.stop();}
+			fps.tick();
+			}// Scene loop.
+			voice.pitch=pitch;
+		}// cutscene.
+		else if(curbgm=="music\\slowbanging.ogg" or nextTrack=="music\\slowbangin.ogg") {addEnemy("Steel Guardian", 107, 4, random(150, 200)); a.set("0.x", 105);}
+		else if(getd("maxox")>=40.0) {setVector(0, 87, 3); addEnemy("Silver Guardian", 66, 3, 50);} // checkpoint.
+	}// stage 3.
+	else if(s==4) {
+		
+		string[] diag={
+"                              ",
+"                              ",
+"    \\                    /    ",
+"--------\\                -----",
+"------------\\          /------",
+"-----------------     /-------",
+"---------------     /---------",
+"----------        //----------",
+"--------       ///------------",
+"------        ----------------",
+"----      --------------------",
+"----      --------------------",
+"----      --------------------",
+"----      --------------------",
+"----      --------------------",
+"----            --------------",
+"----              ------------",
+"----    \\\\                    ",
+"----      ----\\\\\\             ",
+"----      ----------\\\\\\       ",
+"----      --------------------",
+""
+		};
+		newMap(diag, 0);
+		a.set("t-", "snow");
+		a.set("t=", "rock");
+		a.set("b=", steps + "stone\\bump.ogg");
+		a.set("charsize", 0);
+		addEnemy("Redsword", 1, 1.5, 100.0);
+		pool.destroy_all();
+		pool.play_extended_2d(sfx2 + "windy.wav", camera.x, camera.y, 0, 0, 10, 90, 10, 10, true, 0, 0, 0, 100);
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 3, 20, 0, 6, 1, 1, true, 0, 0, 0, 100+math_random());
+		string[] diag2={
+"                 -  1    +    ",
+"                !-  ======  + ",
+"                !-       -----",
+"                !-           -",
+"  ----   --------====-       -",
+"   --- \\          --          ",
+"     --           --          ",
+"      ---         --          ",
+"        --- -     --          ",
+"----      --\\\\    --          ",
+"-l         --      ----       ",
+"-l          -      --------   ",
+"-l          -\\\\               ",
+"-l        / --\\\\              ",
+"-l       /-----\\\\\\            ",
+"-l      /-------\\\\            ",
+" 1      --------------      --",
+" 1       -------              ",
+" 1                  ,       L,",
+"-----------   -------~~~~~~~~~",
+""
+};
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 52, 16, 0, 7, 0, 0, true, 0, 0, 0, random(100, 105));
+		pool.play_extended_2d(jla + "water1.ogg", camera.x, camera.y, 52, 19, 0, 8, 0, 0, true, 0, 0, 0, random(95, 100));
+		newMap(diag2, 1);
+		// Enemies are ninjas and wolves?
+		// Well, and these guys:
+		addEnemy("Silver Guardian", 40, 3, 50);
+		addEnemy("Steel Guardian", 70, 3, 50);
+		
+		string[] diag3={
+"                              ",
+"                /-\\\\          ",
+"\\              /---\\\\  ++   !!",
+"\\             /---------------",
+"----------------              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                    l         ",
+"            l  ======         ",
+"       ======                 ",
+"    ----                      ",
+"                              ",
+"                              ",
+"                              ",
+"-------------  -----------  --",
+""
+		};
+		newMap(diag3, 2);
+		addEnemy("Timberwolf", 71, 18, random(5, 15));
+		addEnemy("Timberwolf", 84, 18, random(5, 15));
+		
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 73, 19, 0, 2, 0, 1, true, 0, 0, 0, random(98, 110));
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 86, 19, 0, 2, 0, 1, true, 0, 0, 0, random(98, 110));
+		string[] diag4={
+"                              ",
+"                /-\\\\          ",
+"\\              /---\\\\   @ 2222",
+"\\             /------------   ",
+"----------------              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"                              ",
+"  <<                l         ",
+"                  \\           ",
+"           =======         /  ",
+"-      //      - -111111111---",
+"      //----   ---            ",
+"    // ---                    ",
+"    /-----                    ",
+"-------------                 ",
+""
+}; // This does not feel like long enough for this level. There's lots of wide open spaces. It needs to be longer than a mere 120 tiles across.
+		newMap(diag4, 3);
+		addEnemy("Timberwolf", 105, 13, random(10, 20));
+		addEnemy("Timberwolf", 95, 16, random(10, 20));
+		// Four ninjas for the master to resurrect.
+		for(uint i=0; i<4; i++) addEnemy("Ninja", 130+random(0, 10), 4*i, random(10, 20));
+		addEnemy("Ninja Master", 103, 0, 100);
+		addEnemy("Uzi Guard", 106, 15, 50);
+		addEnemy("Uzi Guard", 106, 15, 50);
+		int num=geti("charsize");
+		a.set((num-2) + ".counter", 25.0);
+		a.set((num-1) + ".counter", 25.5);
+		// Hopefully, those won't shoot each other, are possible to jump past when climbing, and will make the crumbling bridge actually work as a threat without making it impossible.
+		
+		string[] diag5={
+"   \\                          ",
+"---\\\\            \\\\           ",
+"+  -------------------    ////",
+"++                       ///--",
+"============!!!        ////---",
+"l       \\\\\\           //-----",
+"l         --------------------",
+"9                             ",
+"l                             ",
+"9++                          ",
+"-----------------===          ",
+"      l  =                    ",
+"      l1 =                    ",
+"      l9 =                    ",
+"  +  3L  =                  ++",
+"-----~~~~-~~~~~~~~~~----------",
+"-~~~~~~~~--~~~~~~~~~~~~~~~~~~~",
+"-~~~~~~~~~--~~~~~~~~~~~~~~~~~~",
+"-~~~~~~~~~~--~~~~~~~~~~~~~~~~~",
+"-~~~~~~~~~~~------------~~~~~~",
+"-~~~~~~~~~~~~-~~~~~~99~~~~~~~~",
+"-~~~~~~~~~~~~-~~~~~~~=~~~~~~~~",
+"-~~~~~~~~~~~~-~~~~~~~=~~~~~~~~",
+"-~~~~~~~~~~~~-~~~~~~~=~~~~~~~~",
+"-~~~~~~~~~~~~9~~~~~~~=~~~~~~~~",
+"-9999999999999999999====------"
+		};
+		
+		pool.play_extended_2d(sfx2 + "old_windy.wav", camera.x, camera.y, 104, diag4.length(), 0, 16, 2, 2, true, 0, 0, 0, random(80, 105));
+		pool.play_extended_2d(jla + "brook1.ogg", camera.x, camera.y, 125, 15, 0, 15, 0, 1, true, 0, 0, 0, random(95, 105));
+		addEnemy("Ninja", 138, 23, random(10, 30));
+		a.set((geti("charsize")-1) + ".counter", 40.0); // Hmm. Should it be even longer, really?
+		addEnemy("Drone", 145, 23, 7);
+		addEnemy("Steel Guardian", 145, 13, 100.0);
+		addEnemy("Steel Guardian", 127.0, 3, 100.0);
+		addEnemy("Alpha Wolf", 127, 0, 100.0);
+		addEnemy("Timberwolf", 130, 1, random(5, 25));
+		newMap(diag5, 4);
+		
+		if(s!=geti("stage")) {
+			sound snd;
+			int pitch=voice.pitch;
+			playsong("music\\orchestral8.ogg");
+			bgm.volume=bgm.volume-4;
+			voice.pitch=voice.pitch+1;
+			if(snd.load("voice\\" + geti("lang") + "level4.ogg")) snd.play();
+			else voice.speak("That guy who calls himself Master Jupiter is attacking a city on the other side of this canyon. Maybe the Red Sword was created to stop him?");
+			while(snd.playing or voice.speaking()) {
+				systemKeys();
+			if(pad.active and (pad.button_pressed(joy.a) or pad.button_pressed(joy.b) or pad.button_pressed(joy.start))) {voice.stop(); snd.stop();}
+				else if(key_pressed(key.a) or key_pressed(key.b)) {voice.stop(); snd.stop();}
+				fps.tick();
+			}
+			voice.pitch=pitch;
+			nextTrack="music\\level4.ogg";
+		}// scene.
+		else if(curbgm=="music\\kickass.ogg") setVector(0, 122, 3);
+	}//Stage 4
+	else if(s==5) {
+		string[] diag={
+"                              ",
+"                              ",
+"*                             ",
+"*                             ",
+"*             **   +          ",
+"==========----------------    ",
+"                        l-    ",
+"              l          -    ",
+"                         -    ",
+"                        l-  ||",
+"                         -    ",
+"              l   l      -    ",
+"                  l      -    ",
+"                  3      -    ",
+"              l          -----",
+"     l                   -    ",
+"                         -    ",
+"                         9    ",
+"                         9    ",
+"                         9    ",
+"-----------   ----------------",
+""
+		};
+		pool.destroy_all();
+		pool.play_extended_2d(sfx + "bp_fire_0" + random(1, 6) + ".wav", camera.x, camera.y, 11, diag.length()-1, 0, 3, 1, 1, true, 0, 0, 0, 100.0+math_random());
+		newMap(diag, 0);
+		a.set("charsize", 0);
+		addEnemy("Redsword", 0.5, diag.length()-3, 100.0);
+		a.set("t-", "stone"); // Hm?
+			a.set("t|", "pipe");
+		a.set("t=", "metal");
+		addEnemy("Uzi Guard", 26, 13, 25.0);
+		a.set((geti("charsize")-1) + ".counter", 5.0); // Too long? Too short? If hte accolite would stop burning himself to death, it might change things. -_-.
+		addEnemy("Jovian Accolite", 20, diag.length()-3, 30.0);
+		string[] diag2={
+"-                   -       ++",
+"-                   -  |||||||",
+"-                   -  |llllll",
+"-                   -  |111111",
+"---------------    *-         ",
+"-@        ----- - *--         ",
+"-=======- ----- -*---         ",
+"---------^-----v------        ",
+"                   ++-  -11111",
+"|||------ ----- ------  -     ",
+"   -          - -       -=====",
+"   -          - -      ||    =",
+"   -          - -            =",
+"   -          - -            =",
+"   -          - -   ==========",
+"   -          - -             ",
+"   -          - ---           ",
+"   -          -  --           ",
+"   -          -   -|||||||||||",
+"   -          -             @-",
+"----          ----------------",
+""
+		};
+		newMap(diag2, 1);
+		addEnemy("Silver Guardian", 36, 3, random(25, 50));
+		addEnemy("Silver Guardian", 37, 3, random(25, 50));
+		addEnemy("Jovian Accolite", 57, diag.length()-3, random(1, 15));
+		pool.play_extended_2d(sfx + "bp_fire_0" + random(1, 6) + ".wav", camera.x, camera.y, 34, diag.length()-2, 0, 9, 1, 1, true, 0, 0, 0, 95+(5.0*math_random()));
+		string[] diag3={
+"---%55                 |      ",
+"---------          *  @|    |",
+"llllllll-        |llllll||   |",
+"11111111-   s    11111111|   |",
+"   -----------      *****|   |",
+"        -           ***|||   |",
+"        -           -|||| * *|",
+"R       -           -* * * * |",
+"1111111--        *  - * * * *|",
+"                 *  -********|",
+"============9999999-999999999|",
+"=                   9        |",
+"=                   9        |",
+"=                   9        |",
+"=                   9        |",
+"=                   9        |",
+"=                   9        |",
+"=                   9        |",
+"=                   9        |",
+"=               W   9        |",
+"=-----------------------------",
+""
+		};
+		newMap(diag3, 2);
+		string[] diag4={
+"         ++    =             l",
+"|||||||||||    =             l",
+"               =             l",
+"               =             9",
+"=============  =  |||||||||||=",
+"               =             =",
+"               =             =",
+"               =             =",
+"    |||||||||||=             =",
+"               =|||||||||||  =",
+"               =             =",
+"               =             =",
+"               =             =",
+"               =    ||||||||||",
+"------------   =             =",
+"               =             =",
+"@              =             =",
+"|||||          =||||||||||   =",
+"|||||          =              ",
+"||||||        999            =",
+"-----------------------------=",
+""
+		};
+		addEnemy("Robot", 118, 17, random(10, 30));
+		addEnemy("Robot", 108, 14, random(10, 20));
+		addEnemy("Robot", 111, 11, random(5, 15));
+		addEnemy("Robot", 110, 6, random(1, 20));
+		
+		newMap(diag4, 3);
+		string[] diag5={
+"9                       +-    ",
+"------                  +-    ",
+"-----------  --  --**-----    ",
+"-*           --**--**-----    ",
+"-=========== --**--**-----    ",
+"              ------------    ",
+"                              ",
+"              J               ",
+"---------------               ",
+"+                   =      w  ",
+"=====               =---------",
+"=====               =-        ",
+"=====               =-        ",
+"=====               3-    s  @",
+"-----999999999999999=-    ----",
+"                              ",
+"                             +",
+"                  ||||||||||||",
+"              999             ",
+"                              ",
+"                              ",
+""
+		};
+		pool.play_2d(jla + "trickle.ogg", camera.x, camera.y, 64, diag.length()-3, true);
+		pool.play_extended_2d(sfx + "old_windy.wav", camera.x, camera.y, 122, diag.length(), 0, 27, 2, 1, true, 0, 0, 0, random(90, 101));
+		newMap(diag5, 4);
+		addEnemy("Silver Guardian", 125, 3, random(20, 50));
+		
+		addEnemy("Jovian Accolite", 97, 17, 25); // Hmm. Change if this is just too much.
+		string[] diag6={
+"-+++ ++ 2llllll llllll2      +",
+"-        222221l122222       +",
+"-         2llll2llll2        +",
+"-          2222l2222         +",
+"-l l l2     2ll1ll2     4 l l+",
+"-44444       44444      222222",
+"-                             ",
+"-  ////                \\\\\\\\   ",
+"-***/49445555      555555\\****",
+"------                  ------",
+"-\\\\                         //",
+"-9\\\\       555555555       //9",
+"-l5\\\\                     //5l",
+"-349\\\\                   //555",
+"-l2l4\\\\\\                //4l3l",
+"-333l3\\\\\\              //l33l3",
+"-l3l333\\\\\\           ///44332*",
+"-2222l2l\\\\\\         ///l4l3333",
+"-43255555\\\\        ///94l44444",
+"-****23456\\   ***   /94444****",
+"------------------------------",
+""
+		};
+		newMap(diag6, 5);
+		
+		if(geti("stage")!=s) {
+			playsong("music\\orchestral8.ogg");
+			wait(1000);
+			string[] snds={sfx2 + "EXPLOSIO.WAV", sfx2 + "ManyRocks.ogg", jla + "teleport.wav", "voice\\Silver Guardian\\teleport.wav", jla + "pistol.wav", jla + "uzi.wav", sfx2 + "ABATTERY.WAV", sfx + "robolaser.wav", sfx + "axebullet.wav", sfx2 + "ScreamMale.wav", jla + "rocket.wav", sounds + "CSM\\Laser 1.WAV", sounds + "CSM\\Laser 2.WAV", sounds + "CSM\\Laser 3.WAV", sfx + "bp_ignite_01.wav"};
+			for(int i=1; i<5; i++) {snds.insert_last("voice\\Big Robot\\hit" + i + ".wav"); if(i>0 and i<4) snds.insert_last(sfx + "ignite_0" + i + ".wav"); snds.insert_last(sfx + "sword" + i + ".ogg");}
+			string[] files=find_files(sfx + "*rock*.wav");
+			for(uint i=0; i<files.length(); i++) snds.insert_last((pack.file_exists(files[i])) ? files[i] : (sfx + files[i]));
+			for(uint i=0; i<snds.length(); i++) {
+				pool.play_2d(snds[random(0, snds.length()-1)], 0, 0, random(-10, 10), random(-5, 5), false);
+				wait(random(50, 250));
+			}// Hmm.
+			wait(1000);
+			bgm.volume=bgm.volume-4;
+			sound snd;
+			if(snd.load("voice\\" + geti("lang") + "\\level5.ogg")) snd.play();
+			else voice.speak("If the Redsword is good for anything, it should defeat Master Jupiter!");
+			while(voice.speaking() or snd.playing) {
+				systemKeys();
+				if(key_pressed(key.a) or key_pressed(key.b) or (pad.active and (pad.button_pressed(joy.a) or pad.button_pressed(joy.b) or pad.button_pressed(joy.start)))) {voice.stop(); snd.stop();}
+				fps.tick();
+			}
+			wait(500);
+			snd.load("voice\\Big Robot\\die.wav");
+			snd.play_wait();
+			nextTrack="music\\level5.ogg";
+		}// scene.
+		else if(curbgm=="music\\psibeat1.ogg" or nextTrack=="music\\psibeat1.ogg") {a.set("0.x", 53.5); a.set("0.y", 7.0); nextTrack="music\\psibeat1.ogg"; addEnemy("Big Robot", 66, 5, 100.0); a.set("keys", 1);} // Checkpoint.
+		else if(curbgm=="music\\orchestral8.ogg" or nextTrack=="music\\orchestral8.ogg" or curbgm=="music\\slowbangin.ogg" or nextTrack=="music\\slowbangin.ogg" or geti("checkpoint.x")>150) {
+			setVector(0, 163, 10);
+			addEnemy("Master Jupiter", 165, 10, 100);
+			if(curbgm!="music\\orchestral8.ogg") nextTrack="music\\orchestral8.ogg";
+		}// Bossfight.
+		else if(a.exists("checkpoint.x")) setVector("0", getvector("checkpoint"));
+	}
+	else if(s==6) {
+		pool.destroy_all();
+		string[] diag={
+"          lll                 ",
+"-         222                 ",
+"--                            ",
+"---                           ",
+"----                          ",
+"-----                         ",
+"-----------------------       ",
+"----------------------        ",
+"---------------------         ",
+"--------------------          ",
+"                              ",
+""
+		};
+		a.set("charsize", 0);
+		addEnemy("Redsword", 5, 2, 100.0);
+		addEnemy("Swordkiller", 17, 2, 9999999.9);
+		newMap(diag, 0); // Although I like the fire deal.
+		string[] diag2(diag.length());
+		for(uint i=0; i<diag2.length(); i++) diag2[i]="";
+		newMap(diag2, 1);
+		if(s!=geti("stage")) {
+			fadeout(40);
+			playsong("music\\orchestral5.ogg");
+			sound snd;
+			int pitch=voice.pitch;
+			voice.pitch=-2;
+			if(snd.load("voice\\" + geti("lang") + "\\level6.ogg")) snd.play_wait();
+			else voice.speak_wait("I hope you weren\'t trying to hide. I have a fancy sword of my own, now, but you still have the one I was supposed to get.");
+			voice.pitch=pitch;
+			measure=0;
+			wait(1000);
+			//nextTrack=curbgm;
+		}// Scene.
+		else {
+			string[] tracks={"music\\kickass.ogg", "music\\darkshit.ogg", "music\\level3.ogg", "music\\level5.ogg", "music\\orchestral5.ogg", "music\\orchestral8.ogg", "music\\slowbangin.ogg", "music\\psibeat1.ogg", "music\\youdie.ogg"};
+			nextTrack=tracks[random(0, tracks.length()-1)];
+		}
+	}// Last level.
+	else {
+		fadeout(20);
+		voice.speak_wait("Game over. You win. Sorry about that.");
+		fadeout(); exit();
+	}
+	if(nextTrack=="") nextTrack="music\\level" + s + ".ogg";
+	a.set("stage", s);
+}// setStage.
+
+void addEnemy(string name, double x, double y, double hp=10.0) {
+	int charsize=geti("charsize");
+	if(charsize<0) charsize=0;
+	a.set(charsize + ".name", name);
+	a.set(charsize + ".x", x);
+	a.set(charsize + ".y", y);
+	setVector(charsize + ".v", 0, 0);
+	a.set(charsize + ".counter", 0.0);
+	a.set(charsize + ".face", KeyC_L);
+	a.set(charsize + ".hp", hp);
+	a.set(charsize + ".slot", -1);
+	a.set("charsize", charsize+1);
+}
+
+string getAlt(string terrain) {
+	if(terrain=="pipe") return "metal";
+	
+	return "stone";
+}
+string getFall(string terrain) {
+	//alert("Falling", "Get fall: " + terrain);
+	if(pack.file_exists(steps + terrain + "\\run1.wav")) {
+		string ext=".ogg";
+		if(!pack.file_exists(steps + terrain + "\\fall1.ogg")) ext=".wav";
+		if(ext==".wav" and !pack.file_exists(steps + terrain + "\\fall1.wav")) return jla + "FallDirt" + random(1, 4) + ".wav";
+		int rn=random(1, 4);
+		int tries=0;
+		while(tries<16 and !pack.file_exists(steps + terrain + "\\fall" + rn + ext)) {rn=random(1, 4); tries++;}
+		return steps + terrain + "\\fall" + rn + ext;
+	}// steps.
+	else if(pack.file_exists(jla + "Fall" + terrain + "1.wav")) return jla + "fall" + terrain + random(1, 4) + ".wav";
+	return (terrain=="carpet") ? (jla + "FallCarpet" + random(1, 4) + ".wav") : getFall("carpet");
+}
+
+vector[] projectiles;
+double radartime=0.0;
+bool radaron=false, sonifier=false;
+
+void radar(double dt) {
+	radartime-=dt;
+	if(radartime<=0.0) {
+		radartime=1.0;
+		vector me=getvector("0");
+		vector above(-1, -1);
+		vector wall(-1, me.y);
+		int dx=(geti("0.face")==KeyC_L) ? -1 : 1;
+		int ex=me.x+(15*dx);
+		vector drop(-1, -1); // Gah!
+		for(int x=me.x; x!=ex; x+=dx) {
+			bool pit=true;
+			if(last=="") last="-"; //!!! Also, python could make that normal sized.
+			for(int y=0; last!=""; y++) {
+				vector c(x, y);
+				if(isSolid(getC(x, y))) {
+					if(y<floor(me.y) and (c-me).length()<=(above-me).length()) above=c;
+					else if(y==floor(me.y) and x!=floor(me.x) and (wall-me).length()>=(c-me).length()) wall=c;
+					else if(y>me.y) {
+						if(pit and last=="" and absolute(me.x-x)<absolute(drop.x-x)) drop=c;
+						pit=false;
+					}// drop.
+				}
+			}// y
+		}// x
+		//clipboard_copy_text(clipboard_read_text() + "\r\nSonar:\rme: " + me.x + ", " + me.y + "\rAbove: " + above.x + ", " + above.y + "\rWall: " + wall.x + ", " + wall.y + "\rDrop: " + drop.x + ", " + drop.y);
+		pool.play_2d(sounds + "Env\\platform1.wav", camera.x, camera.y, above.x, above.y, false);
+		pool.play_2d(sounds + "Env\\high.wav", camera.x, camera.y, wall.x, wall.y, false);
+		if(drop.x>-1) pool.play_1d(sounds + "Env\\drop3.wav", camera.x, drop.x, false);
+		//alert("Sonar", "This should work:\nAbove: " + above.x + ", " + above.y + "\nWall: " + wall.x + ", " + wall.y + "\nDrop: " + drop.x + ", " + drop.y);
+	}// ping.
+}// radar.
+
+int addProjectile(double x, double y, double vx, double vy, double damage, bool duck, bool clean=false) {
+	vector p(x, y);
+	vector v(vx, vy);
+	projectiles.insert_last(p);
+	pv.insert_last(v);
+	pd.insert_last(damage);
+	pc.insert_last(duck);
+	if(clean) a.set("pslot" + (projectiles.length()-1), -1);
+	return projectiles.length()-1;
+}// projectiles.
+
+vector[] pv;
+double[] pd;
+bool[] pc;
+
+void removeProjectile(int index) {
+	if(index<0 or index>=projectiles.length()) return;
+	//clipboard_copy_text(clipboard_read_text() + "\r\nRemoving " + index + "...");
+	projectiles.remove_at(index);
+	pd.remove_at(index);
+	pv.remove_at(index);
+	pc.remove_at(index);
+	int slot=geti("pslot" + index);
+	//if(index==0) clipboard_copy_text(clipboard_read_text() + "\r\nBefore: pslot0 is " + slot + ", pslot1 is " + geti("pslot1") + ". ");
+	if(slot>=0) {
+		//clipboard_copy_text(clipboard_read_text() + " Destroying sound " + slot + "...");
+		pool.destroy_sound(slot);
+	}
+	//else clipboard_copy_text(clipboard_read_text() + "\r\nProjectile" + index + " had slot " + slot + ". ");
+	for(int j=index; j<projectiles.length(); j++) {
+		a.set("pslot" + j, geti("pslot" + (j+1)));
+	} // FINALLY! However, this seems horribly inefficient.
+	a.set("pslot" + projectiles.length(), "-1"); // Why? Why do I need to do this? Shouldn't the above loop have taken care of it?
+	//if(index==0) clipboard_copy_text(clipboard_read_text() + "\r\nAfter: pslot0 is " + geti("pslot0") + ", pslot1 is " + geti("pslot1") + ". ");
+	//a.set("pslot" + index, -1);
+}
+void projectileStep(int index, double dt) {
+	if(index<0 or index>=projectiles.length()) return;
+	//clipboard_copy_text(clipboard_read_text() + "\r\nStepping " + index + ". Pslot0 is " + geti("pslot0"));
+	int x=projectiles[index].x;
+	int y=projectiles[index].y;
+	projectiles[index]+=pv[index]*dt;
+	int nx=projectiles[index].x;
+	int ny=projectiles[index].y;
+	
+	bool removeme=false;
+	int slot=geti("pslot" + index);
+	int charsize=geti("charsize");
+	for(int i=0; i<charsize; i++) {
+		vector me=getvector("" + i);
+		if(round(me.x, 0)==nx and round(me.y, 0)==ny and ((!pc[index]) or string_contains(gets(i + ".state"), "crouch", 1)<0)) {
+			string hitsound=jla + "bullet\\hit_by_bullet" + random(1, 3) + ".wav";
+			if(projectiles[index].z==2) hitsound=sfx2 + "EXPLOSIO.WAV"; // Umm.
+			else if(projectiles[index].z==3) hitsound=sfx + "bp_ignite_01.wav";
+			else if(projectiles[index].z==4) hitsound=jla + "elechit.ogg"; //sfx2 + "ABATTERY.WAV";
+			if(i==0 and gets("1.name")=="Cohere" and slot>=0 and pool.items[slot].filename==sfx2 + "EXPLOSIO.WAV") {
+				// YOU CAN'T SHOOT THE PLAYER!!!
+				a.set("1.counter", 1.0);
+			}// This is pissing me off.
+			else {
+				hit(i, pd[index], hitsound);
+				if(geti("difficulty")<random(0, 2)) removeme=true;
+			}// not the friendly fire.
+			//if(i==0 and gets("1.name")=="Cohere") clipboard_copy_text("Hitting: player at " + me.x + ", " + me.y + "\r\nProjectile at " + projectiles[index].x + ", " + projectiles[index].y + ".\nPlayer vx: " + getd("0.v.x") + ", projectile: " + pv[index].x);
+		}// Hit.
+	}// hitting people.
+	if(index>=projectiles.length()) return; // Master Jupiter does this when he shoots himself.
+	if(slot>=0 and pool.sound_is_playing(slot)) pool.update_sound_2d(slot, projectiles[index].x, projectiles[index].y);
+	else if(slot>=0) removeme=true;
+	//else {clipboard_copy_text(clipboard_read_text() + "\r\nProjectile" + index + ", sound slot is " + slot + "\\" + geti("pslot" + index) + ". " + ((slot>=0) ? (pool.sound_is_playing(slot) + ", " + pool.items[slot].filename) : "")); if(geti("stage")==4) for(uint i=0; i<pool.highest_slot; i++) {if(i!=geti("pslot" + (index+1)) and (pool.items[i].persistent and !pool.items[i].looping) or string_contains(pool.items[i].filename, "sword", 1)>0) {a.set("pslot" + index, i); i+=100;}}}
+	
+	if(x!=nx or y!=ny) {
+		string cn=getC(nx, ny);
+		if(isSolid(cn)) {
+			string toplay=jla + "bullet\\bullet_ricochet" + random(1, 4) + ".wav";
+			if(projectiles[index].z==2) toplay=sfx2 + "EXPLOSIO.WAV";
+			else if(projectiles[index].z==3) toplay=sfx + "bp_ignite_01.wav";
+			else if(projectiles[index].z==4) toplay=sfx2 + "ABATTERY.WAV"; // Hmm.
+			removeme=true;
+			// Identify projectiles by projectiles[i].z and pv[i].z.
+			if(string_is_digits(cn)) {
+				int damage=1;
+				int rx=nx/30;
+				cn="" + (string_to_number(cn)-damage);
+				if(cn=="0") {cn=" "; pool.play_2d(sfx2 + "manyRocks.ogg", camera.x, camera.y, nx, ny, false);} // Replace with one of the quarry sounds from downloads/sounsd?
+				last=string_left(last, nx%30) + cn + string_right(last, last.length()-(nx%30)-1); // There's a 1 in there, somewhere.
+				a.set(rx + ", " + ny, last);
+			}// destruction.
+			
+			if(toplay!="") pool.play_2d(toplay, camera.x, camera.y, nx, ny, false);
+		}// hits something solid.
+	
+	if(removeme) removeProjectile(index);
+	}// hit detection.
+}
+
+bool hit(int index, double damage, string hitsound="", double stun=0.0, string targetState="") {
+	vector me=getvector(index);
+	double hp=getd(index + ".hp");
+	//if(index==0) clipboard_copy_text("hitting: hp" + hp + ", damage" + damage);
+	if(hp<=0.0) return false;
+	if(damage<random(5, 7) and string_contains("Steel Guardian Gold Guardian", gets(index + ".name"), 1)>=0) {pool.play_2d(sfx2 + "Arm_hit_" + random(1, 16) + ".wav", camera.x, camera.y, me.x, me.y, false); return true;}
+	else if(damage<50 and gets(index + ".name")=="Sapphire Helmsman") {pool.play_extended_2d(sfx2 + "arm_hit_" + random(1, 16) + ".wav", camera.x, camera.y, me.x, me.y, 0, 0, 2, 0, false, 0, 0, 0, random(75, 90)); return true;}
+	else if(gets(index + ".name")=="Master Jupiter" and geti(index + ".slot")>=0) {pool.play_2d(sfx + "robolaser.wav", camera.x, camera.y, me.x, me.y, false); if(gets(index + ".state")=="") {a.set(index + ".state", "throw"); a.set(index + ".counter", 0.048);} return true;}
+	else if(hitsound!="" and (string_contains(gets(index + ".name"), "Robot", 1)<0) and gets(index + ".name")!="Drone") pool.play_2d(hitsound, camera.x, camera.y, me.x, me.y, false);
+	else if(hitsound!="") pool.play_extended_2d(sfx + "clang" + random(0, 3) + ".ogg", camera.x, camera.y, me.x, me.y, 0, 0, 0, 0, false, 0, 0, 0, 90+(20.0*math_random()));
+	// Hitcries? Ouch. Maybe.
+	hp-=damage;
+	if(hp>0.0) {
+		if(random(0, 5)>2 and directory_exists("voice\\" + gets(index + ".name"))) {
+			int max=1;
+			string name=gets(index + ".name");
+			string ext=".ogg"; if(pack.file_exists("voice\\" + name + "\\hit1.wav")) ext=".wav";
+			while(pack.file_exists("voice\\" + name + "\\hit" + max + ext)) max++;
+			pool.play_2d("voice\\" + name + "\\hit" + random(0, max-1) + ext, camera.x, camera.y, me.x, me.y, false);
+			//if(name=="Big Robot") clipboard_copy_text("Robot hits:" + max);
+			if(name=="Ninja Master") pool.play_2d("voice\\" + name + "\\hit_m" + random(0, 4) + ".wav", camera.x, camera.y, me.x, me.y, false);
+		}// hitcries.
+		if(stun!=0.0 and targetState!="") {
+			a.set(index + ".counter", -stun);
+			a.set(index + ".state", targetState);
+			if(targetState=="fall") {
+				vector v(2, -4);
+				if(index==0) v.x++;
+				if(geti(index + ".face")==KeyC_L) v.x=v.x*-1;
+				setVector(index + ".v", v);
+			}// falling.
+		}// stuns.
+	}// positive hp.
+	else {
+		string name=gets(index + ".name");
+		string toplay="voice\\" + name + "\\die.ogg";
+		if(!pack.file_exists(toplay)) toplay="voice\\" + name + "\\die.wav";
+		if(name=="Robot" or name=="Drone") toplay="voice\\Big Robot\\hit" + random(1, 5) + ".wav";
+		else if(name=="Timberwolf" or name=="Alpha Wolf") toplay="voice\\wolf\\wolf_die_0" + random(1, 4) + ".wav";
+		if(!pack.file_exists(toplay)) toplay=sfx2 + "ScreamMale.wav";
+		if(geti(index + ".slot")>=0) pool.destroy_sound(geti(index + ".slot"));
+		a.set(index + ".slot", pool.play_2d(toplay, camera.x, camera.y, me.x, me.y, false, true));
+		a.set(index + ".state", "dead");
+		a.set(index + ".counter", -5.0);
+		a.set(index + ".v.y", random(-1, -14));
+		a.set(index + ".v.x", (-3+(math_random()*6)));
+		if(name=="Ninja Master" and geti("stage")==1) {
+			if(getd("0.x")<100 or getd("0.y")>6) {a.set(index + ".hp", random(45, 100)); a.set(index + ".x", 103); a.set(index + ".y", 1); a.set(index + ".v.x", 0.0); a.set(index + ".counter", 2.0);}
+			else {wait(1000); setStage(2);}
+		}
+		else if(name=="Big Robot") {
+			//clipboard_copy_text(clipboard_read_text() + "\r\n" + toplay + " exists: " + pack.file_exists(toplay) + ".");
+			if(curbgm=="music\\psibeat1.ogg") {
+				if(geti(index + ".slot")>=0) pool.destroy_sound(geti(index + ".slot"));
+				else for(uint i=0; i<pool.highest_slot; i++) {if(string_contains(pool.items[i].filename, "walk", 1)>=0) pool.destroy_sound(i);}
+				vector me=getvector(index);
+				pool.play_2d("voice\\Big Robot\\die.wav", camera.x, camera.y, me.x, me.y, false); // This is irritating the HFIL out of me.
+				wait(1000);
+				nextTrack="music\\level" + geti("stage") + ".ogg";
+				if(me.y>9) me.y=8;
+				for(int x=me.x-4; x<=me.x+4; x++) {
+					pool.play_2d(sfx2 + "EXPLOSIO.WAV", camera.x, camera.y, x, me.y, false);
+					addProjectile(x, me.y+1, random(-1, 1), random(0, 1), 0.0001, true);
+					fps.tick();
+					step(fps.delay*0.001);
+					wait(100);
+				}// Deathxplosion.
+				a.set("0.hp", math_max(getd("0.hp"), 30));
+			}
+			else {hp=100.0; a.set(index + ".hp", 100.0);}
+		}
+		else if(name=="Silver Guardian") {
+			if(geti("0.x")%30>15 or (getvector(index)-getvector(0)).length()>3.0) {hp=random(50, 100); a.set(index + ".state", ""); a.set(index + ".counter", 0.0);}
+			else {
+				int x=geti(index + ".x");
+				int y=geti(index + ".y");
+				getC(x, y);
+				int rx=x/30;
+				a.set(rx + ", " + y, string_left(last, x%30) + "%" + string_right(last, last.length()-(x%30)-1));
+			}// drop keys.
+		}// Silver Guardians.
+		else if(name=="Steel Guardian" and geti("stage")<4) {
+			wait(1000);
+			fadeout(40);
+			setStage(4);
+		}// Steel Guardian.
+		else if(name=="Alpha Wolf") {
+			if(geti("0.x")<120 or absolute(geti("0.x")-geti(index + ".x"))>15 or geti(index + ".y")<geti("0.y")) {hp=100; a.set(index + ".state", ""); a.set(index + ".counter", 2.0); setVector(index, 123, 1);}
+			else {wait(1000); fadeout(50); setStage(5);}
+		}// Alpha Wolf, which should not be so necessary to kill. T.T
+		else if(name=="Gold Guardian") {
+			vector me=getvector(index), c=getvector(0);
+			if((me-c).length()<3.14159265) {
+				int rx=me.x; rx/=30;
+				int x3=me.x; x3%=30;
+				int y=me.y;
+				getC(me.x, me.y);
+				a.set(rx + ", " + y, string_left(last, x3) + "%" + string_right(last, last.length()-x3-1));
+				getC(0, 4);
+				a.set("0, 4", "@" + string_right(last, last.length()-1));
+			}// You can plausibly have defeated them. Notice that this means Cohere can't do it.
+			else if(gets("1")=="Cohere" and getd("1.hp")>25.0) hp=random(1, 25);
+			else hp=random(50, 100);
+		}// Gold Guardian.
+		//else if(name=="Lady Diamond" and getd("0.x")<150) hp=random(1, 25);
+		else if(name=="Sapphire Helmsman") a.set("keys", geti("keys")+1);
+		else if(name=="Master Jupiter") setStage(geti("stage")+1);
+		else if(name=="Swordkiller") {fadeout(75); sound snd; if(snd.load("voice\\" + geti("lang") + "\\ending.ogg")) snd.play_wait(); else voice.speak_wait("With your murderous rival defeated, and Master Jupiter neutralized, you can finally put down the red sword. But should you?"); a.set("loc", "main");}
+	}// dead.
+	a.set(index + ".hp", hp);
+	return true;
+}
+
+const string brailles=" acc3jgghhhhhhhh\'kmm4w}}||||||||-uxx7)==hhhhhhhh-uxx7)==hhhhhhhh";
+int[] braillesize={0, 30, 20, 18, 12};
+string getBraille(vector c=camera, bool flash=false) {
+	int l=geti("braille");
+	if(l<=0) return "";
+	int x=math_max(c.x-(l/2), 0);
+	int endx=x+l;
+	int y=c.y;
+	// Doing this so often is a little... well, seems like a mistake.
+	getC(x, y);
+	if(last=="") return "";
+	string cur=last;
+	getC(endx, y);
+	if(last=="") {endx=endx-(endx%30)-1; x=endx-l;}
+	string ret;
+	for(x=x; x<=endx; x++) {
+		int n=0;
+		uint shift=0;
+		for(y=c.y-4; y<=c.y+4; y++) {
+			if(y<0) continue;
+			shift=(y<c.y-2) ? 0 : (y<c.y) ? 1 : (y==c.y) ? 2 : (y>c.y+2) ? 4 : 5;
+			string cn=getC(x, y);
+			if(last=="") continue;
+			if(isSolid(cn)) n|=1<<shift;
+			if(cn=="+" and (flash or fps.frame%30<15)) n|=8;
+			else if(cn=="~" and absolute(c.y-y)<2) n|=64;
+			else if(cn=="@" and round(c.y, 0)==y and (flash or fps.frame%30<=15)) n=54;
+		}
+		if((n&64)==0) ret += brailles[n];
+		else if((n&112)>64) ret += "_";
+		else ret += "~";
+		// I'm kinda tempted to use [, on the grounds that it kinda looks like a lightning bolt.
+	}// loop.
+	
+	// Enemies.
+	int charsize=geti("charsize");
+	y=c.y;
+	x=endx-l;
+	for(uint i=0; i<charsize; i++) {
+		if(geti(i + ".y")==c.y) {
+			int ex=geti(i + ".x");
+			if(ex<x or ex>endx) continue;
+			ret=string_left(ret, ex) + gets(i + ".name")[0] + string_right(ret, ret.length()-ex-1);
+			if(i==0 and string_contains(gets("0.state"), "attack", 1)>=0) {
+				int dx=(geti("0.face")==KeyC_L) ? -1 : 1;
+				ret=string_left(ret, ex+dx) + ((dx<0) ? "e" : "i") + string_right(ret, ret.length()-(ex+dx)-1);
+			}// the player is attacking.
+		}// in frame. No aboves or belows? Feels cheap.
+	}
+	
+	for(uint i=0; i<projectiles.length(); i++) {
+		int py=projectiles[i].y-y;
+		int px=projectiles[i].x; // Mostly because of the right edge, which, yes, is pretty annoying.
+		if(py>=-4 and py<=4 and px>=x and px<=endx) {
+			// I feel like I just failed a "efficient rectangle collision" test.
+			string cn=(py<-2) ? "`" : (py<0) ? "c" : (py>2) ? "," : (py>0) ? "-" : "\""; // Python is going to hate me if I ever port this that way.
+			ret=string_left(ret, px) + cn + string_right(ret, ret.length()-px-1); // You know, you could have used l in place of ret.length. They should be the same.
+		}// on screen.
+	}// Projectiles.
+	
+	if(ret!="") show_game_window(ret); // Umm...
+	return ret;
+}
+
+void fadeout(double delay=20) {
+	while(bgm.playing and bgm.volume>-50) {bgm.volume=bgm.volume-1; wait(delay);}
+}
+
+void access_cursor(int c) {
+			vector acam=getvector("acam");
+			bool playit=true;
+			if(c==KeyC_U) acam.y--;
+			else if(c==KeyC_D) acam.y++;
+			else if(c==KeyC_L) acam.x--;
+			else if(c==KeyC_R) acam.x++;
+			else if(c==KeyC_A) acam=getvector("0");
+			else {
+				playit=false;
+				string cn=getC(acam.x, acam.y);
+				int mey=getd("0.y");
+				string toplay="";
+				for(int y=0; last!=""; y++) {
+					cn=getC(acam.x, y);
+					if(isSolid(cn)) {
+						if(absolute(y-mey)<=1) toplay=sounds + "Env\\high.wav";
+						else if(y<mey) {if(toplay==sounds + "Env\\platform1.wav") continue; else toplay=sounds + "Env\\platform1.wav";}
+						else if(last!="") {if(toplay==sounds + "Env\\drop1.wav") continue; else toplay=sounds + "Env\\drop1.wav";}
+						else if(toplay=="") toplay=sounds + "Env\\drop3.wav";
+					}// solids.
+					else toplay="";
+					if(toplay!="") {pool.play_2d(toplay, camera.x, camera.y, acam.x, y, false); wait(250);}
+				}// Vertical loop.
+			}// Vertical scan?
+			if(acam.x<0) acam.x=0;
+			if(acam.y<0) acam.y=0;
+			//if(acam.y>2 and last=="" and acam.x>=0 and acam.x<90) acam.y--;
+			setVector("acam", acam);
+			
+			if(playit) {
+				if(acam.y<0) acam.y=0;
+				string toplay=sounds + "Env\\brownsweep.wav";
+				string cn=getC(acam.x, acam.y);
+				if(last=="") {acam.y--; toplay=sounds + "Env\\drop" + ((isSolid(getC(acam.x, acam.y))) ? "1" : "3") + ".wav";}
+				else if(string_is_digits(cn)) toplay=sounds + "Env\\rockbump.wav";
+				else if(cn=="+") toplay=sounds + "CSM\\Pop.WAV";
+				else if(string_contains("<>^Vv", cn, 1)>=0) toplay=sounds + "Env\\platform1.wav";
+				else if(cn=="@") toplay=sounds + "Env\\path.wav"; // Hmm.
+				else if(isSolid(cn)) toplay=sounds + "Env\\high.wav";
+				else if(cn=="%") toplay=sfx2 + "key2.wav";
+				else if(cn=="!") toplay=sounds + "MHI\\metal_scrape1.ogg";
+				else if(cn=="~") toplay="sfx2\\waterstrike0.wav";
+				pool.play_2d(toplay, camera.x, camera.y, acam.x, acam.y, false);
+				getBraille(acam);
+			}
+}// access cursor.
+
+sound water;
+int measure=0; // Any key changes, if we want the music to not be so redundant.
+sound blast1, blast2; // For flangers.
+
+bool setDifficulty() {
+	dynamic_menu dif;
+	dif.set_tts_object(voice);
+	dif.configure_joystick(pad, joy.a, (joy.a==1) ? 0 : 1);
+	string ext="";
+	int lang=geti("lang");
+	if(pack.file_exists("voice\\" + lang + "\\dif0.ogg")) ext=".ogg";
+	else if(pack.file_exists("voice\\" + lang + "\\dif1.wav")) ext=".wav";
+	
+	if(ext=="") {
+		dif.add_item_tts("Easy", "0");
+		dif.add_item_tts("Normal", "1");
+		dif.add_item_tts("hard", "2");
+		dif.add_item_tts("hardest", "3");
+		dif.add_item_tts("Go Back", "back");
+	}
+	else {
+		for(uint i=0; i<4; i++) dif.add_item("voice\\" + lang + "\\dif" + i + ext, "" + i);
+		dif.add_item("voice\\" + lang + "\\back" + ext, "back");
+	}
+	dif.set_callback(main_callback, "difficulty");
+	int n=dif.run((ext=="") ? "Choose difficulty" : ("voice\\" + lang + "\\difficulty" + ext), ext=="");
+	string rn=dif.get_item_name(n);
+	if(rn=="back") return false;
+	a.set("difficulty", string_to_number(rn));
+	return true;
+}// Difficulty, mostly just affects projectiles.
+
+sound@[] tones(25);
+void sonify(int x, int y, string cn="") {
+	if(@(tones[0])==null or !tones[0].active) {
+		tone_synth synth;
+		float f=880.5;
+		for(uint i=0; i<tones.length(); i++) {
+			synth.waveform_type=4; // ?
+			synth.volume=-12;
+			
+			synth.freq_ms("" + round(f, 0), 1000);
+			@(tones[i])=synth.write_wave_sound();
+			f/=1.059463;
+			synth.reset();
+		}// generate.
+	}// initialize.
+	
+	
+	if(y<0 or y>=tones.length()) return;
+	if(cn=="") cn=getC(x, y);
+	
+	if(isSolid(cn)) {
+		position_sound_1d(tones[y], camera.x, x, pool.pan_step, pool.volume_step);
+		if(!tones[y].playing) tones[y].play();
+	}
+	else tones[y].stop();
+}
+
+pack_file pack;

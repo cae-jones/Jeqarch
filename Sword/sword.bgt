@@ -1,0 +1,203 @@
+#include "c:\\bgIncludes\\FiniteStateMachine.bgt"
+#include "c:\\bgIncludes\\custom_menu.bgt"
+void playsong(string fn) {}
+void systemKeys() {
+if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) voice.stop();
+ if(key_pressed(KEY_F4)) {uninstall_keyhook(); exit();}
+else if(key_pressed(KEY_F5)) voice.options_menu();
+}
+
+custom_voice voice;
+sound_pool pool;
+
+double enemy=0.0;
+double counter=0.0;
+int lives=4, kills=0;
+timer t;
+bool mouse;
+bool legs;
+Menu menu;
+Menu help;
+void main() {
+show_game_window("The Sword Game");
+voice.load_config("voice.cfg");
+voice.config_path="voice.cfg";
+if(screen_reader_is_running(JAWS)) install_keyhook();
+menu.add("Keyboard controlled game");
+menu.add("Mouse controlled game");
+menu.add("Voice options");
+menu.add("How to play");
+menu.add("Exit");
+help.add("Press enter to return to main menu.");
+help.add("In this game, you will be attacked by waves of sword-wielding enemies.");
+help.add("You will hear attacks coming from the left, right, or center. Press enter for an example.");
+ help.add("Enemies can also attack from below. Press enter to hear low attacks.");
+ help.add("Using your choice of the arrow keys or the mouse, swing your sword in the direction of your attacker to block or counter attack. Press enter for an example.");
+ help.add("To block attacks from the center, swing up if it is high, or down if it is low. All low attacks must include a downward swing to be blocked.");
+ help.add("If you are hit by a low attack, your legs will be injured, and you must fight from your knees. All high attacks from this position must be blocked with an upward component.");
+ help.add("If you are hit with a high attack, or a low attack after a leg injury, you will lose a life. If you lose all of your lives, the game will end.");
+
+voice.speak_interrupt("Use arrow keys and enter to select an option.");
+while(!key_pressed(KEY_F4)) {
+int n=menu.run(voice, pool);
+pool.play_stationary("sounds/menu_activate.wav", false);
+switch (n) {
+ case 0 : {mouse=false; play();}; break;
+case 1 : {mouse=true; play();}; break;
+case 2 : voice.options_menu(); break;
+case 3 : {
+bool cont=true;
+while(cont) {
+int h=help.run(voice, pool);
+
+switch (h) {
+case 2 : {
+voice.speak_interrupt_wait("Left");
+ pool.play_1d("sounds/katana" + random(1, 3) + ".wav", 0, -5, false);
+ wait(500);
+ voice.speak_interrupt_wait("Right");
+ pool.play_1d("sounds/katana" + random(1, 3) + ".wav", 0, 5, false);
+ wait(500);
+ voice.speak_interrupt_wait("Center");
+pool.play_stationary("sounds/katana" + random(1, 3) + ".wav", false);
+
+}; break;
+case 3 : {
+voice.speak_interrupt_wait("Left");
+ pool.play_1d("sounds/sword" + random(1, 6) + ".wav", 0, -5, false);
+ wait(500);
+ voice.speak_interrupt_wait("Right");
+ pool.play_1d("sounds/sword" + random(1, 6) + ".wav", 0, 5, false);
+ wait(500);
+ voice.speak_interrupt_wait("Center");
+pool.play_stationary("sounds/sword" + random(1, 6) + ".wav", false);
+
+
+}; break;
+case 4 : {
+pool.play_stationary("sounds/katana" + random(1, 3) + ".wav", false);
+wait(250);
+pool.play_stationary("sounds/katana" + random(1, 3) + ".wav", false);
+wait(125);
+pool.play_stationary("sounds/block" + random(1, 3) + ".wav", false);
+ wait(200);
+pool.play_stationary("sounds/katana" + random(1, 3) + ".wav", false);
+wait(300);
+pool.play_stationary("sounds/kill" + random(1, 3) + ".wav", false);
+}; break;
+default : cont=false;
+}
+}// help.
+}; break;
+default : {uninstall_keyhook(); exit();}
+}// main menu.
+wait(5);
+}// loop.
+}// main.
+const int left=1, right=2, center=0, down=4;
+int swing=0, enemyswing=0;
+bool upswing=false;
+void play() {
+kills=0;
+lives=4;
+counter=0.0;
+enemy=-500.0;
+t.restart(); t.resume();
+voice.speak_interrupt("Begin");
+while(lives>0) {
+systemKeys();
+wait(5);
+mouse_update();
+if(counter>0.0) {counter-=t.elapsed; if(counter<=0.0) {
+bool blocked=((swing&enemyswing)==enemyswing);
+if((!legs)&&((enemyswing&down)==0)) blocked=upswing;
+if(blocked) {
+if(enemy<=0.0) {
+kills++;
+pool.play_1d("sounds/kill" + random(1, 4) + ".wav", 0, (((enemyswing&left)==left) ? -5 : ((enemyswing&right)==right) ? 5 : 0), false);
+}// Your attack connects.
+ else {
+ pool.play_1d("sounds/block" + random(1, 4) + ".wav", 0, (((enemyswing&left)==left) ? -5 : ((enemyswing&right)==right) ? 5 : 0), false);
+//t.pause(); alert("Blocked", "Enemy counter is " + enemy + ". "); t.restart(); t.resume();
+enemy=-2000+(25*kills);
+}// You block.
+}// Block.
+upswing=false;
+swing=0;
+counter=-1000+(10*kills);
+}// 0 from above.
+}// descending.
+else if(counter<0.0) {counter+=t.elapsed; if(counter>=0.0) {
+counter=0.0;
+pool.play_stationary("sounds/recover.wav", false);
+upswing=false;
+}}// ascending.
+ if(mouse) mouseControls();
+ else keyboard();
+if(key_pressed(KEY_C)) {
+t.pause();
+alert("Data", "You are " + ((counter>0.0) ? "attacking" : (counter<0.0) ? "recovering" : "standing still") + ". Swing is " + swing + ", enemy swing is " + enemyswing + ", and upswing is " + upswing + ".");
+t.restart(); t.resume();
+}// Stats.
+
+if(enemy>0.0) {enemy-=t.elapsed; if(enemy<=0.0) {
+
+ if(((enemyswing&down)==down)&&(legs)) {legs=false;
+ pool.play_stationary("sounds/leg.wav", false);
+voice.speak_interrupt("Your legs have been hit!");
+}
+else {
+//t.pause(); alert("Hit!", "Counter is " + counter + "."); t.restart(); t.resume();
+pool.play_stationary("sounds/hit" + random(1, 4) + ".wav", false);
+ lives--;
+voice.speak_interrupt("" + lives + " left");
+}// dead.
+enemy=-2500+(25*kills);
+}// Enemy from above
+}//descending.
+else if(enemy<0.0) {enemy+=t.elapsed; if(enemy>=0.0) {enemy=0.0;
+}}//enemy ascending.
+if(enemy==0.0) {enemy=2500-(kills*25);
+do {
+enemyswing=random(0, 6);
+if((enemyswing==3)&&(!legs)) {
+t.pause();
+legs=true;
+pool.play_stationary("sounds/menu_activate.wav", false);
+ voice.speak_interrupt_wait("Your legs have been healed.");
+wait(500);
+ t.restart(); t.resume();
+}
+} while(enemyswing==3);
+pool.play_1d("sounds/" + (((enemyswing&down)==0) ? "katana" : "sword") + "" + random(1, 6) + ".wav", 0, (((enemyswing&left)==left) ? -5 : ((enemyswing&right)==right) ? 5 : 0), false);
+}// enemy swing.
+t.restart(); t.resume();
+}// loop.
+voice.speak_interrupt("Game over! You killed " + kills + " enemies. Press enter to continue.");
+while(!key_pressed(KEY_RETURN)) {wait(10);}
+voice.speak_interrupt("Main menu");
+}
+
+void mouseControls() {
+double x=MOUSE_X;
+double y=MOUSE_Y;
+if((absolute(x)>10)||(absolute(y)>10)) {
+if(x<-10) {swing|=left; swing&=~right;}
+ else if(x>10) {swing|=right; swing&=~left;}
+ if(y>10) {swing|=down; upswing=false;}
+ else if(y<-10) {upswing=true; swing&=~down;}
+if(counter==0.0) pool.play_1d("sounds/" + (((swing&down)==down) ? "sword" : "katana") + random(1, 6) + ".wav", 0, (((swing&left)==left) ? -3 : ((swing&right)==right) ? 3 : 0), false);
+if(counter==0.0) counter=500-(5*kills);
+}// swing.
+}// mouse controls.
+void keyboard() {
+bool set=(counter==0.0);
+if(key_pressed(KEY_LEFT)) {swing|=left; swing&=~right;}
+ else if(key_pressed(KEY_RIGHT)) {swing|=right; swing&=~left;}
+ else if(key_pressed(KEY_UP)) {upswing=true; swing&=~down;}
+ else if(key_pressed(KEY_DOWN)) {swing|=down; upswing=false;}
+ else set=false;
+if(set) {counter=500-(5*kills);
+pool.play_1d("sounds/" + (((swing&down)==down) ? "sword" : "katana") + random(1, 6) + ".wav", 0, (((swing&left)==left) ? -3 : ((swing&right)==right) ? 3 : 0), false);
+}
+}// keyboard.

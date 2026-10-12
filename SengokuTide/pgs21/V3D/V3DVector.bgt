@@ -1,0 +1,70 @@
+#include "V3DSoundManager.bgt"
+
+class V3DVector
+{
+	int position_handle;
+	vector position;
+	
+	V3DVector(float x=0f, float y=0f, float z=0f)
+	{
+		dictionary@ result;
+		position = vector(x, y, z);
+		
+		//Allocate vector
+		@result = v3.call(v3_new, x, z, y);
+		
+		//Get the handle to control memory
+		result.get("0", this.position_handle);
+	}
+	
+	~V3DVector()
+	{
+		v3.call(v3_free, position_handle);
+	}
+	
+	V3DVector(vector v)
+	{
+		V3DVector(v.x, v.y, v.z);
+	}
+	
+	void setX(float x)
+	{
+		this.position.x = x;
+		updateHandle();
+	}
+	
+	void setY(float y)
+	{
+		this.position.y = y;
+		updateHandle();
+	}
+	
+	void setZ(float z)
+	{
+		this.position.z = z;
+		updateHandle();
+	}
+	
+	void setValues(float x, float y, float z)
+	{
+		this.position.x = x;
+		this.position.y = y;
+		this.position.z = z;
+		updateHandle();
+	}
+	
+	float getX() {return this.position.x;}
+	float getY() {return this.position.y;}
+	float getZ() {return this.position.z;}
+	int getHandle() {return this.position_handle;}
+	
+	void updateHandle()
+	{
+		v3.call(v3_set, this.position_handle, this.position.x, this.position.y, this.position.z);
+	}
+	
+	float length()
+	{
+		return this.position.length();
+	}
+}

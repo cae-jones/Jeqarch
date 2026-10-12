@@ -1,0 +1,374 @@
+#include "V3D\\FMODExSoundManager.bgt"; //here we chose the FMODEx SoundManager
+#include "V3D\\V3DSound.bgt";
+#include "V3D\\V3DVector.bgt"
+#include "sound_buffer.bgt"
+#include "c:\\BGRotation\\3DIO.bgt"
+//#include "c:\\bgincludes\\FiniteStateMachine.bgt"
+
+
+//Sound file paths:
+const string STEPS="c:/jeqo/games/sounds/steps/", steps=STEPS, sfx2="../JeqoconB/sfx2/", Swamp = "../Swamp/sounds/", sfx="../JeqoconB/sfx/", voices="../JeqoconB/voices/", sounds2="../../sounds/", DL="../../", KA = "../../utils/KA/";
+
+//Flag constants for people:
+const uint P_IT=1, P_FROZEN=2, P_HIDDEN=4, P_CLIMBING=8, P_WET=0X10, P2D=0X20, P_CROUCH=0x40;
+
+class Person : FSM {
+	rect@ bounds; // Shape?
+	string name;
+	vector v(0,0,0), theta(1,0,0);
+	float steptime=0.0, stepspeed=0.25;
+	// It feels like speed and agility and such are important, but I don't wanna.
+	double speed=4.0, jump=6.0, climbX=2.0, climbY=3.0;
+	// If we're going that far, maybe height and weight should matter. ... Don't wanna.
+	int flags=0;
+	Map@ gloc=null;
+	Person@ target=null, partner=null;
+	V3DVector@ position=null;
+	V3DSound@ snd=null;
+	
+	MObj@ atop=null; // We're probably using this for any object we're interacting with, since it will inevitably be just one at a time.
+	
+	// Anything else? Probably.
+	
+	Person() {
+		@(this.bounds)=new_rect(0,0,1,1);
+	}
+	bool intersects(shape@ s) {
+		if(s is null or this.bounds is null) return false;
+		return s.intersects(this.bounds);
+	}
+	bool intersects(Person@ p) {
+		if(p is null or this.bounds is null) return false;
+		return this.bounds.intersects(p.bounds);
+	}
+	
+	void update_position(bool is3d=true) {
+		if(this.bounds is null) return;
+		if(this.position is null) {
+			V3DVector temp;
+			@(this.position)=temp;
+		}
+		if(is3d) this.position.setValues(this.bounds.x, 0, this.bounds.y);
+		else this.position.setValues(this.bounds.x, this.bounds.y, 0);
+	}
+	
+	string getTerrain() {
+		if(this.gloc is null) return "Grass";
+		else if(@(this.atop)!=null and this.atop.terrain!="") return this.atop.terrain;
+		// Do we update atop when you're running around in a 3d map, for terrain pieces? I want to say yes.
+		return this.gloc.terrain;
+	}
+	void always(double dt) {
+		
+		if(v.x!=0.0 or v.y!=0.0 or v.z!=0.0) {
+			// We need to know if we're in 2d or 3d.
+			bool is_3d=(this.gloc is null or !(this.gloc.is_2d));
+			bool grounded = (is_3d or this.gloc is null or this.gloc.onGround(this.bounds));
+			double dy = this.v.y;
+			if(is_3d) dy=this.v.z;
+			rect@ targ=cast<rect>(this.bounds.translate(v.x*dt, dy*dt)); // DANGER! We can only move in 2d, so this _should_ work, but be sure that nothing ever conflicts with it!
+			double h2=this.bounds.height/2.0, w2=this.bounds.width/2.0;
+			// Hopefully, maps are small enough that running this check every frame is acceptable.
+			bool moveme=true, stepcount=true;
+			string terrain="Grass";
+			if(@(this.gloc)!=null) {
+				terrain=this.gloc.terrain;
+				for(uint i=0; i<this.gloc.objs.length(); i++) {
+					MObj@ o=this.gloc.objs[i];
+					if(o is null) continue;
+					if(o.intersects(this.bounds)) {
+						if(((o.flags)&MSOLID)==MSOLID) {
+							// Could move you closer. Don't wanna.
+							if(this.v.y<0 and (!is_3d) and this.bounds.y-h2>=o.getTop(targ.x)) {
+								this.landOn(o);
+								targ.y=this.bounds.y;
+							}//Landing.
+							else {
+								moveme=false;
+								this.addSound(o.getBump());
+								this.v*=0.0; // Are you sure? Wall-jumping seems like cheating.
+							}//Not landing.
+						}// Bump.
+						else if(is_3d) {
+							// Do you automatically enter anything, or is it always press enter?
+							if(o.bounds.contains(targ.x, targ.y)) {
+								@(this.atop)=o;
+								terrain=o.terrain;
+							}//Enter.
+							if(@(o.next)!=null) {
+								// Some should be automatic. Some should not. Which is it?
+							}// What to do if there is a map attached to this object?
+						}// Umm.
+						else if(((o.flags)&MPLATFORM)!=0) {
+							if(this.bounds.y-h2>=o.getTop(o.bounds.x)) {
+								this.landOn(o);
+								targ.y=this.bounds.y;
+							}//Land on platforms.
+						}// Platform.
+						else if(((o.flags)&MSLIDE)!=0) {
+							// Let's say it doesn't count if your center is not on the slide, for simplicity.
+							double top=o.getTop(targ.x);
+							if(targ.y-top>h2) continue;
+							else if(targ.y-h2<top-0.2) {
+								this.addSound(o.getBump());
+								moveme=false;
+								this.v*=0; // Hmm.
+								continue; //?
+							}//Bump?
+							else if(@(this.atop)!=@o) this.landOn(o);
+							// Rotate v to match the slope of the slide.
+							double m = o.bounds.height/o.bounds.width;
+							double d = square_root( (o.bounds.width*o.bounds.width) + (o.bounds.height*o.bounds.height));
+							if(d==0) alert("ERROR!", "0-length slide? " + o.bounds.width + ", " + o.bounds.height + "?");
+							double dy=o.bounds.height/d, dx=o.bounds.width/2;
+							if(((o.flags)&MSLIDEDR)!=0) dy*=-1;
+							double av=v.length();
+							// are we facing left or right?
+							if(v.x<0) v.x = -av*(o.bounds.width/d);
+							else v.x = av*(o.bounds.width/d);
+							if(v.y<=0) v.y = -av * (o.bounds.height/d);
+							//If v.y>0, then we're in a weird place, aren't we?
+							// I want you to be able to run up slides, so ... Idk how this is going to work.
+
+						}// Slides are trickficult.
+						//Ladders?
+					}// Intersects.
+					else {
+						if(this.atop is o) {
+							@(this.atop)=null;
+							if(((o.flags)&MLADDER)!=0) this.flags&=~P_CLIMBING;
+							//Make a sound for falling.
+							if(((o.flags)&MLADDER)==0 and this.v.y<=0.0) this.addSound(sfx2 + "downou.wav");
+							else if(((o.flags)&MLADDER)!=0) this.addSound(getSlide(o.terrain));
+						}//No longer atop.
+					}// No intersection.
+				}//Obj loop.
+				if(@(this.atop)!=null and this.atop.terrain!="") terrain=this.atop.terrain;
+			}//Non-null gloc.
+			if(moveme) {
+				this.bounds.x=targ.x;
+				this.bounds.y=targ.y;
+				if(stepcount) {
+					this.steptime-=dt;
+					if(this.steptime<=0.0) {
+						this.sounds.insert_last(STEPS + terrain + "/run" + random(1, 6) + ".wav");
+						this.steptime=this.stepspeed;
+						// Catch things which alter it. Are we climbing, for example?
+					}//Reset.
+				}//Step sounds.
+			}
+		}// Movement.
+	}//Always.
+	
+	void landOn(MObj@ o) {
+		@(this.atop)=o;
+		if(o is null) return;
+		bool nl=true;
+		// Are we falling? Sliding? Rolling?
+		this.v.y=0.0;
+		if(@(o.bounds)!=null) this.bounds.y=o.getTop(o.bounds.x);
+		string terrain=o.terrain;
+		if(terrain=="") {
+			if(@(this.gloc)!=null) terrain=this.gloc.terrain;
+			else terrain="Stairs"; // If you're landing on it, it's presumably artificial.
+		}//Default terrain.
+		string toplay=STEPS + terrain + "/run" + random(6, 9) + ".wav";
+		if(!file_exists(toplay)) toplay = STEPS + terrain + "/run" + random(1, 6) + ".wav";
+		// Check for weird cases. Water, slides, etc.
+		this.addSound(toplay);
+	}// Landing.
+	
+	void setGloc(Map@ g) {
+		if(@(this.gloc)!=null) this.gloc.remove(this);
+		g.add(this);
+		@(this.gloc)=g;
+	}//Set Gloc. Beware position!
+	bool opEquals(Person@ p) {return @this==@p;}
+}
+
+// Flags for Map Objects:
+const int MSOLID=1, MMOVING=2, MLADDER=4, MSLIDEDL=8, MENTER=0X10, M2D=0X20, MLOCKED=0X40, MWET=0X80, MSLIDEDR=0x100, MSLIDE=MSLIDEDL|MSLIDEDR, MPLATFORM=0X200;
+
+class MObj {
+	string snd_fn="";
+	rect@ bounds=null;
+	string name="", terrain="";
+	int flags=0; // Are we using this for all other info? Seems dangerous.
+	V3DSound@ snd=null;
+	V3DVector@ position=null;
+	vector v(0,0,0); // This should be used rarely. How rarely? Almost never.
+	Map@ next=null;
+	MObj() {}
+	MObj(string n, rect@ r, string t="") {
+		this.name=n;
+		@(this.bounds)=r;
+		this.terrain=t;
+	}
+	
+	string getBump() {
+		if(this.terrain!="") {
+			string ret=STEPS + this.terrain + "/bump";
+			if(file_exists(ret + ".ogg")) return ret + ".ogg";
+			else if(file_exists(ret + ".wav")) return ret + ".wav";
+			else if(file_exists(Swamp + "Obstacles/" + this.terrain + ".wav")) return Swamp + "Obstacles/" + this.terrain + ".wav";
+			else if(string_contains("Steel Metal2 Pipe", this.terrain, 1)>=0) return Swamp + "Obstacles/Fence.wav"; //steps + "Metal2/bump.ogg";
+			else if(string_contains("Wade Water Swim Swamp Mud Rock2 Gravel Snow", this.terrain, 1)>=0) return STEPS + this.terrain + "/fall" + random(1, 4) + ".wav";
+			else if(terrain=="Plank" or terrain=="Stairs" or string_left(terrain, 4)=="Wood" or terrain=="CarpetedStairs") ret="../../66276_Wood_impact_wood_medium_1.wav";
+			else if(terrain=="Leaves") ret = steps + "Leaves2/bump.ogg";
+			else return steps + "Stone/bump.ogg";
+			return ret;
+		}
+		return STEPS + "Soil/bump.ogg"; // Maybe return ""?
+	}
+	
+	bool intersects(shape@ s) {
+		if(s is null or this.bounds is null) return false;
+		return s.intersects(this.bounds);
+	}
+	bool intersects(Person@ p) {
+		if(p is null or this.bounds is null or p.bounds is null) return false;
+		return p.bounds.intersects(this.bounds);
+	}
+	void update_position(bool is3d=true) {
+		if(this.bounds is null) return;
+		if(this.position is null) {
+			V3DVector temp;
+			@(this.position)=temp;
+		}
+		if(is3d) this.position.setValues(this.bounds.x, 0, this.bounds.y);
+		else this.position.setValues(this.bounds.x, this.bounds.y, 0);
+	}
+	double getTop(double x) {
+		if(this.bounds is null) return -12000000.0;
+		if(absolute(this.bounds.x-x)>this.bounds.width*2) return -12000000.0;
+		// Slides!
+		if(((this.flags)&MSLIDE)!=0) {
+			double dx = x-(this.bounds.x-(this.bounds.width/2.0));
+			if(this.bounds.width==0.0) alert("Error!", "0width object! " + this.name + ", at " + this.bounds.x + ", " + this.bounds.y + "!");
+			double m = this.bounds.height/this.bounds.width;
+			double b=this.bounds.y-(this.bounds.height/2.0); // Should I save this?
+			if(((this.flags)&MSLIDEDL)!=0) return (m*dx)+b;
+			else return (b+this.bounds.height)-(m*dx); //???
+		}// Slides.
+		return this.bounds.y+(this.bounds.height/2.0);
+	}
+	bool opEquals(MObj@ o) {return @o==@this;}
+	void step(double dt) {
+		//Update position for moving objects, do anything else of interest.
+		
+	}//Step object.
+}//Map object. Equipment, terrain, etc.
+
+class Map {
+	MObj@ parent=null; // For determining where you come out of 2D maps, and also naming submaps.
+	rect@ bounds=null; // Hmm. Maybe making it a subclass of rect isn't a bad idea?
+	string terrain="Grass";
+	MObj@[] objs;
+	Person@[] chars;
+	bool is_2d=true;
+	// I feel like I'm missing something.
+	Map() {}
+	Map(int width, int height) {
+		@(this.bounds)=new_rect(0,0, width, height);
+		this.update_edges();
+	}
+	
+	void update_edges() {
+		if(this.bounds is null) return;
+		double hw=this.bounds.width/2.0, hh=this.bounds.height/2.0;
+		this.left=this.bounds.x-hw;
+		this.right=this.bounds.x+hw;
+		this.top=this.bounds.y+hh; // I assume that fmodex uses (right, up, out) for the positive axes. Should check.
+		this.bottom=this.bounds.y-hh;
+	}
+	
+	void update_all() {
+		for(uint i=0; i<this.objs.length(); i++) {
+			MObj@ o=this.objs[i];
+			if(o is null) continue;
+			//Is it moving? Otherwise, ignore.
+			if(((o.flags)&MMOVING)==0) continue;
+			// I don't want to update moving objects here. Should we do it here anyway?
+			// Does the map's 2d/3d status take priority, or does the object's?
+			bool xz=!this.is_2d;
+			if((xz) and (((o.flags)&M2D)!=0)) xz=false;
+			o.update_position(xz);
+			if(@(o.snd)!=null and @(o.position)!=null) {
+				o.snd.set3DPosition(o.position);
+			}//Sound for moving objects
+		}//Objs
+		
+		bool xz=!(this.is_2d);
+		for(uint i=0; i<this.chars.length(); i++) {
+			Person@ p=this.chars[i];
+			if(p is null) continue;
+			// I don't think these can conflict with the map in terms of 2d/3d. Maybe they can, though? Hmm.
+			p.update_position(xz);
+			if(@(p.snd)!=null and @(p.position)!=null) p.snd.set3DPosition(p.position);
+			
+		}//people
+		if(this.top==this.bottom and @(this.bounds)!=null) this.update_edges();
+	}//Update.
+	double bottom=0.0, left=0.0, top=0.0, right=0.0;
+	
+	bool onGround(rect@ r) {
+		if(r is null or this.bounds is null or !(this.is_2d)) return true;
+		if(this.bottom==this.top) this.update_edges();
+		return (r.y-(r.height/2.0)<=this.bottom);
+	}//Ask the map if we're on the ground or not.
+	
+	int add(Person@ p) {
+		if(p is null) return -1;
+		int index = this.chars.find(p);
+		if(index>=0) return index;
+		index=this.chars.length();
+		this.chars.insert_last(p);
+		return index;
+	}
+	Person@ remove(Person@ p) {
+		int index = this.chars.find(p);
+		if(index<0) return null;
+		this.chars.remove_at(index);
+		// Should we remove all references to p, in case there are multiples?
+		return p;
+	}
+	
+	int add(MObj@ o) {
+		if(o is null) return -1;
+		int index = this.objs.find(o);
+		if(index>=0) return index;
+		index=this.objs.length();
+		this.objs.insert_last(o);
+		return index;
+	}
+}//Map
+
+string getSlide(string terrain) {
+				string toplay="";
+				if(file_exists(steps + terrain + "/slide.wav")) toplay=steps + terrain + "/slide.wav";
+				else if(string_contains("Steel Metal2 Pipe Roof", terrain, 1)>=0) return steps + "Metal2/slide.wav";
+				else if(string_contains("Wade Puddle Water Swim Swamp Sewer", terrain, 1)>=0) return "sfx2/waterwake2.ogg"; // + ((math_random()>0.5) ? "twirl1.ogg" : "wake2.ogg");
+				else if(terrain=="Leaves" or terrain=="Grass") return steps + "Leaves2/slide.wav";
+				else if(terrain=="Rock") toplay=steps + "/Soil/slide.wav";
+				else if(string_contains("Sand Crawl CarpetedStairs Snow", terrain, 1)>=0) return steps + "Snow/slide.wav"; // Change to sand?
+				else if(string_contains("Rock2 Gravel Glass", terrain, 1)>=0) {
+					toplay="sfx2/concreteSlide1.wav"; //toplay=steps + "Stone/slide.wav";
+				}
+				else toplay=steps + "Cement/slide.wav"; //toplay="sfx2/concreteSlide1.wav"; //toplay=steps + "Stone/slide.wav";
+				//if(time.elapsed>10) error_exit("It took " + time.elapsed + "ms to pick " + toplay + " as the slide sound for " + terrain + "\'s slide.");
+				return toplay;
+}//Get slide.
+string getJump(string terrain) {
+				string toplay=sfx + "lcjump.wav";
+				if(file_exists(steps + terrain + "/jump.wav")) return steps + terrain + "/jump.wav";
+				else if(string_contains("Swim Water Wade Swamp Puddle", terrain, 1)>=0) return "sfx2/waterwake2.ogg"; //+ ((math_random()>0.5) ? "wake2.ogg" : "walk1.ogg");
+				else if(string_contains("Sand CarpetedStairs Snow", terrain, 1)>=0) toplay=steps + "CarpetedStairs/jump.wav";
+				else if(terrain=="Leaves") toplay=steps + "Leaves2/jump.wav";
+				else if(string_contains("Steel Metal2 Pipe", terrain, 1)>=0) toplay=steps + "Metal2/jump.wav";
+				else if(string_contains("Rock2 Gravel Glass Cave", terrain, 1)>=0) toplay=steps + terrain + "/run" + random(1, 6) + ".wav";
+				else if(terrain=="Ice") toplay=steps + terrain + "/run" + random(7, 9) + ".wav";
+				else return steps + "Stone/jump.wav"; // no LCJUMP? I kinda feel like that needs to be used, honestly.
+				return toplay;
+}//Jump
+
+MObj@ newObj(string n, rect@ r, string t) {MObj ret(n, r, t); return ret;}

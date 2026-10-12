@@ -1,0 +1,57 @@
+// We're assuming that y is for elevation, and using z everywhere we'd normally use y.
+
+vector sum_angles(vector a, vector b) {
+	// sin(a+b) = sin(a)*cos(b) + cos(a)*sin(b)
+	// cos(a+b) = cos(a)*cos(b) - sin(a)*sin(b)
+	return vector(
+		a.x*b.x - a.z*b.z,
+		0,
+		a.z*b.x + a.x*b.z
+	);
+}
+
+vector dif_angles(vector a, vector b) {
+	// sin(a-b) = sin(a)*cos(b) - cos(a)*sin(b)
+	// cos(a-b) = cos(a)*cos(b) + sin(a)*sin(b)
+	return vector(
+		a.x*b.x + a.z*b.z,
+		0,
+		a.z*b.x - a.x*b.z
+	);
+}
+
+vector sum_angles(double ax, double ay, double bx, double by) {
+		// sin(a+b) = sin(a)*cos(b) + cos(a)*sin(b)
+	// cos(a+b) = cos(a)*cos(b) - sin(a)*sin(b)
+	return vector(
+		ax*bx - ay*by,
+		0,
+		ay*bx + ax*by
+	);
+}
+
+vector dif_angles(double ax, double ay, double bx, double by) {
+	// sin(a-b) = sin(a)*cos(b) - cos(a)*sin(b)
+	// cos(a-b) = cos(a)*cos(b) + sin(a)*sin(b)
+	return vector(
+		ax*bx + ay*by,
+		0,
+		ay*bx - ax*by
+	);
+}
+
+// 1:48 PM 6/9/2018:
+// Returns the unit vector corresponding to the given angle.
+vector uvec(double theta) {
+	vector ret(cosine(theta), 0, sine(theta));
+	return ret;
+}
+
+string vecstr(vector v) {
+	return "(" + round(v.x, 2) + ", " + round(v.y, 2) + ", " + round(v.z, 2) + ")";
+}
+
+double len2(vector v) {
+	/* returns the square of the length of v, since comparing distances without square roots is computationally cheaper. */
+	return (v.x*v.x)+(v.y*v.y)+(v.z*v.z);
+}

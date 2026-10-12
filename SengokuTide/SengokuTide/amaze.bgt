@@ -1,0 +1,139 @@
+
+// The Amaze
+
+// By Philip Bennefall
+
+/*
+Algorithm description:
+
+The maze is constructed as a two dimentional grid of arbitrary size. Each square can contain either the value 0 or the value 1. A value of 0 means that the square is empty and free to walk on, while a value of 1 indicates a wall. At the start of the generation process, all the squares are filled with 1 which is to say walls. The algorithm works by initially selecting a starting square at random, clearing the wall from that square and then selecting a random direction in which to travel. At the next iteration, the algorithm has a much greater probability of selecting the current direction again than choosing an entirely new one. This results in mazes with many long corridors, which is especially good for video games. Lowering this probability will cause many more twists and turns in the generated mazes, which may or may not be desireable. On the other hand, setting it too high will generate very long and straight paths which are not very interesting.
+
+As soon as the algorithm reaches the edge of the maze, it backtracks by using a cache of all the squares that have been cleared thus far. It selects a square from this cache at random, and then continues with a new direction from that point.
+
+Depending on how many times the loop is run in relation to the total size of the maze, the maze will have more or less space available for the user to move in. The default parameters mean that roughly 25 % of the maze is cleared out, and that the corridors are relatively long but still with plenty of interesting variations.
+*/
+
+vector[] turns; // Hmm.
+
+int[][] amaze(
+ int maze_size=30,
+// The maze is always a square, so setting this constant to 10 generates a 10 by 10 maze (100 squares).
+int val=4,
+
+ int straight_probability=8
+// Setting this constant to 1 means that there is an equal chance of changing direction on each new iteration.
+) {
+
+ int rounds=(maze_size*maze_size)/val;
+// This means the number of squares that are emptied (approximately). 25 % is a good default if you want relatively thin passages.
+
+
+int[][] maze;
+vector[] cache;
+int cache_size;
+turns.resize(0); turns.reserve(maze_size/val); // 5:45 PM 2/12/2013 by CAEJones.
+
+//tts_voice speech;
+
+timer counter;
+//alert("Starting", "Starting maze generation with " + rounds + " rounds.");
+counter.restart();
+
+// Resize the grid to the proper dimentions and fill it with walls.
+maze.resize(maze_size);
+for(int i=0;i<maze_size;i++)
+{
+maze[i].resize(maze_size);
+for(int i2=0;i2<maze_size;i2++)
+maze[i][i2]=1;
+}
+
+// Select a starting location, and declare some other variables.
+int x=random(1, maze_size-2);
+int y=random(1, maze_size-2);
+int direction=0;
+int last_direction=0;
+int last_x=x;
+int last_y=y;
+
+// Now we create the cache that we will fill with each square that we clear. We begin by inserting the starting point.
+cache.resize(rounds+1);
+vector temp_cache;
+temp_cache.x=x;
+temp_cache.y=y;
+temp_cache.z=0;
+cache_size=1;
+cache[cache_size-1]=temp_cache;
+
+// Now we run the generation loop.
+for(int i=0;i<rounds;i++)
+{
+x=last_x;
+y=last_y;
+direction=last_direction;
+if(last_direction!=0)
+{
+if(random(1, straight_probability)==1)
+{
+direction=random(1, 4);
+ vector tp(last_x, last_y);
+ turns.insert_last(tp);
+}
+}
+else
+{
+direction=random(1, 4);
+}
+int old_x=x;
+int old_y=y;
+if(direction==1)
+x-=1;
+if(direction==2)
+x+=1;
+if(direction==3)
+y-=1;
+if(direction==4)
+y+=1;
+
+// Have we reached a grid boundry?
+if(x<1 or y<1 or x>maze_size-2 or y>maze_size-2)
+{
+int random_point=random(0, cache_size-1);
+x=cache[random_point].x;
+y=cache[random_point].y;
+last_x=x;
+last_y=y;
+last_direction=0;
+i-=1;
+continue;
+}
+
+// Todo: Should we stop the current iteration if the new direction points to an already free square? Probably not.
+/*
+if(maze[x][y]==0)
+{
+int random_point=random(0, cache_size-1);
+x=cache[random_point].x;
+y=cache[random_point].y;
+last_x=x;
+last_y=y;
+last_direction=0;
+i-=1;
+continue;
+}
+*/
+
+maze[x][y]=0;
+last_direction=direction;
+last_x=x;
+last_y=y;
+temp_cache.x=x;
+temp_cache.y=y;
+temp_cache.z=0;
+cache_size+=1;
+cache[cache_size-1]=temp_cache;
+}
+counter.pause();
+//alert("Result", "Done! The operation took " + counter.elapsed + " milliseconds.");
+return maze;
+}// Amaze.

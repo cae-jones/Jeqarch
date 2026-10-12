@@ -1,0 +1,58 @@
+#include "bass.bgt"
+#include "v3.bgt"
+#include "V3DVector.bgt"
+#include "V3DSound.bgt"
+
+const uint FALSE = 0;
+const uint TRUE = 1;
+
+/*
+This interface is made to choose the SoundManager you want in your game without having to change anything in your program. Any developer who wants to create its own SoundManager must implement this interface.
+
+ALL SoundManagers MUST load at least v3.dll
+*/
+interface V3DSoundManager
+{
+	//Specify the dll place directory. Should be "" by default.
+	void setLoadingDirectory(string path);
+	
+	//Loads dlls
+	bool load();
+	
+	//Create the sound system after having loaded dlls
+	void init();
+	
+	//specify the position and pointing direction of the listener
+	void setListenerPosition(V3DVector@ pos, V3DVector@ ori=null);
+	
+	//updates the sound system
+	void update();
+	
+	//tells if dlls are loaded
+	bool isActive();
+	
+	//called by V3DSound to allocate a new sound and get the handle.
+	//Returns a uint array containing : [sound handle, channel handle, length]
+	uint[] newSound(string soundpath);
+	
+	//Called by V3DSound to pause its sound
+	void pauseSound(V3DSound@ sound);
+	
+	//Called by V3DSound to play its sound
+	void playSound(V3DSound@ sound, bool restart=false);
+	
+	//Called by V3DSound to play its sound looped
+	void playLooped(V3DSound@ sound, bool restart=false);
+	
+	//Called by V3DSound to stop its sound
+	void stopSound(V3DSound@ sound);
+	
+	//Called by V3DSound to seek in its sound
+	void seekSound(V3DSound@ sound, double pos);
+	
+	//Called by V3DSound to destroy its sound
+	void destroySound(V3DSound@ sound);
+	
+	//Called by V3DSound to set its sound position
+	void setSound3DPosition(V3DSound@sound, V3DVector@ position);
+}

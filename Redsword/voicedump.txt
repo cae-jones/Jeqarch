@@ -1,0 +1,103 @@
+(None of these have to match word for word! If it's too much, we can try to work out something else.)
+
+"There is no data in that slot." nofile.ogg
+braille*.ogg, where * is the number of cells. Options are {0, 30, 20, 18, 12}. 0 would probably be read as "no braille"
+"Press the button to use" filename not yet specified.
+"Center joystick and press any button to callibrate." filename not yet specified.
+"Joystick unavailable" filename not yet specified.
+"Use up and down to view actors." FNYS
+--- Object viewer is not set up for self-voicing. It reads names, positions ("at"), and health ("health", "life", or "hp").
+Names:
+"Redsword"
+"Shotgun Guard"
+"Uzi Guard"
+"Ninja"
+"Ninja Master"
+"Cohere" (pronunciation unspecified)
+"Robot"
+"Big Robot"
+"Drone"
+"Silver Guardian"
+"Steel Guardian"
+"Timberwolf"
+"Alpha Wolf"
+"Nia"
+"Jovian Acolite" (Both of these are words; I'm not sure if I spelled them right.)
+"Gold Guardian"
+"Lady Juno"
+"Sapphire Helmsmen" (is it possible in Spanish to preserve the pun "helm" as in helmet, and "helm" as in the pilot's place in a ship?)
+"Master Jupiter"
+"Swordkiller"
+Projectiles:
+Bullet
+Shuriken (throwing star)
+Energy beam
+Flying sword
+Fireball
+Missile
+Explosive Blast
+Jupiter Bolt
+
+Short (mostly one or two lines) scenes:
+"Haven\'t seen you in a while. You look like you\'ve had it pretty rough. Hold onto this, and Cohere will be able to help you if you\'re badly hurt." bonus1.ogg (a comrade in armes, so to speak.)
+"This scuba gear should let you stay under water much longer. Now get rid of those guards!" scuba.ogg (Young friend)
+"What are you waiting for?" waitingfor.ogg (Young friend)
+"Oh, it\'s you. We\'re busy holding off Master Jupiter, but Nia might be able to help you." bonus3.ogg (A serious leader)
+"The future is one led by Jovians. None can oppose me." voice/Master Jupiter/enter*.ogg, where enter is the language number. (A serious, charismatic villain.)
+(This one is long. I'd shorten it if I could think of a way.) "You thought you had nothing left to lose, but that was before the red sword filled you with uncontrollable rage. Of course, you were the test subject; the killer they secretly intended to give the sword--before your rage destroyed the test facility--is still out there, still deadly, and does not mind the red sword\'s terrible side-effects. And, don\'t forget! There was originally a good reason they created the red sword." (FNYS, probably level0.ogg)
+"Watch out for pits. Some of these platforms move." (FNYS, probably level1.ogg)
+"Looking for someone? Watch your step. I\'d prefer not to reach through spikes when I take the Redsword from your corpse." level2.ogg (a violent criminal)
+"Where have you been? I had to break out of that place without you! They can\'t find me, but there are too many drones outside." level3.ogg (Young friend)
+"That guy who calls himself Master Jupiter is attacking a city on the other side of this canyon. Maybe the Red Sword was created to stop him?" level4.ogg
+"If the Redsword is good for anything, it should defeat Master Jupiter!" level5.ogg
+"I hope you weren\'t trying to hide. I have a fancy sword of my own, now, but you still have the one I was supposed to get." level6.ogg (A violent criminal)
+"Game over. You win. Sorry about that." FNYS (I don't think this actually plays anymore; it was a placeholder message while testing.)
+"With your murderous rival defeated, and Master Jupiter neutralized, you can finally put down the red sword. But should you?" ending.ogg
+
+Other (mostly menus):
+"There is already data in that slot. Do you want to overwrite it?" overwrite.ogg (or overwrite.wav)
+"Main Menu" main.ogg (or main.wav; it's important that the menus all use the same filetype.)
+"Select the button to modify." FNYS
+"Do you want to quit? Your progress will not be saved." FNYS
+"Choose the slot to play in." select_slot.ogg
+"Choose difficulty." difficulty.*
+
+(The following should have the same filetype as the numbers. The filetypes don't have to match between languages, but within a language they need to match.)
+ "New Game" new_game.*
+ "Load Game" load_game.*
+ "Speaker Test" speaker_test.*
+ "Switch Language" switch_language.*
+ "Configure Keyboard" configure_keyboard.*
+ "Configure Joystick" configure_joystick.*
+ "learn sounds" learn_sounds.*
+ "Exit" exit.*
+"yes" yes.*
+"no" no.*
+"go back" back.*
+numbers (0-20, 30, 40, 50, 60, 70, 80, 90, hundred. I'm not sure about minus/negative.)
+"easy" dif0.*
+"normal" dif1.*
+"hard" dif2.*
+"hardest" dif3.*
+
+
+Learn sounds menu (I don't have a standard for any voice files for this):
+"Drop ahead"
+"wall ahead, or cursor finds normal block"
+"platform above"
+"Pit"
+"radar finds pit"
+"health up"
+"Door, switch, or person"
+"spikes"
+"Air, or falling block"
+"breakable block"
+"moving platform"
+"key"
+"fire"
+"lava"
+"floating block"
+"sliding block"
+"you get thrown"
+"Guardian teleports"
+
