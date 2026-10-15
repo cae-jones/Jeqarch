@@ -31,3 +31,14 @@ Sonic/**/*.WAV
 Sonic/**/*.ogg
 Sonic/**/*.mp3
 Sonic/s1.dat
+
+# Triastra and LePetitPlanet: saves, voice settings and sound logs written at runtime
+Triastra/trisave*.dat
+Triastra/trisound.log
+Triastra/voice.cfg
+LePetitPlanet/voice.cfg
+**/sound_missing.log
+**/sound_all.log
+
+# Mario: saves
+Mario/asmb.dat

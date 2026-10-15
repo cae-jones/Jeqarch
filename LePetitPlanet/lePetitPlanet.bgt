@@ -1,0 +1,734 @@
+#include "custom_voice.bgt" // Jeqocon2: local copies of c:\bgIncludes
+#include "FiniteStateMachine.bgt"
+//#include "afpack.dat" // Jeqocon2: the embedded pack is lost; sounds load from sounds/
+#include "paths.bgt" // Jeqocon2: sound path mapping
+
+
+custom_voice voice;
+sound_pool pool;
+int x=0, y=0, room=0;
+
+const int yard=0, livingroom=1, hallway=2, kitchen=3, bedroom=4, attic=5, beach=6;
+
+sound@ beacon;
+tone_synth synth;
+int hp=20;
+
+// animals:
+const int bees=0, duck=1, seal=2, monkey=3, lion=4, spider=5, pig=6, donkey=7, pirate=8;
+
+// Items:
+const int health=0, earth=1, fire=2, wind=3, water=4;
+int[] items(7);
+vector[] ipoints(7);
+int16[] sizes(7);
+// Doors are always in the middle, and there is only ever one door.
+string[] itemnames={"menu/menu_activated.wav", "sfx2/yc_earth.wav", "sfx2/yc_fire.wav", "sfx2/yc_wind.wav", "sfx2/yc_water.wav", "sfx2/(gasp).wav"};
+int inv=0;
+
+vector[] enemypose(9);
+int[] enemyrooms(9);
+int[] enemyslots(9);
+
+string[] terrains={
+"soil",
+"bktile",
+"stone",
+"big",
+"stone",
+"plank",
+"sand"
+};
+
+void set_room(int r) {
+room=r;
+pool.destroy_all();
+int left=0;
+int right=(sizes[r]&0xff00)>>8;
+int south=0;
+int north=sizes[r]&0xff;
+
+if(x<=0) x=right;
+else if(x>=((sizes[room]&0xff00)>>8)) x=left;
+else x=(left+right)/2;
+
+if(room==hallway and r==livingroom) y=north-1;
+else if(y<=0) y=north;
+else if(y>=(sizes[room]&0xff)) y=south;
+else y=(north+south)/2;
+
+
+if(r==beach) {
+pool.play_extended_2d("sounds/ambient - high quality/beach_01.wav", x, y, left, north, 0, right, 1, 1, true, 0, 0, 0, 100);
+pool.play_extended_2d("env/BrownGhost.wav", x, y, left, south, 0, right, 1, 1, true, 0, 0, 0, 100);
+}
+else if(r==yard) {
+pool.play_extended_2d("env/BrownGhost.wav", x, y, left, north, 0, right, 1, 1, true, 0, 0, 0, 100);
+pool.play_extended_2d("sounds/ambient - high quality/insects_01.wav", x, y, left, south, 0, right, 15, 15, true, 0, 0, 0, 100);
+}
+else {
+if(r!=kitchen) pool.play_extended_2d("env/BrownGhost.wav", x, y, left, south, 0, right, 1, 1, true, 0, 0, 0, 100);
+if(r!=livingroom) pool.play_extended_2d("env/BrownGhost.wav", x, y, left, north, 0, right, 1, 1, true, 0, 0, 0, 100);
+if(r!=hallway) pool.play_extended_2d("env/BrownGhost.wav", x, y, left, south, 0, 1, 21, north, true, 0, 0, 0, 100);
+if(r==livingroom) pool.play_extended_2d("env/BrownGhost.wav", x, y, right, south, 1, 1, 1, north-3, true, 0, 0, 0, 100);
+else pool.play_extended_2d("env/BrownGhost.wav", x, y, right, south, 1, 1, 21, north, true, 0, 0, 0, 100);
+}
+
+if(r==attic) {
+pool.play_extended_2d("env/BrownGhost.wav", x, y, (left+right)/2, (north+south)/2, 1, 2, 1, 1, true, 0, 0, 0, 360);
+}
+
+beacon.stop();
+if(items[r]>=0) {
+position_sound_2d(beacon, x, y, ipoints[r].x, ipoints[r].y, pool.pan_step, pool.volume_step, pool.behind_pitch_decrease, pool.behind_volume_decrease);
+beacon.play_looped();
+}
+for(uint i=0; i<enemyslots.length(); i++) enemyslots[i]=-1;
+
+room=r;
+}
+
+timer time;
+vector[] chairs(4);
+int[] chairrooms(4);
+string face="N";
+
+void main() {
+//set_sound_storage("*"); // Jeqocon2: no pack
+voice.load_config("voice.cfg");
+voice.config_path="voice.cfg";
+pool.behind_pitch_decrease=5;
+synth.reset();
+synth.waveform_type=4;
+synth.set_edge_fades(8, 500);
+synth.note_ms("A4", 500);
+@beacon=synth.write_wave_sound();
+
+play_game();
+}
+
+void play_game() {
+hp=20;
+room=yard;
+sizes[yard]=0x2018;
+sizes[beach]=0x3014;
+sizes[livingroom]=0x1010;
+sizes[kitchen]=0x1010;
+for(uint i=0; i<chairs.length(); i++) {
+chairrooms[i]=kitchen;
+chairs[i].x=(i==0) ? 2 : i;
+chairs[i].y=(i%2==1) ? 8 : 6+(2*i);
+}
+sizes[hallway]=0x1405;
+sizes[bedroom]=0x100A;
+sizes[attic]=0x2018;
+
+int8 found=0;
+for(uint i=0; i<7; i++) {
+enemyrooms[i]=random(0, 6);
+enemypose[i].x=random(0, ((sizes[enemyrooms[i]]&0xff00)>>8));
+enemypose[i].y=random(0, sizes[enemyrooms[i]]&0xff);
+enemyslots[i]=-1;
+items[i]=random(0, 4);
+ipoints[i].x=random(0, (sizes[i]&0xff00)>>8);
+ipoints[i].y=random(0, sizes[i]&0xff);
+found|=1<<items[i];
+}
+//if(found!=0x1f) clipboard_copy_text(clipboard_read_text() + "\r\nHARD MODE! Not all rings are available!");
+enemyrooms[donkey]=random(0, 6); enemypose[donkey].x=random(0, 25); enemypose[donkey].y=random(1, 15);
+x=15;
+y=33;
+enemyrooms[pirate]=-1;
+enemypose[pirate].z=0; // You have to hit the pirate with everything in order to beat him.
+show_game_window("A modern pirate is smuggling animals! Catch them all with your magic rings! Arrows to move, space to attack, enter to collect/activate, and z/x/c/v for information!");
+room=yard;
+set_room(yard);
+
+while(!key_pressed(KEY_F4)) {
+if(key_pressed(KEY_LCONTROL) or key_pressed(KEY_RCONTROL)) voice.stop();
+else if(key_pressed(KEY_F5)) voice.options_menu();
+else if(key_pressed(KEY_Z)) switch(inv) {
+case earth : voice.speak_interrupt("You are wearing the Earth ring."); break;
+case fire : voice.speak_interrupt("You are wearing the fire ring."); break;
+case wind : voice.speak_interrupt("You are wearing the wind ring."); break;
+case water : voice.speak_interrupt("You are wearing the water ring."); break;
+default : voice.speak_interrupt("No rings.");
+}
+else if(key_pressed(KEY_X)) voice.speak_interrupt(hp + "/20");
+else if(key_pressed(KEY_C)) {
+int score=0;
+for(uint i=0; i<8; i++) {if(enemyrooms[i]<0) score++;}
+voice.speak_interrupt("You have captured " + score + " animals.");
+}// Score.
+else if(key_pressed(KEY_V)) {
+string tosay="Nowhere";
+switch (room) {
+case yard : tosay="yard"; break;
+case hallway : tosay="hallway"; break;
+case beach : tosay="beach"; break;
+case kitchen : tosay="kitchen"; break;
+case attic : tosay = "attic"; break;
+case bedroom : tosay = "bedroom"; break;
+case livingroom : tosay="livingroom"; break;
+}
+
+voice.speak_interrupt("You are " + ((room==beach) ? "at" : "in") + " the " + tosay + ". ");
+}
+else if(key_pressed(KEY_SPACE) and time.elapsed>=200) {
+int lx=x-2;
+int rx=x+2;
+int y1=y-2;
+int y2=y+2;
+
+if(inv>0) {
+
+if(face=="N") y2=y+10;
+else if(face=="E") rx=x+10;
+else if(face=="S") y1=y-10;
+else if(face=="W") lx=x-10;
+else {lx=x-5; rx=x+5; y1=y-5; y2=y+5;}
+
+pool.play_stationary(itemnames[inv], false);
+string element="";
+wait(200);
+switch (inv) {
+case earth : element="sounds/rockmiss_09.wav"; break;
+case fire : element="sounds/bp_ignite_01.wav"; break;
+case wind : element="sfx/air2.wav"; break;
+case water : element="sfx/water2.wav"; break;
+default : element="CSM/Laser " + random(1, 2) + ".wav"; break; // Jeqocon2: the files are "Laser 1"/"Laser 2"
+}
+pool.play_2d(element, x, y, (lx+rx)/2, (y1+y2)/2, false);
+}// rings
+else {
+string[] sounds={
+"sfx2/caej7-(whoosh)0.wav",
+"sfx2/caej7-(whoosh)1.wav",
+"sfx2/caej7-3whooshes.wav",
+"sfx2/caej7-hiya0.wav",
+"sfx2/caej7-hiya1.wav",
+"sfx2/caej7-heiya!.wav",
+"sfx2/yc_eigh.wav",
+"sfx2/yc_hyaaw.wav"
+};
+pool.play_stationary(sounds[random(0, sounds.length()-1)], false);
+lx--; rx++; y1--; y2++;
+}// melee.
+
+bool used=true;
+bool piratecheck=false;
+bool onchair=false;
+for(uint i=0; i<chairs.length(); i++) {
+if(room==chairrooms[i] and x==chairs[i].x and y==chairs[i].y) onchair=true;
+}
+
+for(uint i=0; i<enemyrooms.length(); i++) {
+if(enemyrooms[i]==room and enemypose[i].x>=lx and enemypose[i].x<=rx and enemypose[i].y>=y1 and enemypose[i].y<=y2) {
+
+if(inv==0) pool.play_2d("MHI/h" + random(0, 5) + ".wav", x, y, enemypose[i].x, enemypose[i].y, false);
+
+switch (i) {
+case pig : {
+if(inv==fire or inv==water or (inv==0 and random(0,5)>1)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("sfx2/Splat.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// pig down.
+}; break;
+case donkey : {
+if(inv==fire or inv==earth or (inv==0 and random(0,5)>3)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("sfx2/Splat.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// Ass beat.
+}; break;
+case bees : {
+if(inv==wind or inv==fire or inv==water) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("sfx2/Splat.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// EXTERMINATED
+}; break;
+case duck : {
+// Wind or Fire, but fire only works if you're standing on a chair/the bed.
+if(inv==wind or (
+((room==bedroom and x>=8 and y<=4) or onchair) and (inv==fire or (inv==0 and random(0, 5)>2))
+)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("sfx2/Splat.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}//Laughing Dog
+}; break;
+case monkey : {
+if(random(2, 5)==4) pool.play_2d("CSM/zoink.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+else if(inv==fire or inv==water or (inv==0 and random(0,5)>3)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("sfx2/Splat.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// No more monkeying around!
+}; break;
+case seal : {
+if(inv==earth or inv==wind or (inv==0 and random(0,5)>2)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+}// The Fish and the Wolf plot!
+}; break;
+case lion : {
+if(random(0, 5)==4) {
+pool.play_2d("sounds/goose_flap_0" + random(1, 4) + ".wav", x, y, enemypose[i].x, enemypose[i].y, false);
+if(enemypose[i].x<x) enemypose[i].x+=random(1, 3);
+else if(enemypose[i].x>x) enemypose[i].x-=random(1, 3);
+if(enemypose[i].y<y) enemypose[i].y+=random(1, 3);
+else if(enemypose[i].y>y+1) enemypose[i].y-=random(1, 3);
+pool.play_2d("steps/" + terrains[room] + "/run" + random(1, 9) + ".wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// dodge and counter attack.
+else if(inv==fire or inv==earth or (inv==0 and random(0,5)==1)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("MHI/h" + random(0, 5) + ".wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// The Lion Sleeps Tonight?
+}; break;
+case spider : {
+if(random(6, 10)==9) pool.play_2d("CSM/Whistle.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+else if(inv==fire or inv==water or (inv==0 and random(0,5)>0)) {
+enemyrooms[i]=-1;
+piratecheck=true;
+pool.play_2d("sfx2/Splat.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+}// You forgot your spider!
+}; break;
+case pirate : {
+int z=enemypose[i].z;
+if(z&(1<<inv)==0) {
+pool.play_2d("CSM/Zoink.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+enemypose[i].x+=random(-5, 5); enemypose[i].y+=random(-5, 5);
+if(enemyslots[i]>=0) pool.update_sound_2d(enemyslots[i], enemypose[i].x, enemypose[i].y);
+}// hit successful.
+z|=1<<inv;
+int r=random(0, 6);
+int tries=0;
+while(items[r]>=0 and tries<32) {r=random(0, 6); tries++;}
+items[r]=random(0, 4);
+ipoints[r].x=random(0, (sizes[r]&0xff00)>>8);
+ipoints[r].y=random(0, sizes[r]&255);
+if(r==room) {beacon.play_looped(); position_sound_2d(beacon, x, y, ipoints[r].x, ipoints[r].y, pool.pan_step, pool.volume_step, pool.behind_pitch_decrease, pool.behind_volume_decrease);}
+
+if(z>=0x1f) {
+pool.play_2d("CSM/Descent.wav", x, y, enemypose[i].x, enemypose[i].y, false);
+wait(2000);
+pool.play_2d(((room==yard or room==beach) ? "sounds/bodyfall_soft_0" + random(1, 4) + ".wav" : "MHI/fall" + random(0, 3) + ".ogg"), x, y, enemypose[i].x, enemypose[i].y, false);
+wait(1000);
+pool.play_stationary("sfx2/yc_ahae.wav", false);
+wait(1000);
+voice.speak_interrupt_wait("Congratulations! You have caught all the animals and beat the snot out of the jolly laser pirate!");
+pool.play_extended_1d("menu/menu_activated.wav", 0, -5, 0, 0, false, 0, 0, 0, 50);
+wait(500);
+pool.play_extended_1d("menu/menu_activated.wav", 0, 0, 0, 0, false, 0, 0, 0, 100);
+wait(500);
+pool.play_extended_1d("menu/menu_activated.wav", 0, 5, 0, 0, false, 0, 0, 0, 200);
+wait(2000);
+exit();
+}// Victory.
+enemypose[i].z=z;
+}; break;
+}// animal switch.
+
+if(piratecheck) {
+wait(250);
+pool.play_2d(((room==yard or room==beach) ? "sounds/bodyfall_soft_0" + random(1, 4) + ".wav" : "MHI/fall" + random(0, 3) + ".ogg"), x, y, enemypose[i].x, enemypose[i].y, false);
+int r=random(0, 6);
+if(items[r]>=0) r=random(0, 6);
+if(items[r]>=0) r=random(0, 6);
+items[r]=random(0, 4);
+ipoints[r].x=random(0, (sizes[r]&0xff00)>>8);
+ipoints[r].y=random(0, sizes[r]&255);
+if(r==room) {beacon.play_looped(); position_sound_2d(beacon, x, y, ipoints[r].x, ipoints[r].y, pool.pan_step, pool.volume_step, pool.behind_pitch_decrease, pool.behind_volume_decrease);}
+int score=0;
+for(uint i=0; i<8; i++) if(enemyrooms[i]<0) score++;
+if(score>7) {
+int slot=pool.play_2d("CSM/Pirate.wav", x, y, x+10, y, false, true);
+int px=x+10;
+while(pool.sound_is_playing(slot) and px>=x-10) {
+wait(100);
+px--;
+pool.update_sound_2d(slot, px, y);
+}
+enemyrooms[pirate]=random(0, 6);
+vector ip(random(0, 16), random(0, 16), 0);
+enemypose[pirate]=ip;
+enemyslots[pirate]=-1;
+//clipboard_copy_text(enemyrooms[pirate] + "");
+}// pirate time.
+
+}
+
+}// Hit.
+}// enemies loop.
+
+
+if(used) inv=0;
+else pool.play_stationary("menu/menu_activated.wav", false);
+
+if(room==kitchen and random(0, 5)==4 and rx>=15) pool.play_2d("MHI/glass" + random(0, 4) + ".ogg", x, y, rx, y, false);
+
+time.restart();
+}// attack.
+else if(key_pressed(KEY_RETURN)) {
+if(items[room]>=0 and absolute(x-ipoints[room].x)<=1 and absolute(y-ipoints[room].y)<=1) {
+if(items[room]==0) {hp=math_min(hp+5, 20); voice.speak_interrupt("Health restored to " + hp + ". ");}
+else inv=items[room];
+pool.play_stationary(itemnames[items[room]], false);
+beacon.stop();
+items[room]=-1;
+}
+else if(room==bedroom and x>=7 and y<=5 and (x<8 or y>4)) {
+if(x<8) x=8;
+if(y>4) y=4;
+pool.play_stationary("sfx2/Sprong.wav", false);
+}
+else for(uint i=0; i<chairs.length(); i++) {
+ if(room==chairrooms[i] and absolute(chairs[i].x-x)<=1 and absolute(chairs[i].y-y)<=1) {
+if(room==hallway and x>=((sizes[hallway]&0xff00)>>8)-5 and y>0 and y<5) {
+pool.play_stationary("env/chairbump" + random(1, 6) + ".wav", false);
+wait(200);
+for(uint j=0; j<4; j++) {
+pool.play_stationary("sfx2/Sprong.wav", false);
+wait(125);
+}
+pool.play_stationary("sfx2/(pant).wav", false);
+set_room(attic);
+x-=2;
+voice.speak_interrupt("You climb into the attic.");
+}// Climbing into the attic.
+else {
+x=chairs[i].x;
+y=chairs[i].y;
+pool.play_2d("steps/plank/run" + random(1, 4) + ".wav", x, y, chairs[i].x, chairs[i].y, false);
+}// climb on chair.
+}
+}// chairs.
+}// enter.
+
+if(time.elapsed>225) {
+int tx=x;
+int ty=y;
+
+if(key_down(KEY_LEFT)) {
+face="W";
+tx--;
+}
+else if(key_down(KEY_RIGHT)) {
+face="E";
+tx++;
+}
+else if(key_down(KEY_UP)) {
+face="N";
+ty++;
+}
+else if(key_down(KEY_DOWN)) {
+face="S";
+ty--;
+}
+
+if(x!=tx or y!=ty) {
+
+int r=room;
+int left=0;
+int right=(sizes[r]&0xff00)>>8;
+int south=0;
+int north=sizes[r]&0xff;
+
+string toplay="";
+
+if(room==attic and tx>(left+right)/2 and tx<((left+right)/2)+2 and absolute(ty-((north+south)/2))<=1) {
+synth.reset();
+synth.waveform_type=4;
+synth.freq_bend_ms("880", -660, 2000, 0, 2000);
+synth.write_wave_sound().play_wait();
+set_room(hallway);
+voice.speak_interrupt("Hallway");
+}// Falling.
+else if(tx<left) {
+if(room==hallway) {
+set_room(livingroom);
+y=14; x=15;
+voice.speak_interrupt("Living room");
+toplay="steps/" + terrains[room] + "/run" + random(1, 5) + ".wav";
+}
+else if(room!=yard and room!=beach) toplay="env/collide4-brickwall.ogg";
+}// Left edge.
+else if(tx>right) {
+if(room==livingroom and y>=north-4) {
+set_room(hallway);
+x=0;
+y=2; // Fixes the chair problem?
+voice.speak_interrupt("hallway");
+toplay="steps/" + terrains[room] + "/run" + random(1, 5) + ".wav";
+}
+else if(room==kitchen) toplay="env/collide5-stove.wav";
+else if(room!=yard and room!=beach) toplay="env/collide4-brickwall.ogg";
+}// east.
+else if(ty>=north) {
+if(room==kitchen) {
+if(absolute(x-((left+right)/2))<=1) {
+pool.play_stationary("env/frontdoor_open2012.ogg", false);
+wait(700);
+set_room(beach);
+y=0;
+pool.play_stationary("env/frontdoor_shut2012.ogg", false);
+}// door.
+else toplay="env/collide3-brickwall.ogg";
+}
+else if(room==livingroom) {
+int ox=x;
+set_room(kitchen);
+x=ox;
+toplay="steps/" + terrains[room] + "/run" + random(1, 5) + ".wav";
+}
+else if(room==yard) {
+if(absolute(x-((left+right)/2))<=1) {
+pool.play_stationary("env/frontdoor_open2012.ogg", false);
+wait(750);
+set_room(livingroom);
+y=0;
+pool.play_stationary("env/frontdoor_shut2012.ogg", false);
+}// door.
+else toplay="env/collide3-brickwall.ogg"; // Should have combined this with the kitchen. Oopse.
+}
+else if(room==bedroom) {
+toplay="env/collide4-brickwall.ogg";
+if(absolute(x-(right/2))<=1) {pool.play_stationary("env/door_open2012.ogg", false); wait(1000); set_room(hallway); toplay="env/door_shut2012.ogg";}
+}
+else if(room==attic) toplay="env/collide2-wall.wav";
+else if(room!=beach) toplay="env/collide3-brickwall.ogg";
+}// North.
+else if(ty<0) {
+if(room==beach or room==livingroom or room==hallway) {
+toplay="env/collide3-brickwall.ogg";
+if(absolute(x-(right/2))<=1) {
+pool.play_stationary((room==hallway) ? "env/door_open2012.ogg" : "env/frontdoor_open2012.ogg", false); // Jeqocon2: added env/
+wait(1000);
+set_room((room==beach) ? kitchen : (room==hallway) ? bedroom : yard);
+x=8;
+toplay=(room==hallway) ? "env/door_shut2012.ogg" : "env/frontdoor_shut2012.ogg";
+}
+}
+else if(room==kitchen) {
+int ox=x;
+set_room(livingroom);
+x=ox;
+y=16;
+toplay="steps/" + terrains[room] + "/run" + random(1, 5) + ".wav";
+voice.speak_interrupt("living room");
+}
+else if(room!=yard) toplay="env/collide2-wall.wav";
+}// south.
+else if(room==bedroom and ((x==7 and tx==8) or (y==5 and ty==4))) toplay="MHI/fall2.ogg";
+else {
+toplay="steps/" + terrains[room] + "/run" + random(1, 5) + ".wav";
+
+if(room==yard and absolute(x-(right/2))<=2) toplay="steps/stone/run" + random(1, 6) + ".wav";
+else if(room==bedroom and x>=8 and y<=4) toplay="sfx2/Sprong.wav";
+bool onchair=false;
+for(uint i=0; i<chairs.length(); i++) {
+if(chairrooms[i]!=room) continue;
+if(chairs[i].x==x and chairs[i].y==y) {
+toplay="steps/plank/run" + random(1, 3) + ".wav";
+onchair=true;
+// check for stepping onto another chair.
+bool cont=true;
+for(uint j=0; j<chairs.length(); j++) {
+if(j==i or chairrooms[j]!=room) continue;
+if(chairs[j].x==tx and chairs[j].y==ty) cont=false;
+}// next chair?
+if(cont) pool.play_stationary("CSM/Whistle.wav", false);
+}// atop chair.
+else if(chairs[i].x==tx and chairs[i].y==ty and !onchair) {
+if(face=="E") chairs[i].x++;
+else if(face=="W") chairs[i].x--;
+else if(face=="N") chairs[i].y++;
+else if(face=="S") chairs[i].y--;
+pool.play_2d("env/chairbump" + random(1, 6) + ".wav", x, y, chairs[i].x, chairs[i].y, false);
+
+// Moving chairs between rooms:
+if(chairs[i].x<0) {chairs[i].x=0; if(room==hallway) {chairrooms[i]=livingroom; chairs[i].x=15;}}
+else if(chairs[i].x>right) {chairs[i].x=right; if(room==livingroom and chairs[i].y>=north-4) {chairs[i].x=1; chairrooms[i]=hallway; chairs[i].y=2;}}
+else if(chairs[i].y<south) {chairs[i].y=south; if(room==kitchen) {chairrooms[i]=livingroom; chairs[i].y=15;}}
+else if(chairs[i].y>north) {chairs[i].y=north; if(room==livingroom) {chairrooms[i]=kitchen; chairs[i].y=1; }}
+}// push.
+}// chairs.
+
+x=tx; y=ty;
+// play the door sounds if you walk near them? Do not like.
+if(y<=0 and x==right/2 and (room==livingroom or room==beach or room==hallway)) {
+pool.play_2d((room==hallway) ? "env/doorbump_h.wav" : "env/door.wav", x, y, right/2, 0, false);
+}
+else if(y>=north and x==right/2 and (room==yard or room==kitchen or room==bedroom)) {
+pool.play_2d((room==bedroom) ? "env/doorbump_h.wav" : "env/door.wav", x, y, right/2, 0, false);
+}
+
+}// general.
+
+pool.play_stationary(toplay, false);
+
+time.restart();
+}// Walk.
+
+}// steps.
+
+
+// Enemies.
+for(uint i=0; i<=pirate; i++) {
+// The pirate can chase you through rooms. Other animals will not.
+if(enemyrooms[i]<0) continue;
+if(enemyrooms[i]==room) {
+if(enemyslots[i]<0 or !pool.sound_is_playing(enemyslots[i])) {
+string toplay="steps/" + terrains[room] + "/run" + random(1, 5) + ".wav";
+
+if(i==spider) toplay="CSM/Rattle.wav";
+else if(i==pirate and random(0, 5)<3) {
+string[] sounds={"CSM/Pirate.wav", "sfx/sword1.ogg", "sfx/sword2.ogg", "sfx/sword3.ogg", "sfx/sword4.ogg", "sfx/sword5.ogg", "sfx/sword6.ogg", "CSM/Pirate.wav", "CSM/Pirate.wav"};
+toplay=sounds[random(0, sounds.length()-1)];
+}
+else if(i==monkey and random(0, 5)>2) {
+string[] sounds={"CSM/Monkey.wav", "CSM/Zoink.wav", "sfx2/Sprong.wav", "CSM/Monkey.wav"};
+toplay=sounds[random(0, sounds.length()-1)];
+}
+else if(i==pig) toplay=(random(0, 5)<3) ? "CSM/Hungry pig.wav" : "CSM/Pig.wav";
+else if(i==duck) toplay=(random(1, 5)==2) ? "CSM/Rubber duck.wav" : "sounds/goose_flap_0" + random(1, 4) + ".wav";
+else if(i==bees) toplay=(random(0, 5)<3) ? "sounds/bees_01.wav" : "sounds/bees_02.wav";
+else if(i==lion and random(0, 8)<3) toplay="CSM/Lion.wav";
+else if(i==donkey and random(0, 5)>3) toplay=(room==kitchen and enemypose[i].x>13) ? "MHI/glass" + random(0, 4) + ".ogg" : "CSM/Donkey.wav";
+else if(i==seal) toplay="CSM/Seal.wav";
+if(enemyslots[i]>=0) pool.destroy_sound(enemyslots[i]);
+enemyslots[i]=pool.play_2d(toplay, x, y, enemypose[i].x, enemypose[i].y, false, true);
+}// play sound.
+else {
+pool.update_sound_2d(enemyslots[i], enemypose[i].x, enemypose[i].y);
+}// playing
+
+// Now, moving patterns?
+int ox=enemypose[i].x;
+int oy=enemypose[i].y;
+
+switch (i) {
+case monkey : {
+// The monkey moves completely at random.
+if(random(0, 5)==3) enemypose[i].z=random(1, 8);
+int z=enemypose[i].z;
+double dx=0.0;
+double dy=0.0;
+if(z==1 or z==2 or z==8) dy=0.04;
+else if(z==4 or z==5 or z==6) dy=-0.04;
+if(z==2 or z==3 or z==4) dx=0.04;
+else if(z==6 or z==7 or z==8) dx=-0.04;
+enemypose[i].x+=dx;
+enemypose[i].y+=dy;
+}; break;
+case pig : 
+case duck :
+case seal :
+case bees : {
+// The pig doesn't really care.
+if(random(1, 10)==8) enemypose[i].x+=0.01*random(-50, 50);
+if(random(1, 10)==8) enemypose[i].y+=0.01*random(-50, 50);
+}; break;
+case lion :
+case pirate : {
+// The lion tries to get out of attack range and sneak up on you.
+
+double dx=0.0;
+double dy=0.0;
+if(ox<x) {
+dx=0.4;
+if(face=="W" and oy<=y and oy>=y-1) dy=-0.02;
+else if(face=="W" and oy>=y and oy<=y+1) dy=0.02;
+}
+else if(ox>x) {
+dx=0.04;
+if(face=="E" and oy>=y and oy<=y+1) dy=0.02;
+else if(face=="E" and oy<=y and oy>=y-1) dy=-0.02;
+}// move left.
+if(dy==0.0 or absolute(x-enemypose[i].x)<=1.0) {
+if(oy<y) dy=0.04;
+else if(oy>y) dy=-0.04;
+if(oy<y and face=="S" and ox>=x-1 and ox<=x+1) dx=(ox<9) ? 0.02 : -0.02;
+else if(oy>y and face=="N" and ox>=x-1 and ox<=x+1) dx=(ox<9) ? 0.02 : -0.02;
+}// Lion does not like to get in melee range?
+enemypose[i].x+=dx;
+enemypose[i].y+=dy;
+}; break;
+case donkey : {
+if(ox<x) enemypose[i].x+=0.055;
+else if(ox>x) enemypose[i].x-=0.055;
+if(oy<y) enemypose[i].y+=0.055;
+else if(oy>y) enemypose[i].y-=0.055;
+}; break;
+//case pirate : {
+// The pirate tries to shoot you in the back, but also stay out of your shooting range.
+
+// Otherwise, the pirate tries to get close to you just like the lion does.
+
+//}; break;
+}// Enemy switch for movement.
+
+if(enemypose[i].x<0) enemypose[i].x=0;
+if(enemypose[i].y<0) enemypose[i].y=0;
+if(enemypose[i].y>(sizes[room]&0xff))enemypose[i].y-=0.04;
+if(enemypose[i].x>((sizes[room]&0xff00)>>8)) enemypose[i].x-=0.04;
+
+int nx=enemypose[i].x; int ny=enemypose[i].y;
+
+if((ox!=nx or oy!=ny) and (absolute(enemypose[i].x-x)<=1 and absolute(enemypose[i].y-y)<=1)) {
+// or (i==pirate and absolute(x-ox)<10 and absolute(oy-y)<10 and (x==nx or y==ny))
+if(i==pirate and (absolute(x-nx)>1 or absolute(y-ny)>1)) pool.play_2d("CSM/Laser " + random(1, 2) + ".wav", x, y, (x+nx)/2, (y+ny)/2, false); // Jeqocon2: was "CSM/Laser"
+string[] hits={
+"sfx2/(gasp).wav",
+"sfx2/caej7-(hit).wav",
+"sfx2/yc_ouch.wav",
+"sfx2/yc_ugh.wav",
+"sfx2/yc_whah.wav",
+"sfx2/yc_yell.wav"
+};
+pool.play_stationary(hits[random(0, hits.length()-1)], false);
+hp--;
+//if(i==donkey) hp-=-;
+if(i==pig) hp--;
+if(i==lion) hp--;
+if(i==pirate) hp--;
+enemypose[i].x-=1.5; enemypose[i].y+=1.5; // to give you some breathing space.
+
+}// Damage.
+
+}// same room.
+else if(i==pirate) {
+
+int ox=enemypose[i].x;
+enemypose[i].x+=0.001*random(0, 100);
+int nx=enemypose[i].x;
+if(nx!=ox) {
+enemyrooms[i]=room;
+enemypose[i].x=random(0, (sizes[room]&0xff00)>>8);
+enemypose[i].y=random(0, sizes[room]&0xff);
+}// Found you!
+}// Not the same room.
+}
+
+
+if(hp<=0) {
+pool.destroy_all();
+beacon.stop();
+pool.play_stationary((room==beach) ? "sounds/bodyfall_soft_0" + random(1, 4) + ".wav" : "MHI/fall" + random(0, 3) + ".ogg", false);
+wait(1000);
+voice.speak_interrupt_wait("You lose!");
+pool.play_stationary("CSM/Pirate.wav", false);
+pool.play_stationary("CSM/Descent.wav", false);
+wait(2500);
+play_game();
+exit();
+}
+pool.update_listener_2d(x, y);
+if(beacon.playing) position_sound_2d(beacon, x, y, ipoints[room].x, ipoints[room].y, pool.pan_step, pool.volume_step, pool.behind_pitch_decrease, pool.behind_volume_decrease);
+wait(10);
+}
+
+}

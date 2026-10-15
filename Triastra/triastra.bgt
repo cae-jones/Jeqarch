@@ -1,0 +1,2997 @@
+//#include "c:\\bgIncludes\\FiniteStateMachine.bgt"
+#include "custom_voice.bgt"
+#include "3d2014-8-14.bgt" // Jeqocon2: local copies of c:\bgIncludes
+#include "clock.bgt"
+#include "dynamic_menu.bgt"
+#include "paths.bgt" // Jeqocon2: sound path mapping
+//#include "tripack.dat"
+
+
+custom_voice voice;
+sound_pool pool;
+sound charge, flight; // Uh Oh.
+
+
+// Officially not bothering with doing it right. Let's go with Oldschool Javascript TAG style.
+
+const string fx="downloads/fx/", sounds="c:\\jeqo\\games\\sounds\\", sounds2="downloads/sounds/", jla="downloads/games/jla/jla/sounds/", steps="c:\\jeqo\\games\\lc2015\\sounds\\steps\\";
+// I don't think there will be any collisions.
+
+string slog="string[] files={";
+
+void log_sound(string fn) {
+if(string_contains(slog, "\"" + fn + "\"", 1)<0) slog = slog + "\n\"" + fn + "\",\r";
+}
+
+void fade_all(double time=1.0) {
+	double delay=time*20; // *1000/50, for ms and the maximum volume decrease.
+	
+	for(uint i=0; i<50; i++) {
+		if(bgm.volume>-50) bgm.volume=bgm.volume-1;
+		for(uint i=0; i<pool.items.length(); i++) {
+			if( @(pool.items[i])!=null and @(pool.items[i].handle)!=null and pool.items[i].handle.playing and pool.items[i].handle.volume>-50) {
+				pool.items[i].handle.volume=pool.items[i].handle.volume-1;
+				if(bgm.volume==-50 and pool.items[i].handle.volume>bgm.volume) bgm.volume=-49;
+			}
+		}
+	
+	wait(delay);
+	}
+	bgm.stop();
+	pool.destroy_all(); // Hopefully.
+}
+
+void save_exit() {
+// etc.
+	fade_all();
+	file fout;
+	fout.open("trisound.log", "w");
+	fout.write(slog);
+	fout.close();
+	exit();
+}
+
+
+dictionary a;
+
+// Sick of this dictionary crap.
+string gets(string key) {
+	string ret=""; // Originally was "undefined", but I decided "" was better. 9:44 PM 9/26/2015.
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+
+double getd(string key) {
+	double ret=0.0; // I'd prefer NaN.
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+double geti(string key) {
+	int ret=-1;
+	if(a.exists(key)) a.get(key, ret);
+	return ret;
+}
+
+void put(string key, string value) {a.set(key, value);}
+void put(string key, double value) {a.set(key, value);}
+void put(string key, int value) {a.set(key, value);}
+
+int menu_position=0;
+int main_callback(dynamic_menu@ menu, string data) {
+	system_keys();
+	if(menu_position!=menu.get_position()) pool.play_stationary(jla + "menu/select.wav", false);
+	menu_position=menu.get_position();
+	return 0;
+}
+
+
+// So, I'm a bit lost as to what exactly I'm going to do. Especially for controls. Meh.
+
+const int[] dirs={KEY_LEFT, KEY_A, KEY_RIGHT, KEY_D, KEY_S, KEY_DOWN, KEY_W, KEY_UP};
+clock time(50);
+
+void main() {
+	voice.load_config("voice.cfg");
+	voice.config_path="voice.cfg";
+	
+	//set_sound_storage("*");
+	playsong("downloads/217848__soughtaftersounds__anime-piano-film-score-soundscape-far-away.wav");
+	charge.load(sp(sounds2 + "sounds2/Crystal Glass-SoundBible.com-1933015283.wav")); // Jeqocon2: sp() // Hmm. Up for changing.
+	flight.load(sp(sounds2 + "sounds2/Wings Flapping-SoundBible.com-889456791.wav")); // Jeqocon2: sp()
+	//flight.play_wait(); // Something's weird, here.
+	
+	pool.volume_step*=1.25; // Hmm.
+	// 5:13 PM 9/28/2015: Changed from 1.5 to 1.25. I like the 1.5, but I'm afraid it will confuse people, especially at the ocean parts.
+	
+	
+	// Load more settings? Progress?
+	
+	// unit vectors for faces. Gah.
+	uvs.set("E", get_vector(1, 0, 0));
+	uvs.set("NE", get_vector(square_root(2)/2, square_root(2)/2, 0));
+	uvs.set("N", get_vector(0, 1, 0));
+	uvs.set("NW", get_vector(-square_root(2)/2, square_root(2)/2, 0)); // Should I be saving sqrt(2) to speed this up?
+	uvs.set("W", get_vector(-1, 0, 0));
+	uvs.set("SW", get_vector(-square_root(2)/2, -square_root(2)/2, 0));
+	uvs.set("S", get_vector(0, -1, 0));
+	uvs.set("SE", get_vector(square_root(2)/2, -square_root(2)/2, 0));
+	// ^ BECAUSE I REMEMBER THE UNIT CIRCLE, BASTICHES!
+	
+	show_game_window("Triastra 0.1A");
+	
+	dynamic_menu menu;
+	menu.wrap=false;
+	menu.allow_escape=true;
+	menu.enable_home_and_end=true;
+	menu.set_callback(main_callback, "");
+	for(uint i=1; i<5; i++) menu.add_item_tts("Play in slot " + i);
+	menu.add_item_tts("Voice options...", "voice");
+	menu.add_item_tts("Joystick...", "joystick");
+	menu.add_item_tts("Character Voices...", "cv");
+	menu.add_item_tts("Exit", "exit");
+	
+	put("loc", "main");
+
+	
+	while(true) {
+		system_keys();
+		
+		int[] keys=keys_pressed();
+		for(uint i=0; i<keys.length(); i++) keyPressed(keys[i]);
+		
+		keys=keys_released();
+		for(uint i=0; i<keys.length(); i++) keyReleased(keys[i]);
+		
+		// Joystick something something.
+		
+		string loc=gets("loc");
+		if(loc=="main") {
+			int result=menu.run("Triastra main menu. ", true);
+			if(result<1) save_exit();
+			string n=menu.get_item_name(result);
+			if(n=="") {
+				if(file_exists("trisave" + result + ".dat")) {
+					keys_pressed();
+					
+					dynamic_menu conf;
+					conf.wrap=false;
+					conf.allow_escape=true;
+					conf.enable_home_and_end=true;
+					conf.set_callback(main_callback, "");
+					conf.add_item_tts("Continue");
+					conf.add_item_tts("Restart");
+					keys_pressed();
+					keys_released();
+					int r=conf.run("Would you like to continue from your previous game, or restart? ", true);
+					if(r<=0) {
+						pool.play_stationary(jla + "menu/cancel.wav", false);
+						wait(500);
+					}
+					else if(r==2) new_game(result);
+					else load_game(result);
+				}
+				else new_game(result);
+			}// Slot.
+			else if(n=="voice") {
+				pool.play_stationary(jla + "menu/submenu.wav", false);
+				wait(100);
+				voice.options_menu();
+			}// Voice options.
+			else if(n=="cv") {
+				if(a.exists("cv")==false or gets("cv")=="off") a.set("cv", "on");
+				else a.set("cv", "off");
+				voice.speak_interrupt_wait("Character voices " + gets("cv") + ". ");
+				wait(500);
+			}// Individual voices.
+			else if(n=="exit") save_exit();
+		}// main menu.
+		wait(2);
+		if(time.update()) step(time.delay);
+	}
+	
+	fade_all();
+}
+
+
+void system_keys() {
+	if(key_pressed(KEY_F4) and (key_down(KEY_LMENU) or key_down(KEY_RMENU))) save_exit();
+	else if(key_down(KEY_LCONTROL) or key_down(KEY_RCONTROL)) {
+		voice.stop();
+		if(gets("cv")=="on") {
+			string[] keys=voices.get_keys();
+			for(uint i=0; i<keys.length(); i++) {
+				custom_voice@ v;
+				custom_voice temp; // OK, that's the 4th time I've had to do this. Should have made a function for it.
+				@v=temp;
+				voices.get(keys[i], @v);
+				v.stop();
+			}// Loop.
+		}
+	}// Stop speech.
+	else if(key_pressed(KEY_F5)) voice.options_menu();
+	
+	else if(key_pressed(KEY_PRIOR)) changeBGMVolume(2);
+	else if(key_pressed(KEY_NEXT)) changeBGMVolume(-2);
+	
+}
+
+void changeBGMVolume(double dv) {
+	bgm.volume=bgm.volume+dv;
+	double v=getd("bgmVolume");
+	v+=dv;
+	if(v<-50) v=-50;
+	else if(v>0) v=0;
+	a.set("bgmVolume", v);
+}
+
+sound bgm;
+string curbgm="";
+void playsong(string fn, bool looping=true) {
+	if(curbgm!=fn) {
+		bgm.stop();
+		bgm.load(sp(fn)); // Jeqocon2: sp()
+		curbgm=fn;
+	log_sound(fn);
+	}
+	bgm.volume=getd("bgmVolume");
+	if(looping)bgm.play_looped();
+	else bgm.play();
+}
+
+void loop(int l) {
+	playsong(fx + "complete music/loops/Loop " + l + ".wav");
+}
+void sting(int s) {
+	playsong(fx + "complete music/stingers/stinger " + s + ".wav", false);
+}
+
+
+void keyPressed(int k) {
+	
+	
+	string loc=gets("loc");
+	
+	if(loc=="game") {
+		
+		int stage=geti("stage");
+		int gloc=geti("gloc"); // Should I just... never mind.
+		
+		if(gets("mode")=="move") {
+			if(dirs.find(0, k)>=0) {
+				// I don't think we need to worry about what happens if shift is not held.
+				if(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) playsound(sounds2 + "hawk_takeoff_0" + random(1, 2) + ".wav", false);
+				a.set("act", gets("act") + ((k==KEY_UP or k==KEY_W) ? "U" : (k==KEY_LEFT or k==KEY_A) ? "L" : (k==KEY_DOWN or k==KEY_S) ? "D" : "R"));
+				if((geti("skills")&2)==2 and (gets("act")=="Z(U" or (gets("act")=="U" and key_down(KEY_Z)) ) and getd("e")>=1000 and getd("counter")==0.0) {
+					a.set("counter", 1.0);
+					playsound(sounds2 + "sounds2/30319_Production_Element_Imaging_Accent_Radio_Impact_Burst_Digital.wav", false);
+					double e=getd("e");
+					vector me=getPose(-1);
+					for(uint i=0; i<10; i++) {
+						if(getd("name" + i)!="" and dist3d2(me, getPose(i))<=50) {
+							if((i<2 and getd("hp" + i)>100+(1<<geti("stage"))) or (i>=2 and getd("hp" + i)<=0.0)) continue;
+							if(i<2) a.set("hp" + i, (100+(1<<geti("stage"))));
+							else hurt(i, e/150.0);
+							e*=4.0/7.0; //???
+						}// found.
+					}
+					a.set("hp", math_max(getd("hp"), e/100.0)); // ?
+					a.set("e", 0);
+				}// Heal/smite.
+			}// Movement.
+		}// Moving.
+		
+		if(k==KEY_Z and (stage>0 or gloc>1) and getd("counter")==0 and getd("e")<=math_max(12000, 10000+(stage*1000))) {
+			// 10:45 PM 9/26/2015: counter must be 0.0, e cannot exceed 12000+(stage*1000), and we set act to "z(".
+
+			// Limits?
+			a.set("e", getd("e")+1000); // Too much? Too little?
+			
+			if(!charge.playing) charge.play();
+			a.set("act", "Z("); //?
+		}// Power UP.
+		else if((k==KEY_SPACE or k==KEY_G) and gets("mode")=="move" and (stage>0 or gloc>3 or (geti("skills")&1)==1)) {
+			string act=gets("act");
+			// So... This is kinda weird.
+			double counter=getd("counter");
+			if(counter==0.0) {
+				a.set("act", act + "A");
+				// Check for... stuff.
+				if(string_right(act, 6)=="Z(LLRA" and getd("e")>=7000 and (geti("skills")&8)==8) {
+					counter=0.25; // Kingdom Hearts had a lengthy intro for this sort of thing.
+					a.set("counter", counter);
+					// Play a sound?
+				}// Blast.
+				else if(string_right("act", 6)=="Z(DUDA" and getd("e")>=7000 and (geti("skills")&32)==32) {
+					// )), because those unclosed parentheses are freaking me out. )
+					counter=0.02;
+				a.set("counter", counter);
+					
+				}// Blindness.
+				else {
+					counter=0.25; // Too quick?
+					a.set("counter", counter);
+					playsound(fx + "weapon swings/STAB/" + random(1, 6) + ".ogg", false); // Jeqocon2: was stab/, same folder
+				}// Regular attacks.
+			}// Start appending?
+			else if(counter<0.0 and string_right(act, 1)=="A" and (stage>0 or gloc>2 or (geti("skills")&1)==1)) {
+					a.set("act", act + "A");
+					counter=0.25; // Too quick?
+					a.set("counter", counter);
+					playsound(fx + "weapon swings/STAB/" + random(1, 6) + ".ogg", false); // Jeqocon2: was stab/, same folder
+			}// Combo.
+		}// Attack.
+		else if(k==KEY_TAB and (stage>0 or gloc>3)) {
+			int targ=geti("targ");
+			// Can you target allies? I think you should.
+			int dx=(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) ? -1 : 1;
+			targ+=dx;
+			
+			if(targ<-1) targ=9;
+			else if(targ>9) targ=-1;
+			bool cont=true;
+			while(cont) {
+				//clipboard_copy_text(clipboard_read_text() + ", " + targ);
+				if(targ==-1) break;
+				if(targ<-1) targ=9;
+				if(a.exists("x" + targ)==false or gets("name" + targ)=="") targ+=dx;
+				// Hopefully, the above will let us target dead people and items, without targeting ghosts. ... Unless we have to fight ghosts.
+				else cont=false;
+				if(targ>9) targ=-1;
+			}// Loop for target searching.
+			a.set("targ", targ);
+			if(targ>=0) {
+				pool.play_3d("downloads/31523_Science_Fiction_Beep_Shimmer_Mid_01.wav", getd("x"), getd("y"), getd("z"), getd("x" + targ), getd("y" + targ), getd("z" + targ), false);
+				voice.speak_interrupt(gets("name" + targ) + ", HP" + getd("hp" + targ));
+			}// Set.
+			else playsound(sounds + "menu/yn_cancel.ogg", false);
+		}// Umm... Is this supposed to be so shallow? Just one layer deep?
+		else if(k==KEY_R and geti("swordslot")>=0) {
+			vector sword(getd("swordx"), getd("swordy"), getd("swordz"));
+			vector me(getd("x"), getd("y"), getd("z"));
+			// We want a beacon, not the exact position.
+			//double theta=get_angle(me, sword);
+			//double d=(sword-me).length();
+			//sword=get_vector(cosine(theta), sine(theta), 0);
+			//if(absolute(d)>=10.0) d=10.0;
+			//sword=me+(sword*d);
+			// 11:54 PM 10/7/2015: The above didn't work, so replacing it with a box.
+			if(sword.x<me.x-7) sword.x=me.x-7;
+			else if(sword.x>me.x+7) sword.x=me.x+7;
+			if(sword.y<me.y-7) sword.y=me.y-7;
+			else if(sword.y>me.y+7) sword.y=me.y+7;
+			sword.z=(sword.z<me.z) ? (me.z-1) : me.z;
+			playsound("downloads/31523_Science_Fiction_Beep_Shimmer_Mid_01.wav", sword.x, sword.y, sword.z, false);
+			clipboard_copy_text("Radar: " + str(sword));
+		}// Radar.
+		
+		if(k==KEY_F1) {
+			clipboard_copy_text(gets("act") + ", " + getd("counter"));
+		}// Debug information.
+		
+		if(k==KEY_X) voice.speak_interrupt(gets("desc"));
+		else if(k==KEY_Q) voice.speak_interrupt(gets("mission"));
+		else if(k==KEY_C) voice.speak_interrupt("You are at " + round(getd("x"), 0) + ", " + round(getd("y"), 0) + ", " + round(getd("z"), 0) + ". ");
+
+		if(k==KEY_ESCAPE) {
+			bgm.volume=math_max(bgm.volume-10, -50);
+			pool.pause_all();
+			playsound(jla + "menu/submenu.wav", false);
+			dynamic_menu pause;
+			pause.wrap=false;
+			pause.allow_escape=true;
+			pause.enable_home_and_end=true;
+			pause.set_callback(main_callback, "paused");
+			pause.add_item_tts("Resume Game");
+			pause.add_item_tts("Voice options");
+			pause.add_item_tts("BGM Volume: " + getd("bgmVolume") + " (pg up / pg down)");
+			pause.add_item_tts("Health: " + getd("hp"));
+			pause.add_item_tts("Energy: " + getd("e"));
+			pause.add_item_tts("Position: " + round(getd("x"), 0) + ", " + round(getd("y"), 0) + ", " + round(getd("z"), 0));
+			pause.add_item_tts("Mission: " + gets("mission")); // Oh, dear.
+			pause.add_item_tts("Area Description: " + gets("desc"));
+			pause.add_item_tts("Character voices", "cv");
+			pause.add_item_tts("Save Game", "save");
+			pause.add_item_tts("Save and quit", "sq");
+			pause.add_item_tts("Quit without save", "quit");
+			int result=-1;
+			
+			do {
+				result=pause.run("Pause menu. ", true);
+				
+				if(result==2) voice.options_menu();
+				else if(result==3) changeBGMVolume((key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) ? -2 : 2);
+				else if(pause.get_item_name(result)=="save") {
+					voice.speak_interrupt("Saving...");
+					save_game(geti("slot"));
+					playsound(jla + "menu/activate.wav", false);
+				}// save.
+				else if(pause.get_item_name(result)=="sq" or pause.get_item_name(result)=="quit") {
+					if(confirm("Are you sure you want to quit?")) {
+						if(pause.get_item_name(result)=="sq") save_game(geti("slot"));
+						fade_all();
+						a.set("loc", "main");
+						playsong("downloads/217848__soughtaftersounds__anime-piano-film-score-soundscape-far-away.wav");
+						return;
+					}// Quit.
+				}// Save and quit.
+				else if(pause.get_item_name(result)=="cv") {
+					if(gets("cv")=="on" or confirm("Character voices are not currently enabled. Would you like to enable them?")) {
+						if(gets("cv")!="on") {
+							a.set("cv", "on");
+							string[] cfg=find_files("tri_*.cfg");
+							custom_voice temp;
+							for(uint j=0; j<cfg.length(); j++) voices.set(string_mid(cfg[j], 5, cfg[j].length()-8), temp);
+						}// So much nesting!
+						set_voices(voices.get_keys());
+					}// Character voices.
+				}// Voices.
+				wait(5);
+			} while(result>1);
+			playsound(jla + "menu/cancel.wav", false);
+			bgm.volume=getd("bgmVolume");
+			pool.resume_all();
+		}// Confirm if you want to quit.
+	}// Game in key Pressed.
+}// Key Pressed.
+void keyReleased(int k) {}
+void step(double dt) {
+	
+	string loc=gets("loc");
+	if(loc=="game") {
+		int gloc=geti("gloc");
+		int stage=geti("stage");
+		vector me(getd("x"), getd("y"), getd("z"));
+		switch (stage) {
+			case 0  : {
+				// stage 0.
+				
+				if(bgm.active and !bgm.playing) loop(7);
+				
+				if(gets("mode")=="move") {
+					// Islands are ... places...
+					double[] islands={0, 0,
+ 30, 100,
+ 100, 10,
+ -25, -60,
+ -50, -110,
+ 10, -180,
+ 70, -160,
+ -128, 15,
+ 200, 0,
+ -10, 200,
+ -80, 100,
+ -20, 125
+ }; // islands. Ugh.
+					bool onisland=false;
+					vector nearest(0, 0);
+					double nd=9000;
+					if(me.y<256) for(uint i=0; i<islands.length(); i+=2) {
+						vector next(islands[i], islands[i+1]);
+						double d=distance2(me, next);
+						if(d<nd) {
+							nd=d;
+							nearest=next;
+							if(i>=islands.length()-2) onisland=true;
+						}// Nearer.
+					}// Island loop.
+					else {
+						
+						// Trees and junk.
+						double[] trees={
+ -100, 275, -89, 276, -78, 277, -67, 278, -56, 280, -43, 280, -38, 299, -25, 285, -14, 286, -5, 279,
+ 50, 280, 80, 277, 80, 288, 90, 290, 100, 280, 105, 286, 55, 300, 44, 295, 33, 284,
+ 75, 310, 85, 311, 96, 311, 107, 312, 120, 310, 124, 290, 120, 280, 136, 310, 136, 280,
+ 50, 300, 45, 295, 40, 300, 33, 305, 25, 307, 20, 311, 15, 315, 10, 312, 5, 317, -1, 315, -3, 305, -7, 311, -10, 315, -11, 290, -14, 302, -17, 311, -20, 315, -15, 320, -25, 316, -30, 320, -44, 333, -50, 340, 0, 330, 10, 320,
+ -101, 285, -90, 290, -110, 285, -120, 300, -129, 305
+ };
+						// Loop. Yay.
+						for(uint i=0; i<trees.length(); i+=2) {
+							vector tree(trees[i], trees[i+1]);
+							double next=distance2(me, tree);
+							if(next<=nd) {
+								nd=next;
+								if(nd<=(1.5*1.5) and me.z<=4) {
+									playsound(steps + "leaves/bump.ogg", me.x, me.y, tree.x, tree.y, false);
+									if(me.z>3.9) me.z=4.1;
+									else if(me.x<tree.x) me.x=tree.x-1.6;
+									else if(me.x>tree.x) me.x=tree.x+1.6;
+								if(me.z<4 and me.y<tree.y) me.y=tree.y-1.6;
+									else if(me.z<4 and me.y>tree.y) me.y=tree.y+1.6;
+								}// 9 Tabs is half a line in 4 space mode!
+							}// I do not like being this many layers deep!
+						}
+						nearest.x=me.x;
+						nearest.y=255;
+						
+					}// Mainland.
+					
+					// Now, position the ocean and beach. This is kinda tricky with the beach, since it's a ring.
+					// Well, actually, let's do this first:
+					move(me, get_vector(0, ((me.y>250 and me.y<300 and me.z<=0.0 and absolute(me.x-70)<5) ? -1.0 : 0.0),0), (me.z>0.20 and (me.y<260 or nd>16 or round(me.z, 0)!=4)) ? "sky" : (absolute(me.x)<=5 and absolute(me.y)<=5) ? (sounds + "steps/gravel") : (me.y>256 and absolute(me.x-70)<=4 and me.y<300) ? (sounds + "steps/swim") : (round(me.y, 0)==255 or (me.y>255 and me.y<=305 and absolute(me.x-70)<6) or (absolute(me.y-300)<5 and me.x>=65)) ? (steps + "water") : (me.y>256 and me.y<266) ? (steps + "sand") : (me.y>270 and nd<11.75 and me.z<=0.20) ? (steps + "stone") : (me.y>266 and nd<36) ? (steps + "leaves") : (me.y>266) ? (steps + "dirt") : (nd<100) ? (steps + "dirt") : (nd<=256) ? (steps + "sand") : (nd<370) ? (steps + "water")  : (sounds + "steps/swim"), dt, (nd<625 or me.z<=-(square_root(nd)-16))); // Is that all?
+					
+					double theta=get_angle(nearest, me);
+					if(me.y>255) {
+						pool.update_sound_3d(geti("slot1"), me.x, 255, 0);
+						pool.update_sound_3d(geti("slot2"), me.x, 245, 0);
+						// River? Lake? Trees? UGH!
+						a.set("desc", (me.y<267) ? "(At the edge of the mainland, all islands to the south)" : ((absolute(me.x-70)<=5 and me.y<300) or (absolute(me.y-300)<=5 and me.x>=60)) ? "(In the wilderness, overlooking a crystal-clear stream lined with sparce trees)" : (nd<=36) ? "(Amid sparce trees, seemingly untouched by evil)" : "(Over the mainland, mostly dry and rocky, most life in hiding)");
+					}
+					else if(nd<225) {
+						pool.update_sound_3d(geti("slot2"), nearest.x+(25.0*cosine(theta)), nearest.y+(25.0*sine(theta)), 0);
+						pool.update_sound_3d(geti("slot1"), nearest.x+(15.0*cosine(theta)), nearest.y+(15.0*sine(theta)), 0);
+						if(absolute(me.x)>=20 or absolute(me.y)>=20) a.set("desc", "You are on an island, currently unoccupied.");
+						else a.set("desc", "An ancient harbor, its collapsed ruins buried in sand.");
+					}// You are on an island.
+					else if(nd<625) {
+						pool.update_sound_3d(geti("slot1"), me.x, me.y, 0);
+						pool.update_sound_3d(geti("slot2"), nearest.x+(25.0*cosine(theta)), nearest.y+(25.0*sine(theta)), 0);
+						a.set("desc", "You overlook the sea from an island\'s shore.");
+					}// You are at beach range.
+					else {
+						pool.update_sound_3d(geti("slot2"), me.x, me.y, 0);
+						pool.update_sound_3d(geti("slot1"), nearest.x+(25.0*cosine(theta)), nearest.y+(25.0*sine(theta)), 0);
+						a.set("desc", "(Flying over the sea.  It is fairly clear and tranquil, but beneath the beauty is a glimmer of deadness to the water.)");
+					}// You are over da sea.
+					
+					if(me.x<=-128 and me.y<260) a.set("desc", "(The islands below seem faded.) \'The island is to the east...\'");
+					if(me.x<-200.0) a.set("x", -190);
+					if(me.x>156 and me.y<256) a.set("desc", "(Land seems very far away.) \'Nothing lives this far out.\'");
+					if(me.x>200) a.set("x", 180);
+					if(me.y>250 and gloc<2) a.set("desc", "(the mainland appears close by) \'This is too far...\'");
+					else if(me.y>350) a.set("desc", "\'There is someone further south" + ((me.x>-50) ? ", and west" : (me.x<-150) ? ", and the east" : "") + ".\'");
+					if(me.y<-200) a.set("desc", "(A  sun-backed seascape, with islands like the backs of whales scattered about) \'His island was far to the north of here...\'");
+					if(me.y<-300) a.set("y", -290);
+					if(gloc>2 and me.y>250 and me.x<-150) a.set("desc", "\'There is someone a little to the east of here\'");
+					else if(gloc==3 and me.y>250 and me.x>160) a.set("desc", "\'It would be better to search in the west...\'");
+					
+					
+					if(me.z<0.0) {
+						if(flight.playing) {
+							flight.stop();
+							if(nd>625 and (me.y<256 or (absolute(me.x-70)<=5 and me.y<300))) playsound(jla + "FallWater" + random(1, 4) + ".wav", false);
+							else if((nd>400 and nd<=625 and me.y<256) or (absolute(me.y-300)<=5 and me.x>65)) playsound(steps + "water/run" + random(1, 6) + ".wav", false);
+							else if(me.y>260 and nd<36) playsound(steps + ((nd<11.75) ? "stone/" : "leaves/") + "run" + random(1, 6) + ".wav", false);
+							else if((nd<625 and nd>225) or (me.y>255 and me.y<266)) playsound(steps + "sand/run" + random(1, 6) + ".wav", false);
+							else if(absolute(me.x)<=5 and absolute(me.y)<=5) playsound(sounds + "steps/gravel/run" + random(1, 6) + ".wav", false);
+							else playsound(steps + "dirt/run" + random(1, 6) + ".wav", false); // Ugh, I'm going to have to repeat this for every stage, aren't I? >.<.
+						}// Landing sounds.
+						if(nd<625 or me.y>255) {
+							me.z=0.0;
+							if(distance2(me, get_vector(getd("swordx"), getd("swordy")))<3.0) a.set("swordz", me.z);
+						}// Islands.
+						else me.z=math_max(getd("z"), math_max(-25, -(square_root(nd)-25)));
+						a.set("z", me.z);
+						if(me.z<-0.25) {
+							a.set("desc", "You are under the sea. It seems tranquil to the naked eye, but the tingle of chaos surrounds you, waiting.");
+							if(nd>625 and nd<2500 and geti("swordslot")>=0 and distance2(me, get_vector(getd("swordx"), getd("swordy")))<=4 and getd("swordz")<-20) {
+								a.set("swordz", math_min(getd("swordz")+0.02, -1.0));
+								pool.update_sound_3d(geti("swordslot"), getd("swordx"), getd("swordy"), getd("swordz"));
+							}// I'm sick of this sword being buried.
+						}// Under water.
+					}// Landings and stuff.
+					else if(me.z>0.0 and !flight.playing) flight.play_looped();
+					else if(me.z>50) {
+						a.set("z", 40);
+						playsound(sounds + "CSM/Big Storm.WAV", me.x, me.y, me.x+random(-10, 10), me.y+random(-5, 5), false);
+						a.set("e", math_max(getd("e")-1000, 0));
+						if(getd("e")<=0) {;} // Handle falling there, when falling happens.
+					}// Too high.
+					
+					if(nd<730 and nearest.x==islands[2] and nearest.y==islands[3]) {
+						if(gloc<1) {
+							gloc++;
+						pool.play_extended_3d("downloads/39540_Sound_DesignAngelMagicPixie_Dust_MoveTinkly_8.wav", me.x, me.y, me.z, nearest.x, nearest.y, absolute(me.z)/4, 15, 15, 15, 15, false, 0, 0, 0, 100);
+							double theta=get_angle(me, nearest);
+							string direction="southeast";
+							if(absolute(theta)<pi/8) direction="east";
+							else if(theta>0 and theta<3*pi/8) direction="northeast";
+							else if(theta>0 and theta<5*pi/8) direction="north";
+							else if(theta>0 and theta<=7*pi/8) direction="northwest";
+							else if(theta>0 and theta<9*pi/8) direction="west";
+							else if((theta>pi and theta<3*pi/2) or (theta>-pi and theta<-5*pi/8)) direction="southwest";
+							else if((theta>0 and theta<=13*pi/8) or (theta<-3*pi/8 and theta>=-5*pi/8)) direction="south";
+							voice.speak_interrupt("There it is. Just a bit to the " + direction + ".");
+						}// first sight.
+						else if(nd<50 and gloc<2 and me.z<=0.0) {
+							gloc=2;
+							fadeout(0.5);
+							playsound(sounds2 + "sounds2/39032_WoodSplinterChunkNice_2.wav", me.x, me.y, nearest.x, nearest.y, false);
+							playsound(sounds2 + "sounds2/27259_Impact_Wood_Beam_Drop_On_Cement_Wobble_01.wav", me.x, me.y, me.x+random(-5, 5), me.y+random(-3, 3), false);
+							playsound(sounds2 + "sounds2/23266_Foley_Pigeon_Clay_Set_Down_Wobble_01.wav", me.x, me.y, me.x+random(-5, 5), me.y+random(-5, 5), false);
+							voice.speak_interrupt_wait("All that\'s left is a splintered door, and I can\'t know if it is the work of storms, or devils, or Jannai!");
+							wait(500);
+							playsound(sounds2 + "sounds2/16729_AccentTime_WarpDeep_3.wav", false);
+							wait(500);
+							voice.speak_wait("Whatever his fate, I must purify this place.");
+							wait(1000);
+							playsound(sounds + "menu/yes_no_option.wav", false);
+							wait(500);
+							voice.speak("(Rapidly tap the Z key to gather energy.)");
+							a.set("e", 0);
+							a.set("mode", "charge");
+							a.set("mission", "Gather enough energy to purify this island!");
+						}// Found.
+					}// Island.
+				
+					
+					if(gloc==3 and me.y>250) {
+
+					}// Mainland.
+					
+					if(a.exists("swordslot")) {
+						// Maybe this goes in move, eh?
+						if(geti("swordslot")>=0 and absolute(me.x-getd("swordx"))<=1.5 and absolute(me.y-getd("swordy"))<=1.5 and absolute(me.z-getd("swordz"))<=1.5) {
+							fadeout(0.5);
+							a.set("sword", stage); // ... Yeah.
+							a.set("skills", geti("skills")|(1<<stage));
+							sting(1);
+							bgm.volume=bgm.volume-5;
+							voice.speak_interrupt_wait(sdescs[stage*2]);
+							wait(500);
+							playsound("downloads/31712_Science_Fiction_Computing_Digital_Ascend_01.wav", false);
+							pool.destroy_sound(geti("swordslot"));
+							a.set("swordslot", -1);
+							wait(1250);
+							voice.speak_interrupt_wait("(Gained Skill " + stage + ": " + skills[stage*2]);
+							
+						}// Got sword.
+					}// Sword.
+					
+					if(gloc==3 and me.y>290 and me.x<-30 and distance2(me, get_vector(-100, 350))<=2500) {
+						playsound(sounds2 + "hawk_wingstretch_0" + random(1, 3) + ".wav", false);
+						double vz=0.0;
+						while(bgm.playing or me.z>0.0) {
+							bgm.volume=bgm.volume-1;
+							if(bgm.volume<=-50) bgm.stop();
+							if(me.z>0.0) me.z=me.z-vz;
+							else me.z=0.0;
+							vz+=9.0*0.02;
+							pool.update_listener_3d(me.x, me.y, me.z);
+							wait(20);
+						}// Landing loop.
+						a.set("z", 0.0);
+						playsound(sounds2 + "sq_bighit_0" + random(1, 8) + ".wav", me.x, me.y, me.x+5, me.y-5, false);
+						wait(150);
+						if(noskip()) for(uint i=0; i<4; i++) {
+							playsound(steps + "dirt/run" + (6-i) + ".wav", me.x, me.y, me.x+8-i, me.y+4-i, false);
+							if(noskip()) wait(250);
+						}// Walking loop.
+						if(flight.playing) flight.stop();
+						if(noskip()) playsound(steps + "dirt/slide.wav", me.x, me.y, me.x+4, me.y, false);
+						if(noskip()) wait(500);
+						if(!key_down(KEY_LCONTROL) and !key_down(KEY_RCONTROL)) voice.speak_interrupt_wait("\'Bath Kothar, kin to the Hadadites. You dare dwell in this land?\'");
+						wait(100);
+						if(noskip()) playsound(fx + "weapon swings/POUND/" + random(1, 6) + ".ogg", false);
+						if(noskip()) wait(500);
+						if(noskip()) voice.speak_interrupt_wait("Bath Kothar: Yes, I dare. I also have a new Thunder Club that wants testing.");
+						wait(1000);
+						loop(1);
+						bgm.volume=bgm.volume-6;
+						voice.speak_wait("(Press tab to lock on to a target. Use G or the spacebar to attack.)");
+						keys_pressed();
+						keywait();
+						bgm.volume=getd("bgmVolume")-2;
+						a.set("hp2", 50);
+						a.set("e2", 0.0);
+						a.set("name2", "Bath Kothar");
+						a.set("x2", me.x+5);
+						a.set("y2", me.y);
+						a.set("z2", 0.0);
+						a.set("target", -1);
+						gloc=4;
+					}// Cutscene with Kefa and Bath Kothar.
+					else if(gloc==4 and getd("hp2")<=0.0) {
+						gloc=5;
+						fadeout();
+						int rock=pool.play_3d(sounds2 + "rock_whoosh_0" + random(1, 9) + ".wav", me.x, me.y, me.z, me.x-10, me.y, me.z, false);
+						for(uint i=0; i<50; i++) {
+							time.tick();
+							pool.update_sound_3d(rock, me.x-10+(i*0.2), me.y, me.z); // That seems awfully fast...
+						}
+						playsound(sounds2 + "rock_nailsperson_01.wav", false);
+						for(uint i=0; i<7; i++) {
+							pool.play_3d(steps + "dirt/run" + random(1, 6) + ".wav", me.x, me.y, me.z, me.x-10+i, me.y, me.z, false);
+							wait(200);
+							if(i==2) pool.play_3d(sounds2 + "rockmiss_0" + random(2, 9) + ".wav", me.x, me.y, me.z, me.x+(0.1*random(-25, 25)), me.y+(0.1*random(-25, 25)), 0, false);
+						}// Kefa running loop.
+						
+						script(false, "\"So, you are Kefa?\"");
+						if(gets("cv")=="on") set_voices("Ramiel", "Kefa", "Bath Kothar");
+						playsound(steps + "dirt/slide.wav", me.x, me.y, me.x-2, me.y, false);
+						wait(300);
+						playsound(steps + "dirt/fall" + random(1, 4) + ".wav", me.x, me.y, me.x-1, me.y, false);
+						wait(500);
+						playsong("downloads/217850__soughtaftersounds__mystical-film-score-soundscape-allude.wav");
+						script(false, "Kefa: Sorry! I thought you were a bandit!", "\"Stand. I am only Ramiel.\"", "Bath Kothar: Wait, so are you the Angel of Thunder, or the Angel of Mercy and Hope?", "Ramiel: Both.", "Bath Kothar: So the Angel of Mercy accused me because...?", "Ramiel: I was under the impression you were here to take advantage of a moment of weakness!", "Bath Kothar: After how that turned out for Amalek? - Nice Mercy and Hope there, by the way.", "Ramiel: King Agag had set into motion a mass sacrifice to create more Amorite Nymph Gems! What do you think Moloch would have done with them?");
+						playsound(steps + "dirt/run3.wav", me.x, me.y, me.x-2, me.y, false);
+						wait(200);
+						playsound(steps + "dirt/run5.wav", me.x, me.y, me.x-1, me.y, false);
+						wait(200);
+						playsound(steps + "dirt/run2.wav", false);
+						wait(300);
+						script(false, "Kefa: Ah, Ramiel? Bath Kothar is here because I brought her out of Babylon.", "Kefa: It was years ago, when I was twelve years old. A long story, involving my friends, a sorceror, a demonic Ostrich and Satiyr.", "Ramiel: Ah... I remember. You were hiding from Hyenas and Jackals, and prayed for mercy.", "Ramiel: And it was my job to tell you to be merciful in turn.", "Bath Kothar: That explains the thunder that scared the demons long enough for us to escape.", "Bath Kothar: It\'s strange that you need reminding. Why are you here, exactly?");
+						fadeout();
+						playsong("downloads/217848__soughtaftersounds__anime-piano-film-score-soundscape-far-away.wav");
+						script(false, "Ramiel: There has been war in Heaven. The Accuser found Jannai\'s attrocities evil enough to complete his case against humanity.", "Ramiel: The lord said he would send mercy before wrath. And he took exception to that.", "Ramiel: Michael and the angels fought. Many fell to Earth during the battle.", "Ramiel: I saw Sariel falling. If I cannot bring him back...", "Ramiel: ... Then I must speak with Shimeon, brother of the Queen.", "Ramiel: Something is amiss, and I can\'t simply storm King Jannai\'s palace alone.");
+						playsound(fx + "weapon swings/POUND/" + random(1, 3) + ".ogg", false);
+						wait(300);
+						playsound(sounds2 + "rockmiss_1" + random(0, 1) + ".wav", false);
+						wait(1500);
+						script(false, "Bath Kothar: All I have from Kothar wa Khasis is the talent of building things. Ben Yam inherited a bit more.", "Bath Kothar: Are you an angel of Mercy, or not?", "Bath Kothar: Ben Yam is in hiding, somewhere near this coast, to the east.", "Bath Kothar: Bring him out. Together, we can handle Jannai.", "Ramiel: It was said that no children of Yam should live...", "Bath Kothar: Ben Yam had children himself, when last I saw him. Are they condemned, too?", "Ramiel: I will find Ben Yam, but it will not be the blood of idols that restores hope to this land!");
+						playsound(sounds2 + "hawk_wingstretch_0" + random(1, 3) + ".wav", false);
+						fadeout();
+						loop(20);
+						bgm.volume=bgm.volume-4;
+						if((geti("skills")&1)==0) script(true, "(Your original sword would be helpful. You can almost feel it, to the " + getDir(get_angle(me, get_vector(getd("swordx"), getd("swordy"), getd("swordz")))) + "...)", "(Yam was said to have power over the sea. If Ben Yam inherited some of that power, his hideout probably has an underwater entrance.)");
+						a.set("mission", "Find Ben Yam.");
+						a.set("hp", 100);
+						pool.play_extended_3d(sounds2 + "ambient - high quality/river_01.wav", me.x, me.y, me.z, 180, 255, -23, 20, 20, 10, 10, true, 0, 0, 0, 100);
+					}// Next.
+					else if(gloc>=5 and me.x>160 and me.z<-12 and absolute(me.y-256)<=1.6) {
+						playsound("downloads/31106_Production_Element_Imaging_Accent_Stab_Dark_Hit_Reverb_04.wav", false);
+						fadeout();
+						fade_all();
+						pool.destroy_all();
+						stage=1;
+						gloc=(gloc==5) ? 0 : (gloc-4);
+						a.set("stage", stage);
+						a.set("gloc", gloc);
+						a.set("z", -30.0);
+						scapeme();
+						//script(true, "Ramiel: 
+					}// Found it.
+					else if(gloc==5 and me.z<0 and getd("hp3")<=0.0 and getd("hp4")<=0.0 and getd("hp5")<=0.0 and random(1, 1200)==666) {
+						fadeout(0.33);
+						a.set("hp3", random(10, 30));
+						a.set("hp4", random(-10, 30));
+						a.set("hp5", random(-20, 30));
+						if(getd("hp4")>0) a.set("name4", "Seamonster");
+						else a.set("name4", "");
+						a.set("name3", "Seamonster");
+						a.set("name5", (getd("hp5")>0) ? "Seamonster" : "");
+						a.set("x3", random(me.x-20, me.x+20));
+						a.set("y3", random(me.y-20, math_min(254, me.y+20)));
+						a.set("z3", random(-25, 0));
+						// I am officially switching to something that doesn't require such deep nesting. -_-.
+						a.set("x4", random(me.x-20, me.x+20));
+						a.set("y4", random(me.y-20, me.y+20));
+						a.set("z4", random(-25, 0));
+						a.set("x5", random(me.x-20, me.x+20));
+						a.set("y5", random(me.y-20, me.y+20));
+						a.set("z5", random(-25, 0));
+						loop(12);
+						
+					}// Random encounter.
+				}// moving.
+				
+				if(gloc==2) {
+					double e=geti("e"); // Umm.
+					if(e>=dt) e-=dt;
+					else e=0;
+						// Sound?
+					a.set("e", e);
+					if(e>12000 and stage==0) {
+						gloc=3;
+						a.set("gloc", 3);
+						a.set("mode", "move");
+						playsound(sounds + "CSM/Big Storm.WAV", false);
+						playsound(sounds2 + "ignite_0" + random(1, 3) + ".wav", getd("x"), getd("y"), 30, 100, false); // Is that... even... ?
+						wait(2000);
+						voice.speak_interrupt_wait("To bring hope is my duty. Thy will be done!");
+						loop(20);
+						bgm.volume=bgm.volume-4; // A bit loud.
+						wait(1000);
+						if(gets("name2")=="Ben Yam") a.set("name0", "Ben Yam");
+						clearDead();
+						voice.speak_interrupt("I will go north, to the mainland. There are still a few would be righteous souls who have survived Jannai\'s reign of terror.");
+						a.set("mission", "Go to the mainland and find people.");
+					}// Success. ... Kinda sad that 9000 isn't a reasonable threshold. But that's been done to death, anyway.
+				}// Charging.
+				if(gloc==5 and (gets("name3")!="" or gets("name4")!="" or gets("name5")!="")) {
+					// For posterity, the first time I did this, I screwed it up so that beating one caused loop 20 to play in pingarific slow motion.
+					int alive=0;
+					for(uint i=3; i<=5; i++) {
+						if(getd("hp" + i)<=0.0 and gets("name" + i)!="") put("name" + i, "");
+						else if(getd("hp" + i)>0.0) alive++;
+					
+					}// How did I wind up at the same depth as before? Gah!
+					
+					if(me.z>0.0) {
+						alive=0;
+						playsound(jla + "FallWater" + random(1, 4) + ".wav", false);
+						alive=0;
+						a.set("name3", "");
+						a.set("name4", "");
+						a.set("name5", "");
+						a.set("hp3", 0);
+						a.set("hp4", 0);
+						a.set("hp5", 0);
+					}// They leave. Kinda lame, but I figured, might as well.
+					if(alive<1) {
+						fadeout(0.33);
+						loop(20);
+						a.set("targ", -1);
+					}// Victory.
+				}// Mobs. This is not an efficient way to do this, and I should come up with something better.
+				
+				if(gloc>6 and me.y>500-me.x) {
+					fade_all();
+					pool.destroy_all();
+					bgm.stop();
+					stage=2;
+					gloc=(gloc>7) ? (gloc-2) : 0; // Umm.
+					a.set("stage", 2);
+					a.set("gloc", gloc);
+					scapeme(false);
+					// BGM?
+				}// Stage change.
+			}; break;
+			case 1 : {
+				vector v=keyV();
+				
+				vector temp(me.x, me.y, me.z);
+				me=tunnelmove(me, v, dt*0.001);
+				//if(me.y<245) {alert("ERROR!", "You just bounced to " + round(me.x, 0) + ", " + round(me.y, 0) + ", " + round(me.z, 0) + ", all the way from " + round(temp.x, 0) + ", " + round(temp.y, 0) + ", " + round(temp.z, 0) + "! Isn\'t that ridiculous? I think that\'s ridiculous!");}
+				
+				if(gloc==0 and me.x>230 and me.x<240 and me.y>260 and me.y<270) {
+					playsound(sounds2 + "hawk_landing_01.wav", false);
+					while(me.z!=-16) {
+						if(me.z<-16) {
+							me.z+=0.04;
+							if(me.z>-16) me.z=-16;
+						}
+						else if(me.z>-16) {
+							me.z-=0.04;
+							if(me.z<-16) me.z=-16;
+						}
+						pool.update_listener_3d(me.x, me.y, me.z);
+						time.tick();
+					}// Land.
+					wait(1000);
+					log_sound(sounds + "MHI/throw_weapon_lr.ogg");
+					pool.play_stationary_extended(sounds + "MHI/throw_weapon_lr.ogg", false, 0, 0, 0, 50);
+					wait(1250);
+					playsound(jla + "steps/dirt/run" + random(1, 6) + ".wav", me.x-1, me.y+1, me.z, false);
+					wait(500);
+					playsound(sounds + "MHI/cloth_light_" + random(0, 3) + ".ogg", false);
+					wait(1000);
+					script(true, "Ramiel: Ben Yam.", "\"If you have come to kill me, I might retaliate.\"", "\"If you\'ve come for my children, you will die.\"");
+					time.tick();
+					for(uint i=1; i<5; i++) {
+						playsound(sounds2 + "rock_water_0" + i + ".wav", 235+(5*cosine(i*(PI/4))), 265+(5*sine(i*(PI/4))), -16);
+						wait(150);
+					}// Splashes.
+					wait(1000);
+					clearDead();
+					a.set("name2", "Ben Yam");
+					a.set("hp2", 75);
+					a.set("x2", 233);
+					a.set("y2", 265);
+					a.set("z2", -16);
+					gloc=1;
+				}// Found.
+				
+				if(gloc==1 and getd("hp2")<=0.0) {
+					gloc=2;
+					fadeout();
+					if(gets("cv")=="on") set_voices("Ben Yam");
+					script(false, "Ben Yam: What you do to me is unimportant. My children left hours ago on a vision given to Elisha.", "Ramiel: Vision? Tell me of this vision.", "Ben Yam: If you are an angel of he who sent it, shouldn\'t you know?", "Ramiel: Zechariel arrived late to a meeting of the Archangels. Yours seems the sort of family Zachariel would protect.", "Ben Yam: Watcher of children of sinners, yes.", "Ben Yam: An urgent meeting of messengers, a lost one, and Elisha told to watch the sky... So, it is celestial war, then?", "Ramiel: I have not come to bring judgment, but hope.", "Ben Yam: Hope? Do you aim to rally the people against King Jannai, then?", "Ramiel: Not war; hope. Hope, mercy, and a bit of thunder.", "Ben Yam: Well, then. Best you leave the way Elisha did.");
+					a.set("mission", "Find the exit!");
+					playsound(sounds + "MHI/cloth_light_" + random(0, 3) + ".ogg", false);
+					a.set("z2", -16);
+					a.set("y2", 265);
+					vector bey(getd("x2"), getd("y2"), getd("z2"));
+					while(bey.x<250) {
+						bey=tunnelmove(bey, get_vector(4.0, 0, 0.1), 0.02, false);
+						time.tick();
+						system_keys(); // be safe.
+					}// Moving.
+					a.set("x2", 220);
+					a.set("y2", 288);
+					a.set("z2", -10);
+					
+					while(bgm.volume<getd("bgmVolume")-4) {
+						bgm.volume=bgm.volume+1;
+						time.tick();
+					}// fade in
+					script(true, "Ben Yam: There is an opening near the river, covered by a boulder. I trust yours is a power that can move it.");
+					a.set("targ", -1);
+				}// Victory.
+
+				// Do we get attacked here? The maze is annoying enough without attackers. Sure, in certain areas.
+				if(gloc<2 and random(0, 1200)==666 and (me.z<=-25 or (me.x>240 and me.x<255)) and clearDead()) {
+					int alive=0;
+					for(uint i=2; i<5; i++) {
+						a.set("hp" + i, random(-10, 30));
+						if(getd("hp" + i)>0) {
+							alive++;
+							a.set("name" + i, "sea monster");
+							vector enemy(me.x+random(-15, 5), me.y+random(-5, 5), me.z+random(-10, 10));
+							enemy=tunnelmove(enemy, get_vector(0, 0, 0), 0.04, false);
+							a.set("x" + i, enemy.x);
+							a.set("y" + i, enemy.y); 
+							a.set("z" + i, enemy.z);
+						}// Added.
+					}
+					if(alive>0) playsound(sounds2 + "rock_water_0" + random(1, 8) + ".wav", me.x+random(-5, 5), me.y+random(-5, 5), me.z+random(-5, 5)); // Jeqocon2: was sounds, the files are in sounds2
+				}// Random Encounter.
+				
+				if(gloc>=2 and me.y<=250) {
+					stage=0;
+					gloc=gloc+4;
+					fade_all();
+					if(gets("name2")=="Ben Yam") a.set("name0", "Ben Yam");
+					clearDead();
+					a.set("stage", 0);
+					a.set("gloc", gloc);
+					scapeme(false);
+				}// Go out the way you came in? Is that allowed?
+				a.set("x", me.x);
+				a.set("y", me.y);
+				a.set("z", me.z);
+			}; break;
+			case 2 : {
+				vector v=keyV();
+				me=desertmove(me, v, dt*0.001, gets("act")=="fall");
+				a.set("x", me.x);
+				a.set("y", me.y);
+				a.set("z", me.z);
+				if(me.x>280 and me.y>410 and me.x<460 and me.y<480) {
+					if(me.z>0) a.set("desc", "(A sandy ridge, probably roost to vultures and den to jackals)");
+					if(me.z>0 and me.z<3) a.set("desc", "(In a narrow ravine, largely in shadow.)");
+					else if(me.z<0 and me.y>425) {
+						if(me.x>370 and me.y<450 and me.x<405) a.set("desc", "In a rocky tunnel, suspiciously artificial-looking scratches marring the walls.");
+						else if(me.x<363 and me.y>460) a.set("desc", "Overlooking a smelting pit, still glowing with the heat of molten iron.");
+						else if(me.x>425) a.set("desc", "In a dimly lit stretch of cavern, a few dark holes in the walls and ceiling too small for soldiers to fit through.");
+						else if(me.y>445) a.set("desc", "In a dry, dusty cave, enough of the walkspace swept clear of debris for several men to walk abreast.");
+						if(gloc==1 and me.x<360 and me.y>455) {
+							playsound(sounds2 + "bellow" + random(1, 4) + "v.wav", false);
+							wait(1000);
+							script(true, "Ramiel: They aren\'t smelting Angellic equipment. Just ordinary iron.", "Ramiel: Nevertheless, that demon and its companions are using this to make wicked things.");
+							gloc=2;
+							a.set("name2", "Jannaean Soldier");
+							a.set("x2", 370);
+							a.set("y2", me.y);
+							a.set("z2", -13);
+							a.set("hp2", 75);
+							a.set("name3", "Jannaean Soldier");
+							a.set("x3", 372);
+							a.set("y3", 461);
+							a.set("z3", -13);
+							a.set("hp3", 75);
+							a.set("gloc", gloc);
+						}// Cut scene?
+					}// Inside.
+				}// Hideout.
+				
+				if(gloc==0 and clearDead())  {
+					for(uint i=0; i<10; i++) {
+						playsound(steps + "dirt/run" + random(1, 6) + ".wav", me.x+i, me.y, 0, false);
+						wait(200);
+					}// running away.
+					script(true, "Sapphira: Their captain is running away!", "Elisha: That was no mere man, was it?", "Ramiel: No. It is the body of a man, but the spirit of a demon.");
+					for(uint i=0; i<10; i++) {
+						playsound(steps + "dirt/run" + random(1, 6) + ".wav", me.x-10+i, me.y, 0, false);
+						wait(150);
+					}
+					script(true, "Bath Kothar: Demon, eh? And I just thought people could be viceous on their own.", "Elisha: Bath Kothar, I take it? Ben Yam was rather vague about his time in Babylon.");
+					playsound(sounds + "MHI/cloth_light_" + random(0, 3) + ".ogg", false);
+					wait(1000);
+					script(true, "Ben Yam: There is no time for pleasantries, if you want to find that demon.", "Ramiel: He was after things fallen from Heaven. That could be wounded angels, or holy weapons and armor, or angels corrupted to darkness.", "Kefa: Then what are we waiting for?");
+					a.set("mission", "Find the possessed soldier!");
+					gloc=1;
+					a.set("name1", "");
+					a.set("targ", -1);
+					// Party select.
+				}// First battle won.
+				else if(gloc==3 and dist3d2(me, get_vector(440, 460, -10))<100) {
+					if(gets("cv")=="on") set_voices("Jackal");
+					script(true, "\"Baals. I can\'t convince you to join us, can I?\"", "Ramiel: You can\'t fool me! What\'s your name?", "\"Jackal of Babylon. So, to be clear, you\'re refusing the offer?\"", "Ramiel: I am a servant of mercy! Of course I refuse!", "Jackal: This body let me in because of its hate and lust for blood, but many of my kin have found hosts because they had no other hope.", "Jackal: They pray to demons when your master lets them down. And you are a bringer of hope?", "Ramiel: I exist to serve something greater than myself, unlike you.", "Jackal: Oh? Who says I don\'t have a dayjob, too?", "Ramiel: If you serve the accuser, that doesn\'t help your case.", "Jackal: Not quite. I\'d say talk to Joanah, but he\'s dead.", "Jackal: I\'d say talk to Sandalphon, but you seem to have lost track of your fellow angels.");
+					//fadeout(0.33);
+					//playsong("downloads/217849__soughtaftersounds__mystical-film-score-soundscape-wonder.wav", true);
+					//script(false, "Elisha: One who denies the accuser while wearing his robes makes a fool of himself before one who withstands him by mercy.", "Jackal: Maybe, but look at those kids.", "Jackal: Now look at me, back to the kids, back to me.", "Jackal: I am not those kids. Now look at the angel...", "Jackal: Now look at the bear, back to the angel, now back to the kids...", "Jackal: Where\'s the bear? She ran off. Maybe she\'s had a crisis of faith? Is that her, behind that rock?");
+					/*for(uint i=0; i<10; i++) {
+						playsound(steps + "dirt/run" + random(1, 6) + ".wav", me.x+i, me.y, 0, false);
+						wait(200);
+					}// running away.
+					
+					fadeout();
+					bgm.stop();
+					script(false, "Ramiel: Trying to run away? You can\'t hide that easily!");
+					a.set("gloc", 1);
+					a.set("mission", "Follow the Jackal of Babylon!");
+					a.set("hp0", 100);
+					a.set("hp1", 0);
+					a.set("name1", "");*/
+					// Party select? You can get away with picking anyone, if we can reasonably bring in Kefa and Bath Kothar, here.
+					// Ananiah and Sapphira are strong at close quarters, but have poor defense. They make up for it with quick, lunging attacks, and I'd kinda like them to keep some of those javelins, but those have like no playtime for projectile purposes.
+					a.set("gloc", 4);
+					gloc=4;
+					a.set("name3", "Jackal");
+					a.set("hp3", 150);
+					a.set("x3", 440);
+					a.set("y3", 455);
+					a.set("z3", -13);
+					//fadeout();
+					playsound(fx + "weapon swings/SLICE/" + random(1, 6) + ".ogg", false);
+					playsong("A Challenge Met.ogg", true);
+					bgm.volume=bgm.volume-4; //???
+					wait(500);
+					script(true, "Ramiel: Enough! Come out of him!", "Jackal: If you insist.");
+					playsound(sounds2 + "sounds2/21122_XW1_P04_177Whoosh_LowMechanic_03.wav", false);
+					wait(1000);
+					playsound(steps + "stone/run" + random(1, 5) + ".wav", false);
+					wait(25);
+					playsound(steps + "stone/run" + random(2, 6) + ".wav", false);
+					wait(500);
+					script(true, "Jackal: Anything else I can do for you?", "Ramiel: Tell me, where are all the items you, yours, and this army have collected today?", "Jackal: Are you looking for anything in particular?", "Ramiel: So arrogant...", "Ramiel: Are you going to answer me?", "Jackal: I don\'t know; feasting on your bones is looking pretty good, right about now.");
+					playsound(sounds + "MHI/swing_rough" + random(0, 2) + ".ogg", getd("x3"), getd("y3"), getd("z3"));
+					wait(1000);
+					bgm.volume=bgm.volume+4;
+					
+				}// First battle won.
+				else if(gloc==4 and clearDead()) {
+					playsound("54985__syna-max__anime-sword-hit.wav", false);
+					wait(1000);
+					script(true, "Jackal: Ugh... still don\'t count yourself fallen, huh?", "Ramiel: What?", "Jackal: You want to know something true?", "Jackal: All the things we\'ve found have already been sent back to King Jannai.");
+					gloc=5;
+					a.set("gloc", 5);
+					fadeout();
+					loop(4);
+					a.set("mission", "Find Shimeon, or Sariel.");
+				}// Victory!
+				else if(gloc==2 and absolute(me.x-357)<5 and absolute(me.y-460)<5 and me.z<-10 and key_down(KEY_Z) and getd("e")>=12000) {
+					gloc=3;
+					a.set("gloc", 3);
+					playsound(sounds + "CSM/Storm.WAV", false);
+					playsound(sounds2 + "bellow" + random(1, 4) + "v.wav", 356, 460, -13);
+					a.set("e", 0);
+					a.set("hp2", getd("hp2")/2);
+					a.set("hp3", getd("hp3")/2);
+					a.set("hp0", math_min(getd("hp0")+40, 100));
+					a.set("hp1", math_min(getd("hp1")+40, 100));
+					a.set("hp", getd("hp")+40);
+					
+				}// Clean up.
+				
+				// 10:56 PM 10/14/2015: Change the below to not care so much about gloc, so we can have random encounter after clearing this part?
+				if(gloc==1 and random(0, 2400)==666 and clearDead()) {
+					uint alive=0;
+					for(uint i=2; i<6; i++) {
+						a.set("hp" + i, random(-15, 50));
+						a.set("x" + i, me.x+random(-10, 10));
+						a.set("y" + i, me.y+random(-10, 10));
+						a.set("z" + i, (me.z<-3 and me.x>350 and me.x<450 and me.y>440 and me.y<470) ? -13.0 : 0.0);
+						vector enemy(getd("x" + i), getd("y" + i), getd("z" + i));
+						if(getd("hp" + i)>0) {
+							alive++;
+							a.set("name" + i, (me.z<-3 and me.x>350 and me.x<450 and me.y>400 and me.y<500) ? "Jannaean Soldier" : "Bandit");
+							
+							playsound((gets("name" + i) == "Bandit") ? (sounds + "MHI/swing_med" + random(0, 5) + ".ogg") : (sounds2 + "javelin_toss_0" + random(1, 4) + ".wav"), enemy.x, enemy.y, enemy.z, false);
+							enemy=desertmove(enemy, get_vector(0, 0, -1), 0.04, false);
+							setPose(i, enemy);
+							wait(100);
+						}// Ugh.
+						if(getd("hp" + i)>0 and gets("name" + i)=="Bandit") for(uint j=0; j<map.length(); j++) {
+							if(map[j].contains(enemy)) {
+								Box2@ b=cast<Box2>(map[j]);
+								if(@b!=null) a.set("z" + i, b.getTop(enemy.x, enemy.y));
+								if(@b!=null) continue;
+								Sphere@ s=cast<Sphere>(map[j]);
+								if(@s!=null) a.set("z" + i, s.z-square_root( s.radius*s.radius - distance2(enemy, s.getCenter())));
+								if(@s!=null) continue;
+								Box@ b2=map[j].getBounds(); // Default.
+								a.set("z" + i, b2.z+b2.depth);
+							}// GAAAAH! NO! NOT 9 LEVELS DEEP!
+						}// Don't let them spawn inside solid objects.
+					}// Enemy loop.
+					
+				}// Attacks.
+				
+				if(me.y<500-me.x) {
+					gloc=7+math_max(0, gloc-5); // Hopefully?
+					stage=0;
+					a.set("gloc", gloc);
+					a.set("stage", 0);
+					fade_all(0.33);
+					pool.destroy_all();
+					scapeme(false);
+				}// Go back to stage 0. Warning! Gloc!
+				
+				if(bgm.active and !bgm.playing) playsong("downloads/Mystic Land.ogg", true);
+			}; break;
+		}// stageswitch in step.
+		pool.update_listener_3d(me.x, me.y, me.z);
+		a.set("gloc", gloc);
+		
+		if(gets("mode")=="move") fight(dt);
+					if(a.exists("swordslot")) {
+						// Maybe this goes in move, eh?
+		if(stage>0 and geti("swordslot")>=0 and absolute(me.x-getd("swordx"))<=1.5 and absolute(me.y-getd("swordy"))<=1.5 and absolute(me.z-getd("swordz"))<=1.5) {
+							//fadeout(0.5);
+							a.set("sword", stage); // ... Yeah.
+							a.set("skills", geti("skills")|(1<<stage));
+							//sting(1);
+							bgm.volume=bgm.volume-5;
+							voice.speak_interrupt_wait(sdescs[stage]);
+							wait(500);
+							playsound("downloads/31712_Science_Fiction_Computing_Digital_Ascend_01.wav", false);
+							pool.destroy_sound(geti("swordslot"));
+							a.set("swordslot", -1);
+							wait(1250);
+							voice.speak_interrupt_wait("(Gained Skill " + stage + ": " + skills[stage]);
+							bgm.volume=bgm.volume+5; //?
+						}// Got sword.
+		}// Sword.
+		
+		if(stage>1 and key_down(KEY_R)) radar(dt*0.001);
+	}// Game.
+	
+}// step.
+void new_game(int slot) {
+	// Yeah, This is going to be annoying. Does dictionary serialization actually work?
+	
+	a.set("slot", slot);
+	a.set("x", 0);
+	a.set("y", 0);
+	a.set("z", 0); // Uuugh.
+	a.set("loc", "game");
+	a.set("stage", 0);
+	a.set("ychar", "Remeel");
+	a.set("gloc", 0);
+	a.set("hp", 100);
+	a.set("e", 0);
+	a.set("skills", 0);
+	
+	
+	fade_all();
+	scapeme();
+	
+}// New Game.
+void load_game(int slot) {
+	file fin;
+	fin.open("trisave" + slot + ".dat", "rb");
+	string txt=fin.read(0);
+	fin.close();
+	a=deserialize(string_decrypt(txt, "Perfect fusion I siagree!"));
+	// Umm.
+	// This requires more work. Sure, everything is set correctly, but we might want to set up some other things, like music and stuff.
+	fade_all();
+	scapeme(false); // Should handle most of it? I'm not sure about cutscenes and such.
+}// Load.
+void save_game(int slot=-1) {
+	if(slot<1) slot=geti("slot");
+	if(slot<1) {
+		alert("ERROR", "Tried to save with no slot.");
+		return;
+	}
+	string txt=serialize(a);
+	file fout;
+	fout.open("trisave" + slot + ".dat", "wb");
+	fout.write(string_encrypt(txt, "Perfect fusion I siagree!"));
+	fout.close();
+}
+
+
+void scapeme(bool scene=true) {
+	
+	int stage=geti("stage");
+	int gloc=geti("gloc");
+	switch (stage) {
+		case 0 : {
+			//sound@ wind=getsound(sounds2 + "ambient - high quality/windheavy_01.wav");
+			//wind.play();
+			pool.play_extended_3d(sounds2 + "ambient - high quality/windheavy_01.wav", 0, 0, 30, 0, 0, 30, 5000, 5000, 1000, 1000,
+true, 0,
+0, 0, 100);
+			pool.play_3d(sounds2 + "gulls_03.wav", 0, 0, 30, -10, 0, 5, true);
+			pool.play_3d(sounds2 + "gulls_04.wav", 0, 0, 30, 10, 5, 5, true);
+			pool.play_3d(sounds2 + "gulls_06.wav", 0, 0, 30, -3, 10, 5, true);
+			a.set("slot1", pool.play_3d(sounds2 + "ambient - high quality/beach_01.wav", 0, 0, 30, 0, 15, 0, true)); // This should reposition itself to always be at the shortest distance between the player and the beach.
+			a.set("slot2", pool.play_3d(sounds2 + "ambient - high quality/beach_01.wav", 0, 0, 30, 0, 25, 0, true)); // Likewise. Islands have radius 15, the beach sound is a ring 10 thick.
+			pool.play_extended_3d(sounds2 + "ambient - high quality/brook_01.wav", 0, 0, 30, 75, 300, 0, 0, 200, 5, 5, true, 0, 0, 0, 100);
+			pool.play_extended_3d(sounds2 + "ambient - high quality/river_01.wav", 0, 0, 30, 65, 255, 0, 0, 10, 0, 50, true, 0, 0, 0, 100);
+			playsong("downloads/217846__soughtaftersounds__film-score-soundscape-stray.wav", false);
+			if(scene) wait(500);
+			double[] islands={ 30, 100,
+ 100, 10,
+ -25, -60,
+ -50, -110,
+ 10, -180,
+ 70, -160,
+ -128, 15,
+ 200, 0,
+ -10, 200,
+ -80, 100,
+ -20, 125
+ }; // islands. Ugh.
+			pool.play_extended_3d(sounds2 + "gulls_03.wav", 0, 0, 0, 30, 100, 0, 25, 25, 25, 25, true, 0, 0, 0, 100);
+			pool.play_extended_3d(sounds2 + "gulls_01.wav", 0, 0, 0, 30, 100, 10, 25, 25, 25, 25, true, 0, 0, 0, 100);
+			for(uint i=0; i<islands.length(); i+=2) pool.play_extended_3d(sounds2 + "gulls_0" + ((i%6)+1) + ".wav", 0, 0, 0, islands[i]+random(-15, 15), islands[i+1]+random(-15, 15), random(4, 10), 5, 5, 5, 5, true, 0, 0, 0, 100);
+			// Trees?
+			double[] trees={
+ -100, 275, -89, 276, -78, 277, -67, 278, -56, 280, -43, 280, -38, 299, -25, 285, -14, 286, -5, 279,
+ 50, 280, 80, 277, 80, 288, 90, 290, 100, 280, 105, 286, 55, 300, 44, 295, 33, 284,
+ 75, 310, 85, 311, 96, 311, 107, 312, 120, 310, 124, 290, 120, 280, 136, 310, 136, 280,
+ 50, 300, 45, 295, 40, 300, 33, 305, 25, 307, 20, 311, 15, 315, 10, 312, 5, 317, -1, 315, -3, 305, -7, 311, -10, 315, -11, 290, -14, 302, -17, 311, -20, 315, -15, 320, -25, 316, -30, 320, -44, 333, -50, 340, 0, 330, 10, 320,
+ -101, 285, -90, 290, -110, 285, -120, 300, -129, 305
+ };
+			for(uint i=0; i<trees.length(); i+=4) {
+				if(i==4) pool.play_extended_3d(sounds2 + "ambient - high quality/windlight_01.wav", 0, 0, 30, trees[i], trees[i+1], 4, -20, 20, -7, 10, true, 0, 0, 0, 100);
+				else if(i%12==0) pool.play_extended_3d(sounds2 + "ambient - high quality/birdssparse_01.wav", 0, 0, 30, trees[i], trees[i+1], 5, 7, 7, 7, 7, true, 0, 0, 0, 100);
+			}// Every tree does not get a sound, because I said so.
+			
+			// Lake?
+			// House?
+			// 4:38 PM 10/15/2015: Add the entrance to Ben Yam's hideout.
+			pool.play_extended_3d("juskiddink__waves-caves2.ogg", 0, 0, 30, 180, 255, -16, 20, 15, 5, 5, true, 0, 0, 0, 200);
+			pool.play_extended_3d("juskiddink__waves-caves2.ogg", 0, 0, 30, 180, 255, -16, 20, 15, 5, 5, true, 0, 0, 0, 50);
+			pool.play_extended_3d("juskiddink__waves-caves2.ogg", 0, 0, 30, 180, 255, -16, 20, 15, 5, 5, true, 0, 0, 0, 50); // Umm. I guess. that's... pretty clear?
+			//pool.max_distance=70; // Just... you know.
+			// Angel sword? I do not feel great about this. I'm assuming there will be multiples, because multiple angels fell.
+			if(a.exists("sword")==false) {
+				a.set("swordx", random(-100, 100));
+				a.set("swordy", random(-100, 200));
+				double nd=9000;
+				vector sword(getd("swordx"), getd("swordy"));
+				for(uint i=0; i<islands.length(); i+=2) {
+					vector island(islands[i], islands[i+1]);
+					double next=distance2(island, sword);
+					if(next<nd) nd=next;
+				}// Position the sword vertically. It's at the bottom.
+				sword.z=((nd<=625) ? 0 : math_max(-25, -absolute(square_root(nd)-25)));
+				a.set("swordz", sword.z);
+				a.set("swordslot", pool.play_3d("downloads/39540_Sound_DesignAngelMagicPixie_Dust_MoveTinkly_8.wav", 0, 0, 30, sword.x, sword.y, sword.z, true));
+				clipboard_copy_text("(Debug): " + sword.x + ", " + sword.y + ", " + round(sword.z, 0));
+			}// Sword in the ocean.
+			
+			if(!scene) {
+				playBGM(0);
+				return; // Umm...
+			}// No scene.
+			for(int i=30; i>=0; i--) {
+				//wind.volume=wind.volume-1; // Oh, I'm now hoping this doesn't get graphics.
+				pool.update_listener_3d(0, 0, i);
+			if(i>30) {alert("Error", "Wrong direction."); exit();}
+			else if(i<0) {alert("Error", "Too far."); exit();}
+				wait(40);
+			}// Fade wind.
+			playsound(steps + "sand/fall4.wav");
+			playsound(sounds2 + "sounds2/Crumbling-Mike_Koenig-1123041125.wav");
+			wait(500);
+			playsound(steps + "dirt/slide.wav");
+			//playsound(voices + "remeel/ugh1.ogg");
+			wait(500);
+	for(uint i=0; i<4; i++) {
+				playsound(steps + "dirt/run" + (i+1) + ".wav", 0, 0, 0, i, false);
+				wait(350);
+			}// Steps.
+			voice.speak_interrupt_wait("Ugh. What is this place? Why am I here?");
+			wait(500);
+			for(uint i=0; i<9; i++) {
+				playsound(sounds + "steps/gravel/run" + (i+1) + ".wav", 0, 0, 5.0*cosine(2*PI/9.0*i), 5.0*sine(i*2.0*PI/9.0), false);
+				wait(400);
+			}// Steps.
+			voice.speak_wait("We can\'t have lost. Michael... But why am I cut off?");
+			wait(1000);
+			playsound("downloads/5901_SceneFlash.wav");
+			wait(1000);
+			voice.speak_wait("I am not far from the island where Shimeon would retreat, if Jannai turned on him. Even if I don\'t find him, I will! bring hope to the promised land.");
+			wait(500);
+			playsound(sounds + "menu/yes_no_option.wav");
+			a.set("mission", "Find Shimeon\'s Island.");
+			a.set("desc", "An ancient harbor, its collapsed ruins buried in sand.");
+			wait(1000);
+			voice.speak_interrupt("(Use the arrow keys, or A S W D, to move. Hold shift to fly.)");
+			
+			a.set("mode", "move"); // Uh Oh.
+		}; break;
+		case 1 : {
+			
+			if(scene and getd("x")<170) a.set("x", 171);
+			else if(scene and getd("x")>190) a.set("x", 189);
+			
+			//Map this so it's under stage 0, which means we're to the right of 80, and to the north of 256, and... *sigh* everything is below ground. Is that... sane?
+			// tunnels come in groups of 4: east/west, north/south, vertical, and rivers. Which I guess means the rivers are all oriented the same way. Hum. I'll make those spheres with a southwest drag, then? Feels like a bad idea, but sure.
+			// We provide the centers for each of these. The rivers have a radius of ... 4+i%5? Heh. That would just be confusing. Let's go with 6, because 5 seems small, but 10 feels huge. Then again, the ceiling would be low...
+			//Tunnels have a radius of 5, and a length of ... 10? I don't know! That seems really short!
+			
+			/*vector[] tunnels={
+ get_vector(180, 265, -18), // NS. The entrance is special.
+ get_vector(180, 270, -18), // WE, not sure how well the transition works if tunnels are shorter than 14? It goes both left and right.
+ get_vector(190, 270, -13), // UD, goes almost to the top. Ouch.
+ get_vector(180, 257, -23), // So I put a sphere at the entrance after all.
+ get_vector(170, 277, -19), // NS on the first western fork.
+ get_vector(175, 283, -20), // This symmetry thing is getting real old, real quick.
+ get_vector(183, 283, -15), // Umm...
+ get_vector(160, 285, -20), // A pool off the western branch. I'm a little confused, now. I was thinking the correct path would be rapping around to the northeast, then finding an underground Island, Voldemort Cave Style.
+ get_vector(186, 280, -10), // Supposed to connect the two vertical sections.
+ get_vector(190, 290, -10), // Wrap-around.
+ get_vector(200, 290, -10), // There should be a destructable rock at the top of this shaft. Beat it up to reach the surface.
+ get_vector(200, 280, -30), // Main lake? Na. I'm not sure I positioned it right, for that matter.
+ get_vector(220, 280, -5), // NS shaft rapping around the lake.
+ get_vector(210, 290, -4), // I'm afraid these are too close together and the ambience will just be confusing.
+ get_vector(150, 280, -20), // O.O. Vertical shaft, western pool.
+ get_vector(233, 255, -8), // This should lead to the main lake.
+ get_vector(150, 290, -10), // NS shaft on the annoyingly large western area.
+ get_vector(230, 270, -7), // I wonder if the alignment will be problematic...
+ get_vector(0, 0, -20), // Filler.
+ get_vector(133, 290, -17), // ddd pool.
+ get_vector(240, 265, -8), // More wrapping the lake.
+ get_vector(140, 290, -12) // Leads to the Mara Pool.
+};*/
+			
+			map.resize(0);
+			map.reserve(20);
+			map.insert_last(newSphere(180, 255, -23, 10.0));
+			map.insert_last(newCylinder(180, 262, -20, 3, 15));
+			map.insert_last(newCylinder(160, 275, -20, 3, 32, XAXIS));
+			map.insert_last(newCylinder(193, 275, -30, 4, 15, ZAXIS));
+			map.insert_last(newCappedConic(get_vector(194, 275, -16), get_vector(215, 290, -10), 3, 4)); // Ouch.
+			// It'd be nice if we could have a waterfall track that tube. Also, it gets narrower. So, shouldn't the vertical shaft be full of water, too?
+			map.insert_last(newCylinder(215, 290, -10, 5, 20, XAXIS)); // Umm.
+			map.insert_last(newCappedConic(get_vector(230, 290, -10), get_vector(250, 280, -15), 5, 6)); // Ew.
+			map.insert_last(newCylinder(250, 250, -15, 5, 30, YAXIS));
+			map.insert_last(newSphere(240, 265, -16, 10)); // I'm not sure about that.
+			map.insert_last(newCylinder(235, 265, -16, 3.5, 0.1, ZAXIS)); // Island. Not really sure how to make this one work.
+			
+			// Diversions and distractions.
+			map.insert_last(newSphere(200, 275, -35, 7)); // Bottom of the shaft.
+			map.insert_last(newCappedConic(get_vector(200, 280, -35), get_vector(180, 300, -15), 3, 2)); // That could be a problem.
+			map.insert_last(newCylinder(180, 300, -15, 3, 15, ZAXIS)); // Climb out this, and wind up in the river? Also, you need to be swimming in this one.
+			map.insert_last(newCylinder(160, 275, -20, 3.5, 15, YAXIS));
+			map.insert_last(newCappedConic(get_vector(160, 290, -20), get_vector(180, 300, -15), 3.5, 2)); // Ew, is a 3-way intersection really going to work?
+			map.insert_last(newCylinder(160, 290, -30, 3, 10, ZAXIS)); // So the water from the river doesn't flood the tunnel you're currently in. Except... how would the Mara pool have wound up anywhere else, in that case?
+			map.insert_last(newCappedConic(get_vector(160, 290, -20), get_vector(150, 290, -10), 3, 4));
+			map.insert_last(newCylinder(139, 290, -12, 4, 12, XAXIS));
+			map.insert_last(newSphere(130, 290, -17, 10));
+			
+			
+			if((geti("skills")&2)==0) {
+				vector sword(130, 290, -17);
+				a.set("swordx", sword.x);
+				a.set("swordy", sword.y);
+				a.set("swordz", sword.z);
+				a.set("swordslot", pool.play_3d("downloads/39540_Sound_DesignAngelMagicPixie_Dust_MoveTinkly_8.wav", 0, 0, 30, sword.x, sword.y, sword.z, true));
+				//clipboard_copy_text("(Debug): " + sword.x + ", " + sword.y + ", " + round(sword.z, 0));
+			}// Mara.
+			/*for(uint i=0; i<tunnels.length(); i++) {
+				uint type=i%4;
+				if(type==0) pool.play_3d("littlerobotsoundfactory_ambience-cave-00.ogg", 0, 0, 0, tunnels[i].x, tunnels[i].y-10, tunnels[i].z, true);
+				else if(type==2) pool.play_extended_3d(sounds2 + "sounds2/Spooky Water Drops-SoundBible.com-50164895.wav", 0, 0, 0, tunnels[i].x, tunnels[i].y, tunnels[i].z-10, 5, 5, 5, 5, true, 0, 0, 0, 100);
+				else if(type==1) pool.play_3d(sounds2 + "sounds2/Spooky Water Drops-SoundBible.com-50164895.wav", 0, 0, 0, tunnels[i].x, tunnels[i].y, tunnels[i].z, true); // Centered? OK, then.
+				else if(i%8<5) pool.play_extended_3d("juskiddink__waves-caves2.ogg", 0, 0, 0, tunnels[i].x, tunnels[i].y, tunnels[i].z, 10, 10, 10, 10, true, 0, 0, 0, 100);
+				else pool.play_extended_3d("jpdeglet69__caveriverfall-04.ogg", 0, 0, 0, tunnels[i].x, tunnels[i].y, tunnels[i].z, 7, 7, 7, 7, true, 0, 0, 0, 100);
+			}// Tunnel loop.*/
+			for(uint i=0; i<map.length(); i++) {
+				Sphere@ s=cast<Sphere>(map[i]);
+				if(@s!=null) {
+					pool.play_extended_3d("juskiddink__waves-caves2.ogg", 0, 0, 0, s.x, s.y, s.z, s.radius-2, s.radius-2, s.radius-2, s.radius-2, true, 0, 0, 0, 100);
+					continue;
+				}// It's a sphere. Those never sound like waterfalls? I'm not sure how I feel about that.
+				CappedConic@ cc=cast<CappedConic>(map[i]);
+				if(@cc!=null) {
+					vector c=cc.getCenter();
+					playsound("jpdeglet69__caveriverfall-04.ogg", c.x, c.y, c.z, true); // Umm. Wrong? I think?
+					continue;
+				}// These can do lots of things.
+				Cylinder@ cy=cast<Cylinder>(map[i]);
+				if(@cy!=null) {
+					if(cy.axis==ZAXIS and cy.y==300) {
+						playsound("jpdeglet69__caveriverfall-04.ogg", cy.x, cy.y, cy.z, true);
+						playsound("jpdeglet69__caveriverfall-04.ogg", cy.x, cy.y, cy.z+(cy.height/2), true); // These shoudl have width, but meh.
+					}// The waterfall under the river.
+					else playsound((cy.axis==ZAXIS or i%2==0) ? (sounds2 + "sounds2/Spooky Water Drops-SoundBible.com-50164895.wav") : "littlerobotsoundfactory_ambience-cave-00.ogg", cy.x, cy.y, cy.z, true);
+				}// Cylinders.
+				else {
+					vector c=map[i].getCenter();
+					playsound("littlerobotsoundfactory_ambience-cave-00.ogg", c.x, c.y, c.z, true);
+				}// Basically the same as other stuff.
+			}// Map Loop.
+			
+			
+			//pool.play_extended_3d("juskiddink__waves-caves2.ogg", 0, 0, 0, 180, 255, -23, 10, 10, 5, 5, true, 0, 0, 0, 100);
+			pool.play_extended_3d(sounds2 + "ambient - high quality/river_01.wav", 0, 0, 0, 60, 300, 0, 0, 160, 5, 5, true, 0, 0, 0, 80);
+			
+			
+			
+			if(scene) {
+				vector me(getd("x"), getd("y"), getd("z"));
+				
+				if(me.y>260) {;} // Above.
+				else {
+					for(int i=15; i>=0; i--) {
+						pool.update_listener_3d(me.x, me.y, me.z-i);
+						wait(100); //?
+					}// Loop.
+					while(me.z<-23) {
+						me.z+=0.4;
+						pool.update_listener_3d(me.x, me.y, me.z);
+						wait(100);
+					}
+					a.set("z", me.z);
+					playsound(jla + "FallWater" + random(1, 4) + ".wav", false);
+					wait(200);
+					playsound(sounds2 + "hawk_wingstretch_0" + random(1, 4) + ".wav", false);
+					wait(1000);
+					
+				}// From below.
+				
+			}// Scene bit.
+			playBGM(stage);
+		}; break;
+		case 2 : {
+			if(scene and gets("cv")=="on") set_voices("Elisha", "Sapphira", "Ananias");
+			pool.destroy_all();
+			vector me(getd("x"), getd("y"), getd("z"));
+			pool.play_extended_3d(sounds2 + "ambient - high quality/windheavy_01.wav", me.x, me.y, me.z, 200, 300, 15, 150, 150, 150, 150, true, 0, 0, 0, 100);
+			pool.play_extended_3d(sounds2 + "ambient - high quality/windheavy_01.wav", me.x, me.y, me.z, 200, 300, 38, 150, 150, 150, 150, true, 0, 0, 0, 90);
+			
+			map.resize(0);
+			// Might have screwed up the boxes. They're designed for y=vertical. I'd like to fix that. On the other hand... the flat side is always in the xz plane, so we can have ramps pointing north and south, right? And cliffs? Yay cliffs!
+			
+			// Anyway, the map isn't too important. Cliffs, pits, doons, standing stones. Spheres will be pits, conics will be dunes, cylinders will be boulders, boxes will be unmovable blocks. I guess that means conics can be mountains, too.
+			// New plan: upright cylinders (axis==ZAXIS) are trees. I don't want to think about letting you cut them down, but maybe I will anyway.
+			//vector me(pool.last_listener_x, pool.last_listener_y, pool.last_listener_z);
+			for(int y=310; y<450; y+=10) {
+					float x=200+random(-10, 10);
+					map.insert_last(newCylinder(x, y, 0, 1, 4, ZAXIS));
+					map.insert_last(newCylinder(x, y, 3.9, 3, 0.5, ZAXIS)); // Treetops, which map 1 desperately needs.
+					if((y/10)%4==0) pool.play_extended_3d(sounds2 + "ambient - high quality/birds" + ((random(0, 4)>2) ? "sparse" : "busy" ) + "_01.wav", me.x, me.y, me.z, x, y, 4, 4, 4, 4, 4, true, 0, 0, 0, random(95, 105));
+					// Anything else we want to add in a loop like this?
+					// Sure. Rows of doons or something.
+					map.insert_last(newCylinder(250+((y-310)/10), y-15, 0, 1, 10, XAXIS));
+			}// Trees.
+			
+			// I want a cliff!
+			map.insert_last(newBox2(210, 360, -0.1, 10, 6, 6, east));
+			map.insert_last(newBox2(220, 360, -0.1, 5, 6, 6));
+			map.insert_last(newSphere(227, 360, 0, 6)); // Should let me walk under the cliff as well as on top of it. Yay carving!
+			
+			//Two things. First of all, we really need bigger rock formations, to kinda make a point to having it in 3D. I mean, what's the point of tiny cliffs and sand dunes when you can just fly over everything?
+			//Second, there need to be more ways to detect these things in audio, and maybe even camera controls of some kind, even if temporary. This might make the heavy wind a bit on the problematic side, since it's not only a decent "there are rocks here" sound, but it's loud and can drown out subtler sounds.
+			
+			// An arch-like formation? I'm not sure what purpose it would serve, but sure.
+			// Those dunes in the middle kinda make things difficult.
+			
+			// Ugh, just make the hideout / pit / whatever.
+			//map.insert_last(newBox2(280, 380, 0, 150, 10, 8));
+			map.insert_last(newCylinder(280, 410, -3, 15, 150, XAXIS));
+			map.insert_last(newCylinder(280, 430, -3, 15, 150, XAXIS));
+			// Pyramids? Want.
+			map.insert_last(newCylinder(280, 410, -3, 15, 30));
+			
+			// Dig holes in between the two cylinders.
+			for(int x=300; x<=400; x+=8) {
+				map.insert_last(newSphere(x, 425, 0, 10)); // ???
+			}// Digging.
+			// Go deeper!
+			map.insert_last(newSphere(390, 435, -3, 7)); // Troublesome.
+			map.insert_last(newSphere(390, 440, -5, 8));
+			playsound("littlerobotsoundfactory_ambience-cave-00.ogg", 390, 435, -5, true);
+			map.insert_last(newSphere(394, 445, -8, 5));
+			map.insert_last(newSphere(395, 447, -11, 10));
+			// Dig out enough space to build.
+			for(int x=350; x<425; x+=7) {
+				map.insert_last(newSphere(x, 450, -12, 8));
+			}// More digging.
+			map.insert_last(newBox2(350, 440, -18, 100, 30, 5));
+			// Put in some walls, make it more maze-ish?
+			playsound(sounds2 + "pitch_smelter_02.wav", 355, 460, -13, true);
+			Box2@ forge=newBox2(350, 455, -13.1, 15, 5, 4);
+			forge.slope=north;
+			map.insert_last(forge);
+			
+			// Cassiel's shield?
+			vector sword(random(200, 400), random(350, 450), 0);
+			for(uint i=0; i<map.length(); i++) {
+				if(map[i].contains(sword)) {
+					Sphere@ s=cast<Sphere>(map[i]);
+					if(@s!=null) sword.z=s.z-square_root(s.radius*s.radius - distance2(sword, s.getCenter()));
+					if(@s!=null) continue;
+					Box2@ b=cast<Box2>(map[i]);
+					if(@b!=null and b.slope>=0) sword.z=b.getTop(sword.x, sword.y);
+					else {
+						Box@ b2=map[i].getBounds();
+						sword.z=b2.z+b2.depth;
+					}// -_-
+				}// Collision.
+			}// Sword on the map.
+			if(sword.y>385 and sword.x>280 and sword.z<14) {
+				sword.x=random(350, 450);
+				sword.y=random(460, 470);
+				sword.z=-13;
+			}// This shouldn't happen!
+			clipboard_copy_text("Debug: " + str(sword));
+			
+			swordset(sword);
+			
+			if(scene) {
+				// So... Elisha's team Vs. a Jackal or Goat-possessed minion of Jannai?
+				//I'm not entirely sure how this is supposed to work. I mean...
+				// Elisha summons a bear, and it mauls everyone, just like his namesake did? Seems a bit... troublesome. Also, are there even bears near there?
+				// What are Ben Yam's kids doing? ... And what are their names? I kinda want to think of them as Lazarus and Sapphira, but that has... issues. Mostly that I'm trying to avoid Hellenized or Romanized names, and that'd make Lazarus Eliezer.
+				// Ananias? Does it end in s in Hebrew? Ananiah, maybe? Or even Ananijah? Gah!
+				// Anyway, in the spirit of GU, they should beat up the same demon later, while Joshua Ben Perichiah and Jeshu are destroying members of the Querky Miniboss Squad.
+				script(false, "\"The king has ordered everything found outside since the star-shower brought to the treasury.\"", "Elisha: As if these fallen things have want of a master!", "\"And how many are you hiding in that cloak? What about the lad and lass, there?\"", "\"Men, take them!\"");
+				a.set("name0", "Elisha");
+				a.set("x0", 215);
+				a.set("y0", 350);
+				a.set("z0", 0);
+				a.set("y", 350);
+				a.set("z", 5);
+				pool.update_listener_3d(getd("x"), 350, 0);
+				a.set("name1", "bear");
+				a.set("hp0", 100);
+				a.set("hp1", 50);
+				a.set("x1", 205);
+				a.set("y1", 340);
+				a.set("z1", 0);
+				playsong("A Challenge Met.ogg", false);
+				for(uint i=2; i<7; i++) {
+					a.set("name" + i, "Jannian Soldier");
+					a.set("x" + i, 208+(3*i));
+					a.set("y" + i, 340+(15.0*sine((i-2)*(PI/5))));
+					a.set("z" + i, 0);
+					a.set("hp" + i, random(25, 50));
+					if(i>5) playsound(fx + "weapon swings/STAB/" + random(1, 9) + ".ogg", getd("x" + i), getd("y" + i), getd("z" + i), false);
+					else playsound(sounds2 + "javelin_toss_0" + (i-1) + ".wav", getd("x" + i), getd("y" + i), getd("z" + i)+1, false);
+					wait(125);
+				}// Mooks.
+				
+			}// Scene.
+			else playBGM(stage);
+		}; break;
+	}// stageswitch in scapeme. UGH.
+
+}// scapeme
+
+
+int playsound(string fn, bool looping=false) {
+	log_sound(fn);
+	return pool.play_stationary(fn, looping);
+}
+int playsound(string fn, double lx, double ly, double sx, double sy, bool looping, bool persistent=false) {
+	log_sound(fn);
+	return pool.play_2d(fn, lx, ly, sx, sy, looping, persistent);
+}
+
+void fadeout(double time=1.0) {
+	double delay=time*20.0; // Still feels wrong.
+	while(bgm.volume>-50) {
+		bgm.volume=bgm.volume-1;
+		wait(delay);
+	}
+}
+
+double get_angle(vector o, vector p) {
+	// Return the angle of p, where o represents the origin.
+	// I don't think there's any better way to do this than atan. I'm doing this every frame in the intro. Aaaaaargh.
+	double dx=p.x-o.x;
+	double dy=p.y-o.y;
+	// Ignore z.
+	if(dx==0.0) return (dy>0.0) ? PI/2 : -PI/2;
+	double ret =arc_tangent(dy/dx);
+	if(dx<0) ret+=PI;
+	if(ret>PI) ret-=2.0*PI;
+	return ret;
+}// get angle.
+
+
+void move(vector me, vector v, string terrain, double dt, bool groundzero=true) {
+	
+	groundzero=false; // too annoying.
+	double dx=v.x, dy=v.y, dz=v.z; // Oopse. I meant to use a vector.
+	dt*=0.001; // Umm.
+	
+	bool changeFace=true;
+	if(key_down(KEY_LEFT) or key_down(KEY_A)) dx=-1.0;
+	else if(key_down(KEY_RIGHT) or key_down(KEY_D)) dx=1.0;
+	if(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) {
+		changeFace=false;
+		dx*=1.5;
+		if(dx!=0.0 and terrain!="sky" and (/*groundzero and*/ me.z<1.0)) {
+			playsound(sounds2 + "hawk_wingstretch_0" + random(1, 4) + ".wav", false);
+			dz=2.0;
+		}// Quick hops left/right. I assume key pressed would handle it, but just in case...
+		if(key_down(KEY_W) or key_down(KEY_UP)) dz+=3.0;
+		else if(key_down(KEY_DOWN) or key_down(KEY_S)) dz=-3.0;
+	}// shift.
+	else if(key_down(KEY_W) or key_down(KEY_UP)) dy=1.0;
+	else if(key_down(KEY_DOWN) or key_down(KEY_S)) dy=-1.0;
+	
+	dx*=dt*4.0;
+	dy*=dt*4.0;
+	if(a.exists("act") and string_contains("fallstun", gets("act"), 1)%4==0) {
+		dx=v.x*dt;
+		dy=v.y*dt;
+		dz=v.z;
+		// Gravity? *Sigh*
+		changeFace=false;
+	}// Stunned or falling.
+	dz*=dt;
+	
+	// Rotate for targets.
+	// 5:10 PM 9/27/2015: But what about things like running water, etc, that affect absolute velocity? -_-
+	if(geti("targ")>=0) {
+		// I don't like this. I don't like this at all. 
+		int targ=geti("targ");
+		// If the target doesn't exist, you shouldn't be locked on to it? ... But what about... loot and things? Do defeated enemies drop things?
+		if(getd("hp" + targ)>0.0) {
+			vector you(getd("x" + targ), getd("y" + targ), getd("z" + targ));
+			// So, we want to rotate (dx, dy, dz) to point at you. Or, rather, so that it's y axis points at you.
+			// Though, honestly, I'd prefer not to mess with left/right, but whatever.
+			// So, dx is perpendicular to theta... what's theta, anyway?
+			double theta=get_angle(me, you);
+			// Umm... dz? *Sigh*.
+			// I now need to rotate (dy, dz), don't I? DY is currently all your forward/backward velocity, but it's parallel to the ground.
+			// Luckily, it's as simple as ... umm... I think it works like this?
+			// Actually, we need.. *sigh* this:
+			double phi=get_angle(get_vector(0,0,0), get_vector(square_root(distance2(me, you)), you.z-me.z));
+			dz+=dy*sine(phi); // Presumably, any changes to dz are absolute and additive.
+			dy*=cosine(phi); // I hope.
+			
+			vector rv=rotate(get_vector(dx, dy, dz), get_vector(0,0,0), theta-(PI/2.0)); // I... hope...? Might need to tweak the offset?
+			dx=rv.x;
+			dy=rv.y;
+			
+			// That was an abomination. Matrix transformations are probably much faster, and I really wish I could teach myself to do them.
+		}
+	}// Targeting.
+	else if(changeFace) {
+		if(dx>0) a.set("face", (dy>0) ? "NE" : (dy<0) ? "SE" : "E");
+		else if(dx<0) a.set("face", (dy>0.0) ? "NW" : (dy<0.0) ? "SW" : "W");
+		else if(dy<0.0) a.set("face", "S");
+		else if(dy>0.0) a.set("face", "N");
+	}// Change Face.
+	
+	if(terrain=="sky") {
+		dx*=1.5;
+		dy*=1.5;
+	}
+	else if(string_contains(terrain, "swim", 1)>=0) {
+		dx*=0.6;
+		dy*=0.6;
+		dz*=0.6;
+	}// swimming.
+	
+	if(groundzero and dz<0 and me.z<=0) dz=0.0; // Maybe change it to accept a ground value instead of a boolean?
+		//clipboard_copy_text("DX:" + dx + ", DY:" + dy + "DZ:" + dz);
+	
+	if(dx!=0 or dy!=0 or dz!=0) {
+		// I hate doing it this way, but:
+		
+		bool doplay=(terrain!="sky" and (round(me.x+dx, 0)!=round(me.x, 0) or round(me.y+dy, 0)!=round(me.y, 0) or round(me.z+dz, 0)!=round(me.z, 0)));
+		me.x+=dx;
+		me.y+=dy;
+		me.z+=dz;
+		if(doplay) {
+			if(a.exists("act") and gets("act")=="fall" and (string_contains(terrain, "swim", 1)<0 or me.z>-1.0)) playsound(terrain + "/fall" + random(1, 4) + ".wav", false);
+			else playsound(terrain + "/run" + random(1, 6) + ".wav", false);
+		}// Wait what?
+		// Rolling? Sliding? Other?
+		if(groundzero and me.z<=0.0 and me.z-dz>0.0) playsound(sounds2 + "hawk_landing_01.wav", false); // Is that right?
+		//}// sounds.
+		
+		a.set("x", me.x);
+		a.set("y", me.y);
+		a.set("z", me.z);
+	}// moving.
+}// movement.
+
+// Returns the square of the distance, because there is no reason to take the square root most of the time.
+double distance2(vector v1, vector v2) {
+	return (((v1.x-v2.x)*(v1.x-v2.x))+((v1.y-v2.y)*(v1.y-v2.y)));
+}
+
+bool confirm(string tosay) {
+	dynamic_menu conf;
+	conf.allow_escape=true; // Hmm.
+	conf.enable_home_and_end=true;
+	conf.wrap=false;
+	conf.add_item_tts("Yes");
+	conf.add_item_tts("No");
+	conf.set_callback(main_callback, "confirm");
+	return (conf.run(tosay, true)==1);
+}// Confirm.
+
+void playBGM(int stage=-1, int gloc=-1) {
+	if(stage<0) stage=geti("stage");
+	if(gloc<0) gloc=geti("gloc");
+	if(stage==0) {
+		loop((gloc<3) ? 7 : (gloc==4) ? 1 : 20);
+		bgm.volume=bgm.volume-4;
+	}
+	else if(stage==1) {
+		playsong("241946__dredile__dark-ambience-lonely-caverns.ogg");
+		bgm.volume=bgm.volume-4; // Umm. Are we just... going to do this everywhere? I feel like we need to balance the quieter Varazuvi tracks, and we won't need to do this so much.
+	}
+}
+
+const string[] skills={
+"Basic Combo. press spacebar, or g, 3 times in a row to perform a simple combo.",
+"Heal. Hold Z, and press up or W, to heal allies, and weaken nearby enemies. Divides all your power among all targets.",
+"Shield. Hold Z and down, or Z and S, to guard against most attacks. Rapidly depletes power.",
+"Flame of Hope: hold Z, and press left, left, right, attack, to cast angellic fire at your enemies.",
+"Smite from On High: In the air, hold up, and attack, to perform a diving attack.",
+"Outer Darkness: hold Z, and press down, up, down, attack, to temporarily blind all enemies."
+};
+const string[] sdescs={
+"This is the sword I used in Heaven. I must have dropped it when I fell.",
+"The Waters of Mara remain pure, even with the touch of the blood of Yam thick here.",
+"The shield of Cassiel cannot have fallen here... why can't I understand...?",
+"They sought to imprison Death, but neglected to implement Mercy.",
+"I can\'t afford to miss the mark!",
+"If there is no Hope in the darkness, then is there Hope at all?"
+};
+
+bool noskip() {
+	return (key_up(KEY_RETURN) and key_up(KEY_A) and key_up(KEY_SPACE) and key_up(KEY_ESCAPE));
+}
+void keywait() {
+	keys_pressed();
+	while(true) {
+		system_keys();
+		if(keys_pressed().length()>0) return;
+		wait(5);
+	}// Loop.
+}
+
+void script(bool dim, string s0, string s1="", string s2="", string s3="", string s4="", string s5="", string s6="", string s7="", string s8="", string s9="", string s10="", string s11="", string s12="", string s13="", string s14="", string s15="") {
+	// Weirdest thing to watch out for: starting scripts with the A key down. Space or Enter, too, but especially A.
+	string[] lines={s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15};
+	keys_pressed();
+	//playsound(jla + "menu/submenu.wav", false); // Umm?
+	if(dim) bgm.volume=bgm.volume-4;
+	uint l=0;
+	bool cv=(gets("cv")=="on");
+	if(cv and string_contains(s0, ":", 1)>0 and voices.exists(string_left(s0, string_contains(s0, ":", 1)))) {
+		custom_voice@ vv;
+		custom_voice temp;
+		@vv=temp;
+		voices.get(string_left(s0, string_contains(s0, ":", 1)), @vv);
+		
+		vv.speak(string_right(s0, s0.length()-string_contains(s0, ":", 1)));
+	}// Custom voice.
+	else voice.speak(s0);
+	while(l<16 and lines[l]!="") {
+		system_keys();
+		int[] keys=keys_pressed(); // This right here is why we have event based systems.
+		bool found=false; // GRR!
+		for(uint i=0; i<keys.length(); i++) {
+			found=((dirs.find(keys[i])>=0 or keys[i]==KEY_RETURN or keys[i]==KEY_H or keys[i]==KEY_G) and keys[i]!=KEY_A);
+			if(keys[i]==KEY_RETURN or keys[i]==KEY_H or keys[i]==KEY_G) l++; // No confirmation sound?
+			if(found) i+=100;
+		}// Keys.
+			if(found and l<16) {
+				string[] parts=string_split(lines[l], ":", true);
+				if(cv and voices.exists(parts[0])) {
+					custom_voice@ vv;
+					custom_voice temp;
+					@vv=temp;
+					// AGH! THIS CAN'T BE PORTED TO PYTHON!
+					voices.get(parts[0], @vv);
+					vv.load_config(vv.config_path);
+					vv.speak_interrupt(string_right(lines[l], lines[l].length()-parts[0].length()));
+				}// Custom.
+				else voice.speak_interrupt(lines[l]);
+			}// Speak.
+		else if(!noskip() and !key_down(KEY_RETURN) and !key_down(KEY_SPACE)) break;
+		wait(5);
+	}// Loop.
+	if(dim) bgm.volume=bgm.volume+4;
+}
+
+// Oh, jees, this is stupid. The lack of a map, I mean. Are we going to actually draw one, or am I going to have to gut the step function and make a universal movement function? The latter is better, but the former is less of a nuissance.
+
+void fight(double dt) {
+	
+	dt*=0.001;
+	// We need to watch out for what allies are doing when not fighting. I like the idea of a party of up to three, and incentives for you to choose party members diversely, but I'm kinda lost beyond that.
+	
+	vector me(getd("x"), getd("y"), getd("z")); // Ugh, and now we need to keep track of party members _and_ the player, even though they aren't in the same format.
+	
+	string act=gets("act");
+	double counter=getd("counter");
+	int targ=geti("targ");
+	
+	if(counter>0.0) {
+		counter-=dt;
+		if(counter<=0.0) {
+			counter=0.0;
+			vector aim(0, 1, 0);
+			string face=gets("face");
+			if(targ>=0) {
+				// So, I want the unit vector pointing from the player to the target.
+				aim=get_vector(getd("x" + targ), getd("y" + targ), getd("z" + targ))-me;
+				double length=aim.length();
+				if(length!=0) aim/=length; // That's how you normalize, right?
+			}// Aiming is annoying.
+			else aim=unit_vector(face);
+			if(string_right(act, 1)=="A" or string_right(act, 2)=="A)") {
+				// I have no idea how to handle the dive move.
+				int skills=geti("skills");
+				if(((skills&8)==8) and string_right(act, 7)=="Z(LLRA)" and getd("e")>=7000) {
+					addProjectile(sounds2 + "ignite_0" + random(1, 3) + ".wav", -1, me, 1.0, aim*7, sounds2 + "bellow" + random(1, 4) + "v.wav", random(25, 50), 1.0, 0);
+					a.set("e", getd("e")-7000);
+				}// Fireball. I guess.
+				else if(((skills&32)==32) and string_right(act, 7)=="Z(DUDA)" and getd("e")>=7000 and getd("blind")<=0.0) {
+					playsound("downloads/31106_Production_Element_Imaging_Accent_Stab_Dark_Hit_Reverb_04.wav", false);
+					a.set("blind", random(5, 12)); // Too short? Too long?
+					a.set("e", getd("e")-7000);
+					// I have no idea what to do with enemy targets, though. Just go through and set all of them to random, then let events sort them out?
+					for(uint i=2; i<10; i++) if(a.exists("targ" + i)) a.set("targ" + i, random(2, 9)); // Will Python let me put everything on one line like that?
+				}// Blinding.
+				else if(string_right(act, 3)=="AAA") {
+					// You can actually perform this combo without your angel sword, but it's stronger and better at guard-breaking with it.
+					// (Todo: find ways to encourage more exploration.)
+					// Also, environmental interaction. What if you do this to a tree?
+					for(uint i=2; i<10; i++) {
+						if(a.exists("x" + i)==false) continue;
+						vector you(getd("x" + i), getd("y" + i), getd("z" + i));
+						if((you-me).length()<=1.5 and absolute(get_angle(me, you)-get_angle(zero, aim))<=PI/4 ) {
+							// 3D collision detection with angles all over the place are annoying! Phi! Phi! To get phi, I have to turn (x, y) into a plane, which means more square roots! 
+							// (Blocking.)
+							pool.play_3d("magiarm6.ogg", me.x, me.y, me.z, you.x, you.y, you.z, false);
+							hurt(i, 3+(skills&1)); // Hey, maybe we should multiply (skills&1) by stage? It'd be kinda like leveling up.
+						}// Hit.
+					}// Enemy loop.
+					
+					a.set("act", "");
+					a.set("counter", -0.5); // Imagining Kingdom Hearts, thinking it might want to be longer.
+					
+					// Environmental interaction.
+					if(geti("stage")==1 and geti("gloc")>=2 and absolute(me.x-220)<=6 and me.y>280 and me.z>-9) {
+						playsound(sounds2 + "sq_rockramp_01a.wav", false);
+						fadeout();
+						a.set("z", 0);
+						a.set("stage", 2);
+						int gloc=geti("gloc");
+						a.set("gloc", (gloc==2) ? 0 : (gloc+2));
+						playsound(sounds2 + "hawk_wingstretch_0" + random(1, 4) + ".wav", false);
+						wait(500);
+						fade_all();
+						scapeme(gloc==2);
+					}// Breaking the boulders on Ben Yam's hideout.
+					else if(geti("stage")==2 and me.z<-7 and me.z>-20 and absolute(me.x-358)<=3 and absolute(me.y-460)<=5) playsound(sounds2 + "bellow" + random(1, 4) + "v.wav", 356, 460, -13);
+				}// Combo-ender.
+				else {
+					a.set("counter", -0.4); // ?
+					// The aim thing again.
+					for(uint i=2; i<10; i++) {
+						if(!a.exists("x" + i) or getd("hp" + i)<=0.0) continue;
+						vector you(getd("x" + i), getd("y" + i), getd("z" + i));
+						if((you-me).length()<=1.5 and absolute(get_angle(me, you)-get_angle(zero, aim))<=PI/3) {
+							// Vertical, and blocking.
+							// Also armor and stuff.
+							pool.play_3d("magiarm5.ogg", me.x, me.y, me.z, you.x, you.y, you.z, false);
+							hurt(i, 2);
+							// Stun?
+						}// Hit.
+					}// Loop.
+					
+					// Environmental interaction:
+					if(geti("stage")==1 and geti("gloc")>=2 and absolute(me.x-220)<=6 and me.y>280 and me.z>-9) playsound("downloads/150838__toxicwafflezz__bullet-impact-2.wav", false);
+				}// Basic hit.
+			}// Attacking
+			else {
+				a.set("counter", 0.0);
+				// I want to do more with this.
+			}// Umm. I dunno.
+			counter=getd("counter"); // You goofed.
+		}// From Above.
+	}// DESCENDING! AGAIN? NOOOOOO!
+	else if(counter<0.0) {
+		counter+=dt;
+		if(counter>=0.0) {
+			counter=0.0;
+			a.set("act", ""); // Destruction?
+		}// From below.
+	}// Ascending.
+	
+	for(uint i=0; i<10; i++) {
+		if(a.exists("hp" + i)==false) continue;
+		double hp=getd("hp" + i);
+		double e=getd("e" + i);
+		vector you(getd("x" + i), getd("y" + i), getd("z" + i)); // So much easier with brackets! Come on, Angelscript!
+		if(i<2) {
+			
+			continue; // because I don't like overdoing the indentation. Might need to move this, though. Aaarrrggghhh!
+		}// party.
+		
+		// Targeting player, or party members? Whichever is closest, I guess.
+		
+		// AI:
+		if(gets("name" + i)=="Bath Kothar") {
+			// If the target is in range, try to knock them back, or retreat.
+			// If this is any time other than the first fight in the game, she can dodge to the side.
+			// If there is distance, "gather energy", which is to say, reset / charge weapons.
+			// If enemy is too high, high jump and smash them down.
+			// (High jump uses up lots of energy.)
+			// If she has enough power for a special, get in position to use it.
+			// If the enemy has been stunned by a special, or is just standing there, combo them.
+			// But I don't want her to have an easy time of the combo without the Sonic Boom as a stunner. Hmm.
+			// (Also, can she upgrade her weapons, gain new skills, etc?)
+			// (Oh, and if she's swinging a club, does that block swords?)
+		}// Bath Kothar.
+		
+		// Yeah, this right here? This is where it becomes clear that I'm doing it wrong:
+		a.set("hp" + i, hp);
+		a.set("e" + i, e);
+		a.set("x" + i, you.x);
+		a.set("y" + i, you.y);
+		a.set("z" + i, you.z);
+	}// Loop.
+	
+	a.set("counter", counter);
+	
+}// Fighting.
+
+// Cross fading music for random encounters? I can do it, but it requires two bgm objects. Should I?
+//sound battle;
+
+dictionary uvs;
+
+vector unit_vector(string face) {
+	if(uvs.exists(face)) {
+		vector ret;
+		uvs.get(face, ret);
+		return ret;
+	}
+	return get_vector(0, 1, 0);
+}
+
+
+// I had to make projectiles anyway:
+class Projectile {
+	string hitsound="magiarm" + random(1, 6) + ".ogg"; // Can you do that?
+	double damage=0.0, stun=0.0;
+	int8 flags=0; // 1=obeys gravity, 2=has momentum.
+	vector v(0,0,0);
+	int creator=-1; // Though it mostly just focuses on teams?
+	int slot=-1;
+	double r=1.0, r2=1.0; // They are always spheres. Grumble grumble distance 3d.
+	vector pose(0,0,0);
+	// I think that's it.
+	Projectile() {}
+	
+	bool update(double dt) {
+		// returns true if it is dead.
+		
+		if(pool.sound_is_playing(this.slot)) {
+			pool.update_sound_3d(this.slot, this.pose.x, this.pose.y, this.pose.z);
+			return true;
+		}
+		else {
+			pool.destroy_sound(this.slot);
+			return false;
+	}
+	}
+}// Projectile.
+Projectile@[] projectiles;
+Projectile@ addProjectile(string startSound, int creator, vector center, float radius, vector velocity, string hitsound="magiarm3.ogg", double damage=0.0, double stun=0.0, int flags=0) {
+	Projectile ret;
+	// Question: do we give the sound range, or do we play from the center?
+	ret.slot=pool.play_3d(startSound, getd("x"), getd("y"), getd("z"), center.x, center.y, center.z, false, true);
+	ret.r=radius;
+	ret.r2=radius*radius;
+	ret.pose=center;
+	ret.damage=damage;
+	ret.hitsound=hitsound;
+	ret.stun=stun;
+	ret.flags=flags;
+	ret.v=velocity;
+	ret.creator=creator;
+	projectiles.insert_last(ret);
+	return ret;
+}
+
+vector zero(0,0,0);
+
+void hurt(int i, double damage, double stun=0.0, string targetState="stun") {
+	
+	if(i>=0 and a.exists("hp" + i)==false) return;
+	double hp=getd((i<0) ? "hp" : ("hp" + i));
+	string name=gets((i<0) ? "name" : ("name" + i));
+	
+	hp-=damage;
+	if(hp<=0.0 and hp+damage>0.0) {
+
+	}// KO.
+	else if(hp>0.0 and random(0, 5)>2) {
+		if(name=="Bath Kothar") pool.play_3d(sounds + "kiais/linda" + ((random(0, 5)>3) ? "2" : (random(0, 5)>2) ? "22" : "23") + ".ogg", getd("x"), getd("y"), getd("z"), getd("x" + i), getd("y" + i), getd("z" + i), false);
+	}// Alive.
+	
+	if(i<0) a.set("hp", hp);
+	else a.set("hp" + i, hp);
+}// Hurt.
+
+vector getV(int targ) {
+	if(targ<0) {
+		return get_vector(getd("vx"), getd("Vy"), getd("vz"));
+	}
+	else return get_vector(getd("vx" + targ), getd("vy" + targ), getd("vz" + targ)); // GAAAAH!
+}
+
+string getDir(double theta) {
+							string direction="southeast";
+							if(absolute(theta)<pi/8) direction="east";
+							else if(theta>0 and theta<3*pi/8) direction="northeast";
+							else if(theta>0 and theta<5*pi/8) direction="north";
+							else if(theta>0 and theta<=7*pi/8) direction="northwest";
+							else if(theta>0 and theta<9*pi/8) direction="west";
+							else if((theta>pi and theta<3*pi/2) or (theta>-pi and theta<-5*pi/8)) direction="southwest";
+							else if((theta>0 and theta<=13*pi/8) or (theta<-3*pi/8 and theta>=-5*pi/8)) direction="south";
+							return direction;
+}
+
+bool clearDead() {
+	uint alive=0;
+	for(uint i=2; i<=9; i++) {
+		if(gets("name" + i)!="") {
+			if(getd("hp" + i)>0.0) alive++;
+			else a.set("name" + i, "");
+		}// Still present.
+	}
+	return alive==0; // Umm.
+}// Remove dead enemies.
+
+
+/*
+vector tunnelmove(vector me, vector v, double dt) {
+		// GAAAAAH!
+		double nd=900000; // R^2.
+		int nearest=-1;
+		int inside=-1; // -_- we need to distinguish these for some reason?
+		// You know, the most annoying part of this is going to be walking along the curviture of the tunnels.
+		vector[] tunnels= {
+ get_vector(180, 265, -18), // NS. The entrance is special.
+ get_vector(180, 270, -18), // WE, not sure how well the transition works if tunnels are shorter than 14? It goes both left and right.
+ get_vector(190, 270, -13), // UD, goes almost to the top. Ouch.
+ get_vector(180, 257, -23), // So I put a sphere at the entrance after all.
+ get_vector(170, 277, -19), // NS on the first western fork.
+ get_vector(175, 283, -20), // This symmetry thing is getting real old, real quick.
+ get_vector(183, 283, -15), // Umm...
+ get_vector(160, 285, -20), // A pool off the western branch. I'm a little confused, now. I was thinking the correct path would be rapping around to the northeast, then finding an underground Island, Voldemort Cave Style.
+ get_vector(186, 280, -10), // Supposed to connect the two vertical sections.
+ get_vector(190, 290, -10), // Wrap-around.
+ get_vector(200, 290, -10), // There should be a destructable rock at the top of this shaft. Beat it up to reach the surface.
+ get_vector(200, 280, -30), // Main lake? Na. I'm not sure I positioned it right, for that matter.
+ get_vector(220, 280, -5), // NS shaft rapping around the lake.
+ get_vector(210, 290, -4), // I'm afraid these are too close together and the ambience will just be confusing.
+ get_vector(150, 280, -20), // O.O. Vertical shaft, western pool.
+ get_vector(233, 255, -8), // This should lead to the main lake.
+ get_vector(150, 290, -10), // NS shaft on the annoyingly large western area.
+ get_vector(230, 270, -7), // I wonder if the alignment will be problematic...
+ get_vector(0, 0, -20), // Filler.
+ get_vector(133, 290, -17), // Mara pool.
+ get_vector(240, 265, -8), // More wrapping the lake.
+ get_vector(140, 290, -12) // Leads to the Mara Pool.
+ };
+		vector[] av={get_vector(0, me.y, me.z), get_vector(me.x, 0, me.z), get_vector(me.x, me.y, 0), me};
+		
+		// There are two separate things going on, here.
+		// The simplest is testing to see if we are inside something, and if not, moving to the nearest.
+		// The other is terrain detection: are we swimming? Walking? In the air?
+		// The last one is complicated by slopes and flying. We're walking on a curved surface. This isn't a problem under water, but gravity is pretty much completely ignored if we aren't falling.
+		
+		string terrain="sky"; // swim > sky > stone, because intersections can cut holes in stone, but not in water.
+		// Oh, and there's this, which I should have thought of ... long... ago... AAAARGH:
+		vector next=me+(v*dt);
+		bool move=false; //Holes, you know? However, I don't want you to run up walls that aren't there, so... that could be annoying.
+		clipboard_copy_text("");// Debug.
+		for(uint i=0; i<tunnels.length(); i++) {
+			//double d=(tunnels[i]-me).length(); // NOOOO! IT'S SO SLOW! WHAT ABOUT ENEMIES? GAAAAAH! Even assuming a max of 5 enemies, that's 144 sqrt per frame!
+			double d=dist3d2(me, tunnels[i]);
+			if(d<=nd) {
+						nd=d;
+						nearest=i;
+			}// No! Wrong!
+			
+			uint t=i%4;
+			// Regretting using vectors, now.
+			vector axis((t==0) ? 0 : tunnels[i].x, (t==1) ? 0 : tunnels[i].y, (t==2) ? 0 : tunnels[i].z);
+			float linear=absolute((t==1) ? (tunnels[i].x-me.x) : (t==0) ? (tunnels[i].y-me.y) : (tunnels[i].z-me.z));
+			if((linear<=10 and dist3d2(axis, av[t])<=((t==3) ? 100 : 25)) or (t==3 and nd<=100.0)) {
+				if(d<=nd) inside=i;
+				else if(i==nearest and inside<0) inside=i; // WTF? Added because I have no idea what is wrong with this part.
+				// Now, do the same crap with next. Urgh.
+				float linear2=absolute((t==0) ? (tunnels[i].x-next.x) : (t==1) ? (tunnels[i].y-next.y) : (tunnels[i].z-next.z));
+				vector av2((t==0) ? 0 : next.x, (t==1) ? 0 : next.y, (t==2) ? 0 : next.z);
+				if(linear2<=10 and dist3d2(av2, axis)<=((t==3) ? 100 : 25)) move=true; // YAY! THE EASY PART!
+				
+				if(t==3 and next.z<=tunnels[i].z) {
+					terrain=sounds + "steps/swim";
+					if(move and me.z>tunnels[i].z) pool.play_3d(jla + "FallWater" + random(1, 4) + ".wav", pool.last_listener_x, pool.last_listener_y, pool.last_listener_z, me.x, me.y, me.z, false);
+				}// Swimming.
+			}// We are inside!
+			clipboard_copy_text(clipboard_read_text() + "\r\n" + i + "-" + t + ": d=" + d + ", nd=" + nd + ", nearest=" + nearest + ", inside=" + inside);
+		}// Cunnels loop.
+		
+		if(inside<0) {
+			pool.play_3d(steps + "stone/bump.ogg", pool.last_listener_x, pool.last_listener_y, pool.last_listener_z, me.x, me.y, me.z, false);
+			clipboard_copy_text(clipboard_read_text() + "\r\nNot inside anything. Nearest = " + nearest + ", at " + tunnels[nearest].x + ", " + tunnels[nearest].y + ", " + tunnels[nearest].z + ". Moving from " + me.x + ", " + me.y + ", " + me.z + ".");
+			if(tunnels[nearest].y<=0) {alert("ERROR", "You bounced into oblivion, somehow. dt=" + dt + ", v=(" + v.x + ", " + v.y + ", " + v.z + "), destination was " + next.x + ", " + next.y + ", " + next.z + ". I have no idea how to catch the teleportation in action. T.T"); exit();}
+			return tunnels[nearest];
+		}// You are in the middle of solid earth.
+		else if(!move) {
+			// Move to the nearest point on inside. This is kinda obnoxious.
+			if(inside%4==2) {
+				if(next.z<tunnels[inside].z-10) {
+					next.z=tunnels[inside].z-10;
+					move=true;
+					playsound( (steps + "water/run" + random(1, 6) + ".wav"), next.x, next.y, next.z, false); // Jeqocon2: was random(1, 9), there are 6
+				}// Landing.
+				else {
+					playsound(steps + "dirt/bump.ogg", next.x, next.y, next.z, false);
+					move=false; // How to prevent rapid bumping?
+					me-=v*(dt*2.0); // Buys us two frames, at least.
+				}// Bumping the walls.
+			}// vertical tunnels.
+			else if(inside%4==3) {
+				
+				move=false; // That all?
+				if(next.z>tunnels[inside].z) {
+					playsound(steps + "dirt/bump.ogg", next.x, next.y, next.z, false);
+					me-=v*(dt*3); // You know, it occurs to me that this could bounce one into weird places.
+				}//Bumping the ceiling. 
+			}// Spherical pools.
+			else {
+				if(next.z>tunnels[inside].z) {
+					playsound(steps + "dirt/bump.ogg", next.x, next.y, next.z, false);
+					me-=v*(3.0*dt);
+					if(me.y<200 or me.x<100 or me.z>0) alert("OOPS!", "This is not supposed to happen! " + str(me+(v*(3*dt))) + ", currently " + str(me) + ", v=" + str(v) + ", and v*3*dt = " + str(v*(3*dt)) + ". ");
+					move=false;
+				}// This part is easy.
+				else if((inside%4==0 and absolute(next.x-tunnels[inside].x)>10) or (inside%4==1 and absolute(next.y-tunnels[inside].y)>10)) {
+					playsound(steps + "stone/bump.ogg", next.x, next.y, next.z, false);
+					me-=v*(3*dt);
+				}// Tunnel ends.
+				else {
+					vector c((inside%4==0) ? tunnels[inside].x : tunnels[inside].y, tunnels[inside].z);
+					vector targ((inside%4==0) ? next.x : next.y, next.z);
+					double theta=get_angle(c, targ);
+					targ.x=5.0*cosine(theta);
+					targ.y=5.0*sine(theta);
+					next.z=targ.y;
+					if(inside%4==0) next.x=targ.x;
+					else next.y=targ.x;
+					move=true;
+					terrain=steps + "stone";
+				}// This part is annoying.
+			}// Horizontal tunnels.
+		}// This could nullify movement entirely, or it might not.
+		
+		// Oh, make sure the player is flying.
+		if(me.x==pool.last_listener_x and me.y==pool.last_listener_y and me.z==pool.last_listener_z) {
+			if(terrain=="sky" and flight.playing==false) flight.play_looped();
+			else if(flight.playing and terrain!="sky") {
+				flight.stop();
+				playsound(terrain + "/run" + random(1, 6) + ".wav", false); // Hmm. Landing sounds, though?
+			}// stop flying.
+		}// At the player's position, which is not the same as being the player, but accomplishes the same thing.
+		if(move) {
+			
+			// Are we walking? Probably not.
+			if(nd>24) {
+				if(inside%4==2 and next.z<=tunnels[inside].z-10) terrain=steps + "water";
+				else if(inside%4<2 and (nd>24.8)) {
+					vector axis((inside%4==0) ? tunnels[inside].x : tunnels[inside].y, tunnels[inside].z);
+					vector temp((inside%4==0) ? next.x : next.y, next.z);
+					if(round(distance2(axis, temp), 2)==25.00) terrain=steps + "stone";
+				}// Tunnel walking.
+			}// No point in checking if we're closer than that, right?
+			
+			// We want to know if we've moved one step. However, that could get... weird.
+			if(terrain!="sky" and (round(me.x, 0)!=round(next.x, 0) or round(me.y, 0)!=round(next.y, 0) or round(me.z, 0)!=round(next.z, 0))) playsound(terrain + "/run" + random(1, 6) + ".wav", next.x, next.y, next.z, false);
+			return next;
+		}// Moving.
+		
+		return me;
+}// Moving in the tunnels of stage 1.
+*/
+
+// This does not include changes in velocity due to terrain, swimming, or flying.
+vector keyV() {
+	vector v(getd("vx"), getd("vy"), getd("vz"));
+	double dx=v.x, dy=v.y, dz=v.z; // Oopse. I meant to use a vector.
+	
+	if(string_contains("fallstun", gets("act"), 1)%4==0) {
+		// GRAVITY!
+		return v;
+	}// Stunned or falling.
+	
+	bool changeFace=true;
+	if(key_down(KEY_LEFT) or key_down(KEY_A)) dx=-1.0;
+	else if(key_down(KEY_RIGHT) or key_down(KEY_D)) dx=1.0;
+	if(key_down(KEY_LSHIFT) or key_down(KEY_RSHIFT)) {
+		changeFace=false;
+		dx*=1.5;
+		if(key_down(KEY_W) or key_down(KEY_UP)) dz+=3.0;
+		else if(key_down(KEY_DOWN) or key_down(KEY_S)) dz=-3.0;
+	}// shift.
+	else if(key_down(KEY_W) or key_down(KEY_UP)) dy=1.0;
+	else if(key_down(KEY_DOWN) or key_down(KEY_S)) dy=-1.0;
+	
+	dx*=4.0;
+	dy*=4.0;
+	/*if(a.exists("act") and string_contains("fallstun", gets("act"), 1)%4==0) {
+		dx=v.x*dt;
+		dy=v.y*dt;
+		dz=v.z;
+		// Gravity? *Sigh*
+		changeFace=false;
+	}// Stunned or falling.
+	*/
+	//dz*=dt;
+	
+	// Rotate for targets.
+	// 5:10 PM 9/27/2015: But what about things like running water, etc, that affect absolute velocity? -_-
+	if(geti("targ")>=0) {
+		// I don't like this. I don't like this at all. 
+		int targ=geti("targ");
+		// If the target doesn't exist, you shouldn't be locked on to it? ... But what about... loot and things? Do defeated enemies drop things?
+		if(getd("hp" + targ)>0.0) {
+			vector you(getd("x" + targ), getd("y" + targ), getd("z" + targ));
+			vector me(getd("x"), getd("y"), getd("z"));
+			// So, we want to rotate (dx, dy, dz) to point at you. Or, rather, so that it's y axis points at you.
+			// Though, honestly, I'd prefer not to mess with left/right, but whatever.
+			// So, dx is perpendicular to theta... what's theta, anyway?
+			double theta=get_angle(me, you);
+			// Umm... dz? *Sigh*.
+			// I now need to rotate (dy, dz), don't I? DY is currently all your forward/backward velocity, but it's parallel to the ground.
+			// Luckily, it's as simple as ... umm... I think it works like this?
+			// Actually, we need.. *sigh* this:
+			double phi=get_angle(get_vector(0,0,0), get_vector(square_root(distance2(me, you)), you.z-me.z));
+			dz+=dy*sine(phi); // Presumably, any changes to dz are absolute and additive.
+			dy*=cosine(phi); // I hope.
+			
+			vector rv=rotate(get_vector(dx, dy, dz), get_vector(0,0,0), theta-(PI/2.0)); // I... hope...? Might need to tweak the offset?
+			dx=rv.x;
+			dy=rv.y;
+			
+			// That was an abomination. Matrix transformations are probably much faster, and I really wish I could teach myself to do them.
+		}
+	}// Targeting.
+	else if(changeFace) {
+		if(dx>0) a.set("face", (dy>0) ? "NE" : (dy<0) ? "SE" : "E");
+		else if(dx<0) a.set("face", (dy>0.0) ? "NW" : (dy<0.0) ? "SW" : "W");
+		else if(dy<0.0) a.set("face", "S");
+		else if(dy>0.0) a.set("face", "N");
+	}// Change Face.
+	
+	/*if(terrain=="sky") {
+		dx*=1.5;
+		dy*=1.5;
+	}
+	else if(string_contains(terrain, "swim", 1)>=0) {
+		dx*=0.6;
+		dy*=0.6;
+		dz*=0.6;
+	}// swimming.
+	*/
+	
+	
+		//clipboard_copy_text("DX:" + dx + ", DY:" + dy + "DZ:" + dz);
+	
+	
+	return get_vector(dx, dy, dz);
+}// KeyV.
+
+double dist3d2(vector v1, vector v2) {
+	vector v=v2-v1;
+	return v.x*v.x + v.y*v.y + v.z*v.z;
+}// Leaving out parentheses always makes me nervous.
+
+int playsound(string fn, double x, double y, double z, bool looping=false) {
+	log_sound(fn);
+	return pool.play_3d(fn, pool.last_listener_x, pool.last_listener_y, pool.last_listener_z, x, y, z, looping);
+}// Playsound 3d.
+
+string str(vector v) {
+	return "(" + v.x + ", " + v.y + ", " + v.z + ")";
+}
+
+
+// OK, so original plan did not work. Let's move to tile maps.
+// Each bit is a 10^3 space. Each nibble is one column, where 8=0--10, 4=-10--20, 2=-20--30, and 1=-30--40.
+// 0 = 250, y-wise.
+// x range is 100-260.
+// I have no idea how to handle the sound.
+/*vector tunnelmove(vector me, vector v, double dt, bool falling=false) {
+	
+	if(me.y<260 and absolute(me.x-180)>10) me.x=180;
+	vector next=me+(v*dt);
+	int64[] map={
+0x0000000770000000,
+0x0002200070027776,
+0x0002311151000776,
+0x00020e64444f0006,
+0x0000080000090004,
+0x000ec80008890004,
+0x000cc00000310004,
+0x0444444722274444,
+	};
+	
+	int y=(next.y-250)/10;
+	int x=(next.x-100)/10; // ... Right?
+	int z=absolute(-next.z/10);
+	if(x<0 or y<0 or z>3 or x>15 or y>=map.length()) {
+		// Exception: moving between maps.
+		
+		playsound(steps + "stone/bump.ogg", next.x, next.y, next.z, false);
+		if(me.x<100) me.x=100;
+		else if(me.x>260) me.x=260;
+		if(me.y<250) me.y=250;
+		else if(me.y>250+(map.length()*10)) me.y=250+(map.length()*10)-1;
+		if(me.z<-40) me.z=-40;
+		else if(me.z>=0) me.z=-1;
+		return me;
+	}// Out of bounds.
+	x=15-x; // GAH! 
+	
+	//alert("8 64bit ints for a 3D map", "Absolute position: " + me.x + ", " + me.y + ", " + me.z + ". Scaled position: " + x + ", " + y + ", " + z + ". Corresponding nibble: " + number_to_hex_string((map[y]&(15<<(4*x)))>>(4*x)) + ", corresponding row: " + number_to_hex_string(map[y]) + ". 7<<4x:" + number_to_hex_string(7<<(4*x)));
+	//alert("Oh, what the fish?", "This is stupid. Map: " + number_to_hex_string(map[0]) + ". 7<<4x: " + number_to_hex_string(7<<(4*x)) + ". The two anded together: " + number_to_hex_string(map[y]&(7<<(4*x))) + ". If any of those 3 is not 0x70000000, there is a bug in BGT or Angelscript.");
+	//exit();
+	int64 ander=15;
+	ander<<=(4*x);
+	//15<<(4*x)))>>(4*x)
+	if((
+((map[y]&ander)&(1<<z))
+)==0) {
+		// Get landing/falling.
+		if(me.z%10<1 and next.z%10>=9) {
+			if(me.x==pool.last_listener_x and me.y==pool.last_listener_y and me.z==pool.last_listener_z) {
+				if(flight.playing) flight.stop();
+			}// Player-specific.
+			me.z=floor(me.z);
+			if(me.y>270 and me.z>-30) playsound((falling) ? (steps + "stone/fall1.wav") : (steps + "stone/run" + random(1, 6) + ".wav"), me.x, me.y, me.z, false);
+			else playsound(steps + "water/run" + random(1, 6) + ".wav", me.x, me.y, me.z, false);
+			return me;
+		}
+		else {
+			playsound(steps + "dirt/bump.ogg", next.x, next.y, next.z, false);
+			me=me-(v*(3*dt)); // DANGER!
+			return me;
+		}// Just a wall/ceiling.
+	}// No room.
+	else {
+		float z2=next.z%10.0;
+		if(z2==0 and (next.z<-30 or z==0 or ((map[y])&((1<<(z-1))<<(4*x)))==0)) {
+
+		}// On something.
+
+		return next;
+	}// Open space. Walking, flying, swimming?
+	
+	//return me;
+}// Had to redo this because the first one turned out unfixably bad. Sad, because everything would have been round, which audio games really have never done.
+*/
+
+Shape3D@[] map;
+dictionary voices;
+
+void set_voices(string v0, string v1="", string v2="", string v3="", string v4="", string v5="", string v6="") {
+	string[] v={v0, v1, v2, v3, v4, v5, v6};
+	dynamic_menu vm;
+	pool.pause_all();
+	for(uint i=0; i<v.length(); i++) {
+		if(v[i]!="") {
+			vm.add_item_tts((v[i]=="Ramiel") ? "Player" : v[i], v[i]);
+			custom_voice@ cv;
+			custom_voice temp;
+			@cv=temp;
+			cv.load_config("tri_" + v[i] + ".cfg");
+			cv.config_path="tri_" + v[i] + ".cfg";
+			voices.set(v[i], @cv);
+		}// Gah!
+	}// loop.
+	vm.add_item_tts("OK", "OK");
+	vm.wrap=false;
+	vm.enable_home_and_end=true;
+	vm.allow_escape=true;
+	vm.set_callback(main_callback, "");
+	playsound(jla + "menu/submenu.wav", false);
+	bgm.volume=bgm.volume-4;
+	wait(300);
+	int n=1;
+	while(n>0 and n<vm.get_item_count()) {
+		n=vm.run("Set character voices:", true);
+		if(n<=0) break;
+		string id=vm.get_item_name(n);
+		if(id=="OK") break;
+		else {
+			custom_voice@ cv;
+			custom_voice temp;
+			@cv=temp;
+			if(voices.exists(id)) voices.get(id, @cv); // Question: do we need the @ sign?
+			string fn="tri_" + id + ".cfg";
+			cv.load_config(fn);
+			cv.config_path=fn;
+			cv.options_menu();
+			voices.set(id, cv);
+		}
+	}// loop.
+	
+	playsound(jla + "menu/activate.wav", false);
+	wait(500);
+	bgm.volume=bgm.volume+4;
+	pool.resume_all();
+}// Set voices.
+void set_voices(string[] v) {
+	//string[] v={v0, v1, v2, v3, v4, v5, v6};
+	dynamic_menu vm;
+	//pool.pause_all();
+	for(uint i=0; i<v.length(); i++) {
+		if(v[i]!="") {
+			vm.add_item_tts((v[i]=="Ramiel") ? "Player" : v[i], v[i]);
+			custom_voice@ cv;
+			custom_voice temp;
+			@cv=temp;
+			cv.load_config("tri_" + v[i] + ".cfg");
+			cv.config_path="tri_" + v[i] + ".cfg";
+			voices.set(v[i], @cv);
+		}// Gah!
+	}// loop.
+	vm.add_item_tts("OK", "OK");
+	vm.wrap=false;
+	vm.enable_home_and_end=true;
+	vm.allow_escape=true;
+	vm.set_callback(main_callback, "");
+	playsound(jla + "menu/submenu.wav", false);
+	//bgm.volume=bgm.volume-4;
+	wait(300);
+	int n=1;
+	while(n>0 and n<vm.get_item_count()) {
+		n=vm.run("Set character voices:", true);
+		if(n<=0) break;
+		string id=vm.get_item_name(n);
+		if(id=="OK") break;
+		else {
+			custom_voice@ cv;
+			custom_voice temp;
+			@cv=temp;
+			if(voices.exists(id)) voices.get(id, @cv); // Question: do we need the @ sign?
+			string fn="tri_" + id + ".cfg";
+			cv.load_config(fn);
+			cv.config_path=fn;
+			cv.options_menu();
+			voices.set(id, cv);
+		}
+	}// loop.
+	
+	playsound(jla + "menu/activate.wav", false);
+	wait(500);
+	//bgm.volume=bgm.volume+4;
+	//pool.resume_all();
+}// Set voices.
+
+
+vector tunnelmove(vector me, vector v, double dt, bool falling=false, int stage=1) {
+	vector next=me+(v*dt);
+	
+	int nearest=-1;
+	int inside=-1;
+	double nd=12345678;
+	
+	string terrain="sky";
+	bool move=false;
+	bool player=(floor(me.x)==pool.last_listener_x and floor(me.y)==pool.last_listener_y and ceiling(me.z)==pool.last_listener_z);
+	vector tempnext;
+	bool rotmove=false;
+	for(uint i=0; i<map.length(); i++) {
+		double d=dist3d2(me, map[i].getCenter());
+		if(d<=nd) {
+			nearest=i;
+			nd=d;
+		}// Nearest to center.
+		
+		if(map[i].contains(me)) {
+			inside=i;
+			if(map[i].contains(next)==false) {
+				// One exception: I want you to walk on the curves of cylinders and conics. No idea how to make this work. Maybe just move next toward center? ... *Sigh*
+				Cylinder@ cy=cast<Cylinder>(map[i]);
+				if(@cy!=null) {
+					// Am I going to have to use a line3d? I don't wanna!
+					// Is there a faster way--like, since we know the axis, we can just... *Sigh* never mind, I'll get the angles and multiply, of course.
+					if(cy.axis==ZAXIS) {
+						continue; // I was hoping for landing, but you might be going down into something else. Gah!
+					}// These are easiest.
+					vector av((cy.axis==XAXIS) ? next.z : next.x, (cy.axis==YAXIS) ? next.z : next.y);
+					double theta=get_angle(get_vector((cy.axis==XAXIS)? cy.z : cy.x, (cy.axis==YAXIS) ? cy.z : cy.y), av); // Right?
+					av=get_vector(cosine(theta)*cy.radius, sine(theta)*cy.radius);
+					if(av.x<0) av.x+=0.001;
+					else if(av.x>0) av.x-=0.001;
+					if(av.y>0) av.y-=0.001;
+					else if(av.y<0.0) av.y+=0.001; // Umm...?
+					if(cy.axis==YAXIS) tempnext=get_vector(cy.x+av.x, next.y, cy.z+av.y);
+					else if(cy.axis==XAXIS) tempnext=get_vector(next.x, cy.y+av.y, cy.z+av.x);
+					if(cy.contains(tempnext)) rotmove=true;
+					if(rotmove) terrain=jla + "steps/dirt";
+					if(!move) clipboard_copy_text("Debug: " + str(cy.getCenter()) + ", axis " + cy.axis + ", radius " + cy.radius + ". Next is " + str(next) + ". ");
+				}// Cylinders.
+			}// Don't move.
+			else {
+				move=true;
+				if(i==9) {
+					a.set("desc", "A small island in this underground lake.");
+					terrain=jla + "steps/dirt";
+					continue; // Umm.
+				}// Island, so easy.
+				Sphere@ s=cast<Sphere>(map[i]);
+				if(@s!=null) {
+					// Does "is not" work in BGT?
+					vector c=s.getCenter();
+					if(next.z<c.z) {
+						terrain=sounds + "steps/swim";
+						if(me.z>=c.z) playsound(jla + "FallWater" + random(1, 4) + ".wav", me.x, me.y, me.z);
+						if(player) a.set("desc", "Adrift in the dark, cold, tainted water in the depths of a cave.");
+					}// Under water.
+					else if(me.z<=c.z and next.z>c.z) {
+						playsound(jla + "FallWater" + random(1, 4) + ".wav", me.x, me.y, me.z); // Splash for unsubmerging... Hmm.
+						a.set("desc", "Above a subterranian pool of water, lapping from the pool of an unseen ocean.");
+					}// This... but... wtf?
+					else if(player or (player and next.z>=c.z)) a.set("desc", "Above a subterranian pool of water, lapping from the pool of an unseen ocean.");
+					continue; // ????
+				}// Sphere.
+				Cylinder@ cy=cast<Cylinder>(map[i]);
+				if(@cy!=null) {
+					if(cy.axis==ZAXIS and next.z<=cy.z) {
+						next.z=cy.z;
+						terrain=jla + "steps/dirt"; // No puddles? Hmm.
+						//terrain=steps + "water"; // Actually, they all end in water.
+					}// Vertical.
+					else if(cy.axis==ZAXIS and me.y>295) terrain=sounds + "steps/swim";
+					else if(round(newLine3D(cy.getBase(), cy.getTop()).getDistance(next), 2)==round(cy.radius, 2)) terrain=jla + "steps/dirt"; // THIS FUNCTION IS SO INEFFICIENT!!!
+					// GAH, this is so confusing!
+					if(player) {
+						if(cy.axis==XAXIS) a.set("desc", "In a damp. stony tunnel, running east and west.");
+						else if(cy.axis==YAXIS) a.set("desc", "In a north/south tunnel, deep in the Earth.");
+						else if(me.y>295) a.set("desc", "More than a trickle of water pours down on you from above.");
+						else a.set("desc", "In a vertical shaft, bathed in darkness.");
+						if(key_down(KEY_R)) {
+							playsound((cy.z<me.z) ? "aviewer/sounds/red.wav" : "aviewer/sounds/blue.wav", cy.x, cy.y, cy.z, false);
+							wait(100); // NOOO!
+							vector top=cy.getTop();
+							playsound((top.z<me.z) ? "aviewer/sounds/red.wav" : "aviewer/sounds/blue.wav", top.x, top.y, top.z, false);
+						}// Detect exits.
+					}// Descriptions.
+					//else clipboard_copy_text("Not the player. Last listener position: " + pool.last_listener_x + ", " + pool.last_listener_y + ", " + pool.last_listener_z + ". Me: " + str(me) + ". ");
+					continue;
+				}// Cylinder.
+				CappedConic@ cc=cast<CappedConic>(map[i]);
+				if(@cc!=null) {
+					// I have no idea how to determine if you're on the bottom. Maybe like this?
+					if(round(cc.getDistance(next), 2)==round(cc.getRadius(next), 2)) {
+						terrain=steps + "water";
+						// Catch the case where they're stone instead?
+						if(me.x>215) terrain=jla + "steps/dirt"; // Hmm.
+					}// On the edge, or close enough, since these are probably wet.
+					if(me.z<-23) terrain=sounds + "steps/swim";
+					if(player) {
+						if(key_down(KEY_R)) {
+							playsound((cc.start.z<me.z) ? "aviewer/sounds/red.wav" : "aviewer/sounds/blue.wav", cc.start.x, cc.start.y, cc.start.z, false);
+							wait(100); // -_-
+							playsound((cc.end.z<me.z) ? "aviewer/sounds/red.wav" : "aviewer/sounds/blue.wav", cc.end.x, cc.end.y, cc.end.z, false);
+						}// Radar.
+						a.set("desc", "In a slanting tunnel, the streaks from water flowing down the bottom in contrast with the dryness of the ceiling.");
+						if(me.x<130 or (me.z<-15 and me.x>275) or (me.y>306) or me.y<245) a.set("desc", "Swimming down the tunnel to oblivion.");
+						else if(me.x<200 and me.y>290) a.set("desc", "In a narrow tunnel cut by a downpour of freshwater.");
+						//else if(me.x<160) a.set("desc", "(Is that light coming from up ahead? It feels like there might be something to the " + getDir(get_angle(me, get_vector(getd("swordx"), getd("swordy"), getd("swordz")))) + "...)");
+					}// Descriptions.
+				}
+
+			}// Terrain check.
+		}// Inside.
+
+	}// Map loop.
+	
+	if(inside<0) {
+		if(nearest<0) nearest=0; // BLAH!
+		playsound(steps + "stone/bump.ogg", next.x, next.y, next.z, false);
+		return map[nearest].getCenter();
+	}
+	
+	if(player and absolute(me.x-220)<=6 and me.y>280 and me.z>-9) a.set("desc", "(On the dark side of a small opening, blocked by a large boulder.)");
+	if(rotmove and !move) {
+		move=true;
+		next=tempnext;
+	}// Curves.
+	
+	if(move) {
+		if(terrain!="sky" and (round(next.x, 0)!=round(me.x, 0) or round(next.y, 0)!=round(me.y, 0) or round(next.z, 0)!=round(me.z, 0))) playsound(terrain + "/run" + random(1, 6) + ".wav", next.x, next.y, next.z, false); // Falling?
+		if(player) {
+			if(terrain=="sky" and flight.playing==false) flight.play_looped();
+			else if(flight.playing and terrain!="sky") {
+				flight.stop();
+				playsound(terrain + "/run" + random(1, 6) + ".wav", false);
+			}// Landing. Umm.
+		}// Flight sounds.
+		return next;
+	}
+	else if(terrain != sounds + "steps/swim") playsound(steps + "dirt/bump.ogg", next.x, next.y, next.z, false);// Umm.
+	
+	return me;
+}// tunnel move, mark 3.
+
+vector desertmove(vector me, vector v, double dt, bool falling=false) {
+	
+	vector next=me+(v*dt);
+	
+	bool move=(next.z>=0.0);
+	
+	string terrain=(me.z<=0.0) ? (steps + "dirt") : "sky";
+	bool player=(floor(me.x)==pool.last_listener_x and floor(me.y)<=pool.last_listener_y and floor(absolute(me.z))==absolute(pool.last_listener_z)); // If you're in a pit, or above a pit, enemies can cheat and be you anyway.
+	vector rotmove(next.x, next.y, math_max(next.z, math_min(0.0, me.z))); // DANGER!
+	int inside=-1;
+	if(player and flight.playing) a.set("desc", "Above a dry, rock-strone lanscape, though there are hints of trees to the west, and many things could be hiding amid the cliffs and dunes scattered about.");
+	
+	for(uint i=0; i<map.length(); i++) {
+		if(map[i].contains(next)) {
+			inside=i;
+			Sphere@ s=cast<Sphere>(map[i]);
+			if(@s!=null) {
+				move=true;
+				rotmove=next;
+				if(next.z<=0.0 and dist3d2(next, s.getCenter())>=round(s.radius*s.radius - 4, 2)) terrain=sounds + "steps/gravel";
+				else terrain="sky";
+				if(player) a.set("desc", "In a dry, dusty pit, in the middle of a dry, dusty landscape.");
+				continue;
+			}// sphere
+			
+			Box2@ b=cast<Box2>(map[i]);
+			if(@b!=null) {
+				// Basically, are you walking up a slope?
+				float top=b.getTop(next.x, next.y);
+				float otop=b.getTop(me.x, me.y);
+				if((absolute(top-otop)<=0.1 and absolute(me.z-otop)<=0.2) or (b.contains(me)==false and (absolute(next.z-top)<=0.15 or absolute(top-b.z)<=0.2))) {
+					terrain=steps + "stone";
+					if(player) a.set("desc", (b.slope>=0) ? ("On a rocky slope, rising to the " + dirname(b.slope) + ".") : "Atop a boxy rock formation.");
+					next.z=top;
+					move=true;
+				}// On Slope.
+				else move=false;
+				continue;
+			}// Boxes.
+			
+			// Cylinders?
+			Cylinder@ cy=cast<Cylinder>(map[i]);
+			if(@cy!=null) {
+				if(cy.axis==ZAXIS) {
+					if(me.z>=cy.z+cy.height and next.z<cy.z+cy.height) {
+						next.z=cy.z+cy.height;
+						terrain=steps + "leaves";
+						if(falling) playsound(sounds2 + "bodyfall_treeAB_0" + random(1, 3) + ".wav", next.x, next.y, next.z);
+						move=true; // Umm?
+						if(player) a.set("desc", "In a tree at the edge of a vast expanse of rocks and sand.");
+						if(player and flight.playing) flight.stop(); //?
+						
+						continue;
+					}// Landing.
+					else playsound((cy.radius>1) ? "downloads/65340_Foliage_impact_medium_foliage_hit_5.wav" : (sounds + "env/hedgebump.ogg"), next.x, next.y, next.z, false);
+				}// Trees.
+				else if(next.z>=cy.z) {
+					//double d2=distance2(get_vector((cy.axis==XAXIS) ? cy.z : cy.x, (cy.axis==YAXIS) ? cy.z : cy.y), get_vector((cy.axis==XAXIS) ? next.z : next.z, (cy.axis==YAXIS) ? next.z : next.y));
+					rotmove=get_vector(next.x, next.y, absolute(cy.radius*sine(arc_cosine( ((cy.axis==XAXIS) ? (next.y-cy.y) : (next.x-cy.x))/cy.radius)))+cy.z); // Umm... should've gone with the Pythagorean theorem, ne?
+					terrain=steps + "sand"; // Are you sure?
+					if(player) a.set("desc", "Amid sand dunes, which seem to stretch as far as the eye can see to the southeast.");
+				}// walking atop cylinders.
+				//else playsound(steps + "dirt/bump.ogg", next.x, next.y, next.z, false);
+			}// Cylinders.
+			
+			move=false;
+		}// Probably the answer is no, but let's be careful.
+		else if(map[i].contains(me) and !map[i].contains(next)) {
+			inside=i;
+			Sphere@ s=cast<Sphere>(map[i]);
+			if(@s!=null and next.z<s.z) {
+				move=true; // Hmm.
+				double d=distance2(me, s.getCenter());
+				rotmove=get_vector(next.x, next.y, s.z-square_root(s.radius*s.radius - d));
+				terrain=sounds + "steps/gravel";
+				next=rotmove;
+			}// Walking on the bottom.
+		}// Mostly just spheres.
+		else if(map[i].contains(me)) {
+			inside=i;
+			Cylinder@ cy=(cast<Cylinder>(map[i]));
+			if(@cy!=null and cy.axis==ZAXIS and round(me.z, 0)==round(cy.z+cy.height, 0)) terrain="leaves"; //?
+		}// Wasteful. 4 calls to contains?
+		//else if(me.z==next.z and me.z==map[i].getCenter().z+(map[i].getBounds().depth/2) and @(cast<Cylinder>(map[i]))!=null) terrain=steps + "leaves"; // ... That seems... dumb. Really, dumb.
+		
+	}// Map.
+	
+	if(inside<0 and me.z<0) {
+		next.z=0.0;
+		me.z=0.0;
+		playsound(steps + "dirt/slide.wav", me.x, me.y, me.z);
+		move=true;
+	}// Underground bug.
+	if(!move and me.z>0.0 and next.z<=0.0 and terrain=="sky") {
+		next.z=0.0;
+		move=true;
+	}// landing.
+	
+	if(!move and rotmove!=next) {
+		next=rotmove;
+		move=true;
+	}// Rotation things. Mostly walking on the insides of spheres.
+	
+	if(!move) {
+		me=me-(v*dt); // Umm.
+		//if(me.z>=0.0) playsound(steps + "stone/bump.ogg", next.x, next.y, next.z, false);
+		return me;
+	}// no move.
+	
+	//if(terrain!="sky" and (round(me.length(), 0) != round(next.length(), 0))) {
+	if(terrain!="sky" and (round(me.x, 0) != round(next.x, 0) or round(me.y, 0)!=round(next.y, 0) or round(me.z, 0) != round(next.z, 0))) {
+		// That... ur... gets around the diagonal problem, I guess. But it's slow.
+		// 11:03 PM 10/4/2015: Changed because for some reason the obvious sensible method just straight-up didn't work.
+		//clipboard_copy_text(terrain + ", " + str(next));
+		playsound((falling) ? (terrain + "/fall" + random(1, 4) + ".wav") : (terrain + "/run" + random(1, 6) + ".wav"), next.x, next.y, next.z, false);
+	}// Steps / falls.
+	//else clipboard_copy_text(terrain + str(next));
+	
+	if(player) {
+		if(terrain=="sky" and flight.playing==false) flight.play_looped();
+		else if(terrain!="sky" and flight.playing) {
+			flight.stop();
+			if(falling) playsound(terrain + "/fall1.wav", false);
+			else playsound(terrain + "/run" + random(1, 6) + ".wav", false); // Ahem.
+			if(terrain==steps + "dirt") a.set("desc", "You are in the middle of a vast stretch of dust and rocks, with numerous hiding places in the shadows of countless rocky outcroppings and pits.");
+		}// Land.
+	}// Player stuff.
+	return next;
+}// Desert move. Desert, because pits, I guess.
+
+
+// Since I screwed up the coordinate system, these boxes are rotated so that the xy face is the bottom, rather than xz.
+class Box2 : Box {
+	Box2() {}
+	Box2(double xx, double yy, double zz, double w, double h, double d) {
+		this.x=xx;
+		this.y=yy;
+		this.z=zz;
+		this.width=w;
+		this.height=h;
+		this.depth=d;
+		this.slope=-1;
+	}
+	
+	double getTop(double xx, double zz) {
+		if((xx<this.x)||(xx>this.x+this.width)||(zz<this.y)||(zz>this.y+this.height)) return MIN_VALUE;
+		if((slope<0)||(slope>=32)) return this.z+this.depth;
+		
+		double ret=this.z+this.depth;
+		
+		if(this.slope==east) ret = (this.depth*((xx-this.x)/this.width))+this.z;
+		else if(this.slope==west) ret = (-this.depth*((xx-this.x)/this.width))+(this.z+this.depth);
+		else if(this.slope==north) ret = (this.depth*((zz-this.y)/this.height))+this.z;
+		else if(this.slope==south) ret = (-this.depth*((zz-this.y)/this.height))+(this.z+this.depth);
+		// Intermediates and inversions are not important enough to bother with right now?
+		return round(ret, 3);
+	}// Get top
+	
+	// Returns 0 if the boxes collide, but b is not atop this,
+	// 1 if b is resting atop this,
+	// and -1 if b does not collide with this.
+	int atop(Box@ b) {
+		// This checks to see if the collision qualifies as b resting atop this.
+		if(!this.collide(b)) return -1;
+		if(b.z<this.z) return 0;
+		
+		// Now. For it to be atop, there must be one line of intersection, and it must have a constant y value of whatever getTop is at that point.
+		// The line must be along either the x or the y axis, but that kinda goes without saying.
+		// Well, actually, there is one other case:
+		
+		if(this.slope<0) return (b.z==this.z+this.depth) ? 1 : 0;
+		
+		// 5:13 AM 5/3/2012: I'm getting sick of bugs with slopes, so I'm doing this drastic thing:
+		b.z=round(b.z, 3); // Oh nos precision~!
+		// In other cases, we pretty much need to check every possibility. Boo.
+		
+		int ret=0;
+		vector p(this.x+this.width, this.y+this.height, this.z+this.depth);
+		vector q(b.x+b.width, b.y+b.height, b.z+b.depth);
+		// switch (~( (~slope)|(up|down) ) ) {
+		switch (this.slope) {
+		case east : {
+			if(this.x+this.width<b.x+b.width) ret = (b.z==this.z+this.depth) ? 1 : 0;
+			else ret = (b.z==getTop(b.x+b.width, this.y)) ? 1 : 0;
+		}; break;
+		case west : {
+			if(this.x>b.x) ret = (b.z==this.z+this.depth) ? 1 : 0;
+			else ret = (b.z==getTop(b.x, this.y)) ? 1 : 0;
+		}; break;
+		case north : {
+			if(this.y+this.height<b.y+b.height) ret = (b.z==this.z+this.depth) ? 1 : 0;
+			else ret = (b.z==getTop(this.x, b.y+b.height)) ? 1 : 0;
+		}; break;
+		case south : {
+			if(this.y>b.y) ret = (b.z==this.z+this.depth) ? 1 : 0;
+			else ret = (b.z==getTop(this.x, b.y)) ? 1 : 0;
+		}; break;
+		default : {
+			// Default.
+			if(b.z==this.z+this.depth) ret=1;
+		}
+		}// Slope switch.
+		
+		return ret;
+	}// On Top.
+	
+	// Update collision and junk.
+	// Contains already ignores getTop, though. -_-.
+}// Box2.
+Box2@ newBox2(double x, double y, double z, double w, double h, double d, int slope=-1) {
+	Box2 ret(x, y, z, w, h, d);
+	ret.slope=slope;
+	return ret;
+}
+
+
+string dirname(int dir) {
+	return (dir==east) ? "east" : (dir==west) ? "west" : (dir==south) ? "south" : (dir==north) ? "north" : "unknown direction";
+}
+
+void swordset(vector sword) {
+	a.set("swordx", sword.x);
+	a.set("swordy", sword.y);
+	a.set("swordz", sword.z);
+	a.set("swordslot", pool.play_3d("downloads/39540_Sound_DesignAngelMagicPixie_Dust_MoveTinkly_8.wav", pool.last_listener_x, pool.last_listener_y, pool.last_listener_z, sword.x, sword.y, sword.z, true));
+}
+
+// The radar in stage 1 is annoyingly primative. Let's make a new one:
+void radar(double dt) {
+	double counter=getd("rc");
+	int index=geti("ri");
+	int stage=geti("stage");
+	if(index<0) index=0;
+	counter-=dt;
+	if(counter<=0.0) {
+		vector me(pool.last_listener_x, pool.last_listener_y, pool.last_listener_z);
+		
+		if(stage==0) {
+			// Point toward islands and trees?
+			// I'm a little worried that we'll want it to point toward where you need to go--abandoned island, clearing, seacave. Hm.
+			counter=0.14;
+			a.set("rc", counter);
+			a.set("ri", index);
+			return;
+		}// Stage 0 is kinda weird.
+		bool cont=true;
+		
+		for(int i=index; i<map.length(); i++) {
+			index=i;
+			if(map[i].contains(me) or dist3d2(me, map[i].getCenter())<=225) {
+				string toplay="aviewer/sounds/blue.wav";
+				string below="aviewer/sounds/red.wav";
+				vector pose=map[i].getCenter();
+				Sphere@ s=cast<Sphere>(map[i]);
+				if(@s!=null) {
+					if(stage==1) {
+						// Find intersecting tunnels.
+					}
+					else {
+						toplay="aviewer/sounds/white.wav";
+						below="aviewer/sounds/black.wav";
+						double theta=get_angle(pose, me);
+						double phi=get_angle(get_vector(pose.x, pose.z), get_vector(me.x, me.z)); // Does that work?
+						if(s.contains(me)) pose=me; // Maybe having it point out isn't a bad idea, though?
+						else pose=s.getCenter()+(s.radius*get_vector(cosine(theta), sine(theta), sine(phi)));
+						//clipboard_copy_text(toplay + str(pose));
+					}// Hmm.
+					cont=false;
+				}// Spheres are weird.
+				Box2@ b=cast<Box2>(map[i]);
+				if(cont and @b!=null and b.slope>=0) {
+					toplay="aviewer/sounds/yellow.wav";
+					below="downloads/14776_Triangle_02_Restrained_06.wav";
+					if(me.x<b.x) pose.x=b.x;
+					else if(me.x>=b.x+b.width) pose.x=b.x+b.width;
+					else pose.x=me.x;
+					if(me.y<b.y) pose.y=b.y;
+					else if(me.y>=b.y+b.height) pose.y=b.y+b.height;
+					else pose.y=me.y;
+					pose.z=b.getTop(pose.x, pose.y);
+					if(me.z<b.z) pose.z=b.z;
+					else if(me.z<pose.z) pose.z=me.z;
+					// But, is there a way to indicate the height of the slope?
+					cont=false;
+				}// Sloped box.
+				Cylinder@ cy=cast<Cylinder>(map[i]);
+				if(cont and @cy!=null and stage==1) {
+					pose=cy.getTop();
+					playsound((cy.z<me.z) ? below : toplay, cy.x, cy.y, cy.z, false);
+					wait(10);
+				}// Tunnels.
+				else if(@cy!=null) {
+					if(cy.contains(me)) pose=me;
+					else {
+						// We need an angle.
+						double theta=get_angle(get_vector((cy.axis==XAXIS) ? cy.z : cy.x, (cy.axis==YAXIS) ? cy.z : cy.y), get_vector((cy.axis==XAXIS) ? me.z : me.x, (cy.axis==YAXIS) ? me.z : me.y));
+						if(cy.axis==XAXIS) {
+							if(me.x<cy.x) pose.x=cy.x;
+							else if(me.x>cy.x+cy.height) pose.x=cy.x+cy.height;
+							else pose.x=me.x;
+							if(absolute(me.y-cy.y)<=cy.radius) pose.y=me.y;
+							else pose.y=cy.y+cy.radius*sine(theta);
+							if(absolute(me.z-cy.z)<=cy.radius) pose.z=me.z;
+							else pose.z=cy.z+cy.radius*cosine(theta);
+						}// AAARRRGGGHHH!
+						else if(cy.axis==YAXIS) {
+							if(me.y<cy.y) pose.y=cy.y;
+							else if(me.y>cy.y+cy.height) pose.y=cy.y+cy.height;
+							else pose.y=me.y;
+							if(absolute(me.x-cy.x)<=cy.radius) pose.x=me.x;
+							else pose.x=cy.x+cy.radius*cosine(theta);
+							if(absolute(me.z-cy.z)<=cy.radius) pose.z=me.z;
+							else pose.z=cy.z+cy.radius*sine(theta);
+						}// Y.
+						else if(cy.axis==ZAXIS) {
+							if(me.z<cy.z) pose.z=cy.z;
+							else if(me.z>cy.z+cy.height) pose.z=cy.z+cy.height;
+							else pose.z=me.z;
+							if(absolute(me.y-cy.y)<=cy.radius) pose.y=me.y;
+							else pose.y=cy.y+cy.radius*sine(theta);
+							if(absolute(me.x-cy.x)<=cy.radius) pose.x=me.x;
+							else pose.x=cy.x+cy.radius*cosine(theta);
+						}// ZZAXIS.
+					}// Ugh.
+					cont=false;
+				}// Get closest point to player.
+				
+				// Conics are hard!
+				CappedConic@ c=cast<CappedConic>(map[i]);
+				if(cont and @c!=null and stage==1) {
+					pose=c.start;
+					playsound((c.end.z<me.z) ? below : toplay, c.end.x, c.end.y, c.end.z);
+					wait(10); // GRR.
+					cont=false;
+				}// Tunnels.
+				
+				if(cont) {
+					Box@ b2=map[i].getBounds();
+					if(me.x<b.x) pose.x=b.x;
+					else if(me.x>b.x+b.width) pose.x=b.x+b.width;
+					else pose.x=me.x;
+					if(me.y<b.y) pose.y=b.y;
+					else if(me.y>=b.y+b.height) pose.y=b.y+b.height;
+					else pose.y=me.y;
+					if(me.z<b.z) pose.z=b.z;
+					else if(me.z>b.z+b.depth) pose.z=b.z+b.depth;
+					else pose.z=me.z;
+					cont=false;
+				}// Default.
+				
+				playsound((pose.z<me.z) ? below : toplay, pose.x, pose.y, pose.z, false);
+				index++;
+				if(index>=map.length()) index=0;
+				break;
+			}// Found.
+			index++;
+			if(index>=map.length()) index=0;
+		}// Loop.
+		counter=0.14; //?
+	}// Tick.
+	a.set("rc", counter);
+	a.set("ri", index);
+}// radar.
+
+void setPose(int i, vector p) {
+	if(i<0) {
+		a.set("x", p.x);
+		a.set("y", p.y);
+		a.set("z", p.z);
+		return;
+	}// player.
+	a.set("x" + i, p.x);
+	a.set("y" + i, p.y);
+	a.set("z" + i, p.z);
+}
+vector getPose(int i) {
+	if(i<0) return get_vector(getd("x"), getd("y"), getd("z"));
+	return get_vector(getd("x" + i), getd("y" + i), getd("z" + i));
+}
+
+// Repeat the above for velocities.

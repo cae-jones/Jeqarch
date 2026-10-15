@@ -1,0 +1,5252 @@
+#include "sound_pool.bgt"
+#include "TTechnique.bgt"
+#include "BitRoom.bgt"
+
+ tts_voice QuadTalker;
+
+ int indexOf(string[] arr, string val) {
+ for(uint i=0; i<arr.length(); i++) {if(arr[i]==val) return i;}
+ return -1;
+ }
+ double math_random() {
+ return 0.01*random(0, 100);
+ }
+ double Math_max(double a, double b) {
+ if(a>b) return a; return b;}
+ double Math_min(double a, double b) {if(a<b) return a; return b;}
+
+ TTechnique newTechnique(double dur) {TTechnique ret(dur); /*alert("Ret.duration", "duration = " + ret.duration + ". Parameter was " + dur + ".");*/ return ret;}
+ TyleMap@ newTyleMap(string[] diag) {
+ TyleMap  ret(diag);
+ return ret;
+ }
+ TyleChar@ newTyleChar(string n) {TyleChar ret(n); return ret;}
+
+
+ int t=50;
+ double speed=0.001;
+
+ // Loc Constants?
+ const int title=0, game=1, paused=2, nextStage=3, gameOver=4, gameComplete=5, dying=6, stageEnd=7, soundTest=8;
+ int loc=title, players=1, player=1, stage=1, soundx=0, menuX=0;
+ int camX=0, camY=0;
+  Point2D camera(0, 0); //a camera=new Camera(5.0); // 12:30 AM 12/28/2010. With the platform cues, a following camera works better than an absolute camera.
+ Point2D checkpoint(1, 8);
+ int checkgloc=0;
+  string[] soundtest={
+ "Platform above|platform1.wav",
+ "Two-layer platform above|platform2.wav",
+ "three or more layers of platform above|platform3.wav",
+ "Flashing Brick|mario/flashingBrick.wav",
+ "wall or pipe|low.wav",
+// "Medium wall|mid.wav",
+// "High wall|high.wav",
+ "Bottomless pit|drop3.wav",
+ "Large drop|drop2.wav",
+ "Small drop|drop1.wav",
+ "Coin nearby|mario/coinspin.wav",
+ "Mario lands, or camera finds clear space|mario/tone.wav",
+ "Mario walks|mario/step.wav",
+ "Mario bumps a block or pipe|mario/smb3_bump.wav",
+ "Turn around|mario/stop.wav",
+ "Enemy moves|mario/kick.wav",
+ "Mario is hit or crawls through pipe|mario/pipe.wav",
+ "Perana plants disappear, Mario moves near pipe or camera finds pipe|mario/pipeFound.wav",
+ "Enemy stomped or Mario swims|mario/stomp.wav",
+ "Item found|mario/grow.wav",
+ "Power up|mario/powerup.wav",
+ "Extra life|mario/1up.wav",
+ "Mario shoots fireball|mario/fireball.wav",
+ "Small Mario jumps|mario/jumpsmall.wav",
+ "Big Mario jumps|mario/jumpbig.wav",
+ "Brick broken|mario/bumpblock.wav",
+ "Camera finds brick|mario/brick.wav",
+ "Platform rises|mario/fast.wav",
+ "Platform falls, or paratroopa flies|mario/hit.wav",
+ "Coin collected|mario/coin.wav",
+ "Lakidu moves|mario/smb2_throw.wav",
+ "Lakidu throws egg, creating spiny|mario/smb2_pickup.wav",
+ "Perana plant rises from pipe|mario/perana.wav",
+ // Need sounds for fireballs and fire breath.
+ "Fireball trap descends, or Bowser breathes fire|mario/flame.wav",
+ "Fireball rises|mario/flame2.wav",
+ "Bowser falls|mario/bossfall.wav"
+ };
+
+
+// KeyC key1=KeyC.MyKeyC(), key2=new KeyC();
+ TyleChar mario("Mario"), luigi("Luigi");
+ sound_pool sb; // SoundBuffer sb=new SoundBuffer(2048000l);
+ sound bgm;
+ string curbgm="";
+ int BGMVolume=0;
+ int saveSlot=0;
+ bool warn_wall=true, warn_drop=true, warn_platform=true, output_to_window=false, hard_mode=false;
+ double counter=0.0;
+ int p1coins=0, p2coins=0, p1lives=5, p2lives=5;
+ double firex=-1.0, fire2=-1.0, fdir=1.0, fdir2=1.0; int firey=-1, firey2=-1;
+ int perana=-1;
+
+ string jump="mario/jumpsmall.wav";
+ string bumpblock="mario/bumpblock.wav"; // Saved so that size can be caught.
+ TyleMap@ gloc, nexit;
+ Point2D exitPoint(2, 7);
+ double starpower=0.0;
+ double[] timeLimits (32);
+
+ void init(int tt, double dd) {t=tt; speed=dd;
+
+ // Create Mario and Luigi.
+ mario.name="Mario"; mario.hitcries.insert_last("mario/pipe.wav");
+ luigi.name="Luigi"; luigi.hitcries.insert_last(mario.hitcries[0]);
+ mario.height=1; luigi.height=1;
+ mario.mp=0; luigi.mp=0;
+ mario.migrates=true; luigi.migrates=true;
+// HashMap list=mario.movelist;
+ // Oh, the horror...
+ // Walking.
+ TTechnique teq=newTechnique(0.25);
+
+ teq.dvx=0.25;
+ mario.movelist.set("f", teq);
+ mario.movelist.set("air_f", teq);
+ // Turning:
+ teq=newTechnique(0.05);
+ teq.rotate=4;
+ teq.addStartSound("mario/stop.wav");
+ mario.movelist.set("b", teq);
+ mario.movelist.set("air_b", teq);
+ // Jump.
+ teq=newTechnique(0.7);
+ teq.dvy=-0.1; //???
+ teq.addStartSound(jump);
+ teq.weightless=true;
+ mario.movelist.set("a", teq);
+
+ // Jump forward.
+ teq=newTechnique(0.3);
+ teq.dvx=0.2; teq.dvy=-0.1;
+ teq.addStartSound(jump); // This isn't easy to fix, methinks.
+// list.put(new Integer(TyleChar.forward|TyleChar.A), teq);
+// list.put("air_" + (TyleChar.forward|TyleChar.A), teq);
+ mario.movelist.set("fa", teq);
+ mario.movelist.set("af", teq);
+ mario.movelist.set("air_af", teq);
+
+ // Back-jump.
+ teq=newTechnique(0.3);
+ teq.dvx=-0.2; teq.dvy=-0.1;
+ teq.addStartSound(jump); // This isn't easy to fix, methinks.
+// list.put(new Integer(TyleChar.back|TyleChar.A), teq);
+// list.put("air_" + (TyleChar.back|TyleChar.A), teq);
+ mario.movelist.set("ba", teq);
+ mario.movelist.set("ab", teq);
+ mario.movelist.set("air_ba", teq);
+ mario.movelist.set("air_ab", teq);
+
+ // Fireball.
+ teq=newTechnique(0.1);
+ teq.addStartSound("mario/fireball.wav");
+ teq.mp=1.0;
+ teq.addHitArea(1, 0, 0, 1, 1); teq.damage=1.0; teq.stun=0.5;
+// list.put(new Integer(TyleChar.B), teq);
+// list.put("air_" + TyleChar.B, teq);
+ mario.movelist.set("x", teq);
+ mario.movelist.set("air_x", teq);
+
+ // Running Fireball.
+ teq=newTechnique(0.1);
+ teq.addStartSound("mario/fireball.wav");
+ teq.mp=1.0;
+ teq.addHitArea(1, 0, 0, 1, 1); teq.damage=1.0; teq.stun=0.5;
+ teq.dvx=0.2;
+// list.put(new Integer(TyleChar.B|TyleChar.forward), teq);
+// list.put("air_" + (TyleChar.forward|TyleChar.B), teq);
+ mario.movelist.set("fx", teq);
+ mario.movelist.set("air_fx", teq);
+
+ // Jumping Fireball.
+ teq=newTechnique(0.25);
+ teq.addStartSound("mario/fireball.wav");
+ teq.mp=1.0;
+ teq.addHitArea(1, 0, 0, 1, 1); teq.damage=1.0; teq.stun=0.5;
+ teq.dvy=-0.1;
+// list.put(new Integer(TyleChar.B|TyleChar.A), teq);
+ mario.movelist.set("ax", teq);
+ mario.movelist.set("air_ax", teq);
+
+ // Jump-Forward-Fireball
+ teq=newTechnique(0.25);
+ teq.addStartSound("mario/fireball.wav");
+ teq.mp=1.0;
+ teq.addHitArea(1, 0, 0, 1, 1); teq.damage=1.0; teq.stun=0.5;
+ teq.dvx=0.25; teq.dvy=-0.1;
+// list.put(new Integer(TyleChar.B|TyleChar.forward|TyleChar.A), teq);
+ mario.movelist.set("afx", teq);
+ mario.movelist.set("fax", teq);
+ mario.movelist.set("air_afx", teq);
+ mario.movelist.set("air_afx", teq);
+
+ luigi.movelist=mario.movelist;
+
+ stage=1;
+ @(mario.gloc)=setStage();
+ @(luigi.gloc)=mario.gloc;
+
+// try {
+// QuadTalker.setVoice(QuadTalker.buildVoiceList().get(0));
+// } catch (Exception voiceError) {System.err.println("Unable to initialize sapi text-to-speech.");}
+ }//Constructor.
+
+
+//   double getSpeed() {return speed;}
+//   int getT() {return t;}
+//   void setFrameData(int tt, double dd) {t=tt; speed=dd;}
+//   void setKeys(KeyC k1, KeyC k2) {key1=k1; key2=k2;}
+
+ void extendStage(TyleMap@ ret) {
+ if(@ret==null) return;
+// ret.defaultBump= ("mario/smb3_bump.wav");
+ ret.defaultBump=bumpblock; // O.O I dumb. 12:14 PM 1/1/2011
+  ret.defaultLand="mario/tone.wav"; // Remove this later.
+ ret.defaultStep="mario/step.wav";
+ ret.walls="-|PpBbCM23^vV<>Tt456789S";
+// ret.bumps=new HashMap();
+// ret.bumps.put(new Character('M'), bumpblock);
+ ret.bumps.set("M", bumpblock);
+// ret.bumps.put(new Character('S'), bumpblock);
+ ret.bumps.set("S", bumpblock);
+// ret.bumps.put(new Character('C'), bumpblock);
+ ret.bumps.set("C", bumpblock);
+// ret.bumps.put(new Character('b'), bumpblock);
+ ret.bumps.set("b", bumpblock);
+
+ TyleMap@ next=ret.east;
+ while(@next!=null) {
+ next.bgm=ret.bgm;
+ next.defaultStep=ret.defaultStep; next.defaultLand=ret.defaultLand; next.defaultBump=ret.defaultBump;
+ next.defaultFall=ret.defaultFall;
+ next.gravity=ret.gravity; // For water, mostly.
+ next.walls=ret.walls; next.bumps=ret.bumps; @next=next.east;
+}
+
+}// Copies properties of the first map to all those to the east of it.
+ TyleMap@ setStage() {
+ TyleMap@ ret; @ret=null;
+// string[] diag; // *Sigh*. This had better work.
+ switch (stage) {
+ case 1 : {
+string[] diag={
+"                             ,",
+ "                             ,",
+"                  C          ,",
+  "                             ,",
+  "                             ,",
+  "                             ,",
+  "            C   bMbCb        ,",
+  "                        pp   ,",
+  "                        pp   ,",
+  "                        pp   ,",
+  "------------------------------"
+};
+ @ret=newTyleMap(diag);
+ string[] diag2= {
+"                             ,",
+"                             ,",
+"                             ,",
+  "                             ,",
+  "                             ,",
+  "                             ,",
+  "                    2        ,",
+  " pp    pp      pPp           ,",
+  " pp    pp      ppp           ,",
+  " pp    pp      ppp           ,",
+  "---------------ppp------   ---"
+ };
+addEastwest(ret, newTyleMap( diag2));
+
+ string[] diag3= {
+ "                             ,",
+  "                             ,",
+  "                           C ,",
+  "                             ,",
+  "       bbbb                  ,",
+  "                             ,",
+  "   bMb             bbbS    C ,",
+  "                             ,",
+  "                             ,",
+  "                             ,",
+  "----------   -----------------"
+};
+
+ addEastwest(ret.east, newTyleMap( diag3));
+
+ string[] diag4= {
+
+"                             ,",
+"                             ,",
+" C    M  bbb                 ,",
+"                             ,",
+"                             ,",
+"         bb9                 ,",
+" C    C        --  --       - ",
+"              ---  ---     -- ",
+"             ----  ----   --- ",
+"            -----  ----- ---- ",
+"----------------------------- "
+ };
+
+ addEastwest(ret.east.east, newTyleMap(  diag4));
+
+ string[] diag5= {
+"                             ,",
+"                         -  F,",
+"                        --  F,",
+"                       ---  F,",
+"           CCCCC      ----  F,",
+" --                  -----  F,",
+" ---   pp           ------  F,",
+" ----  pp          -------  F,",
+" ----- pp         --------  B,",
+" -----------------------------"
+ };
+
+ addEastwest(ret.east.east.east, newTyleMap( diag5));
+
+// ret.team2=new ArrayList();
+ TyleChar@ enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret;
+ enemy.y=9; enemy.x=18; ret.team2.insert_last(enemy);
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret.east;
+ enemy.y=9; enemy.x=5;
+  ret.east.team2.insert_last(enemy);
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret.east;
+ enemy.y=9; enemy.x=10;
+ ret.east.team2.insert_last(enemy);
+
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; enemy.x=12; enemy.y=9;
+ ret.east.team2.insert_last(enemy);
+
+ // All the enemies by the star.
+// ret.east.east.east.team2=new ArrayList();
+ for(int i=0; i<5; i++) {@enemy=newTyleChar("Goomba"); enemy.x=1+(i*2); enemy.y=9; @(enemy.gloc)=ret.east.east.east; ret.east.east.east.team2.insert_last(enemy);}
+ for(int i=0; i<4; i++) {@enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret.east.east; enemy.x=3+i; enemy.y=5; enemy.face="w"; enemy.counter=math_random();
+ enemy.gloc.add(enemy, 2);
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret.east.east.east.east; enemy.x=13+i; enemy.y=8; enemy.counter=math_random();
+ enemy.gloc.add(enemy, 2);
+ }// New enemies 7:00 AM 5/28/2011.
+ ret.bgm="mario/overworld.wav";
+
+ extendStage(ret);
+
+ }; break;
+ case 2 : {
+ // 1-2, first ice-cave.
+
+ string[] diag= {
+ "-                             ",
+ "-                             ",
+ "-   bbbbbbbbbbbbbbbbbbbbbbbbbb",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-                       9     ",
+ "-     MCCCC        -  -   -   ",
+ "-               -  -  -   - - ",
+ "-            -  -  -  -   - - ",
+ "------------------------------"
+ };
+  @ret=newTyleMap( diag);
+ ret.bgm="mario/underworld.wav";
+ string[] diag2= {
+ "                              ",
+ "                              ",
+ "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+ "                  bbb     bbbb",
+ "                  bbb     bbbb",
+ "      $$$$$$      bbb        b",
+ "     b$bbbb$S     bbb        b",
+ "     b$b  b$b     bbbbbb $$$$b",
+ "     bbb  bbb       bbbb bbbbb",
+ "                    bbbb     b",
+ " -                            ",
+ "------------------------------"
+ };
+
+ addEastwest(ret, newTyleMap(  diag2));
+
+ string[] diag3= {
+ "                              ",
+ "                              ",
+ "bbbbbbbbbbbbbb2bbbbbbbbbbbbbbb",
+ " bbb       $$$$               ",
+ " bbb       $$$$               ",
+ " bbb       bbbb               ",
+ " bbb  $M   bbbb               ",
+ " bb9 b$b                      ",
+ " bbb bbb                      ",
+ "                         pPp  ",
+ "                  -      ppp  ",
+ "------------      -------ppp--"
+ };
+
+ addEastwest(ret.east, newTyleMap(  diag3));
+ string[] diag4= {
+
+ "                              ",
+ "                              ",
+ "bbbbbbbbbbbbbbbbbbbbbbbbb    b",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                             b",
+ "                              ",
+ "                        - vv  ",
+ "   pp    ppp      pp   --    -",
+ "   pp    ppp      pp  ---     ",
+ "--------------  ---------     "
+ };
+ addEastwest(ret.east.east, newTyleMap( diag4));
+ string[] diag5= {
+ "                             -",
+ "                             -",
+ "bbbb   bbbbbbbbbbbbbbbbbbbbb -",
+ "               p----        w-",
+ "               p----         -",
+ "               p----         -",
+ "bbbM           p----         -",
+ "               p----         -",
+ "             ppp----         -",
+ "bbbb ^^      Ppp---- P  P  P -",
+ "        ------------ p  p  p -",
+ "        ----------------------"
+ };
+
+ addEastwest(ret.east.east.east, newTyleMap(  diag5));
+ extendStage(ret);
+
+ // Add Enemies:
+ TyleChar@ enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=9; enemy.y=ret.getHeight()-2;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=8; enemy.y=ret.getHeight()-2; enemy.face="w"; enemy.vx=0.3;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=24; enemy.y=10; enemy.counter=0.45;
+ for(int i=0; i<4; i++) {
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.y=ret.getHeight()-2;
+ enemy.x=10+(6*i);
+ enemy.face="w"; enemy.vx=0.25*i;
+ }// Enemies in the second room. 
+
+ for(int i=0; i<8; i++) {
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.y=ret.getHeight()-2;
+ enemy.x=5+(3*i);
+ enemy.face="w"; enemy.vx=0.25*i;
+ while(enemy.gloc.getC(enemy.x, enemy.y)!=" ") enemy.x--;
+  }// Enemies in the third room.
+
+ }; break;
+ case 3 : {// 1-3.
+ string[] diag= {
+ "                              ",
+ "                   $$$        ",
+ "                              ",
+ "                              ",
+ "                 ------       ",
+ "                              ",
+ "                              ",
+ "                          M   ",
+ "                              ",
+ "                --            ",
+ "                         -----",
+ "                              ",
+ "           ----               ",
+ "--------                      "
+ };
+ @ret=newTyleMap( diag);
+ ret.bgm="mario/overworld.wav";
+ string[] diag2={
+ "                          $$$ ",
+ "                              ",
+ "                      --------",
+ "                              ",
+ "                              ",
+ "     $$$    ------   M        ",
+ "                              ",
+ "                              ",
+ "    -------        -----      ",
+ "        C                     ",
+ "--                            ",
+ "   $$$$$$$                    ",
+ "  --------                    ",
+ "                              "
+ };
+
+ addEastwest(ret, newTyleMap(  diag2));
+ string[] diag3= {
+ "         $  $               F ",
+ "                            F ",
+ "-----   <<     9  ---       F ",
+ "            $$$             F ",
+ "              $$      $$$   F ",
+ "              ---           B ",
+ "                            --",
+ "                    $$      --",
+ "                    $$$$    --",
+ "                            --",
+ "                   $   $  ^^--",
+ "                   -----vv  --",
+ "                            --"
+ };
+
+ addEastwest(ret.east, newTyleMap( diag3));
+ extendStage(ret);
+ // Block enemies from falling off of platforms...?
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=13; enemy.y=ret.getHeight()-3;
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=20; enemy.y=3;
+
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=4; enemy.y=1;
+
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=22; enemy.y=ret.getHeight()-3; enemy.face="w"; enemy.vx=0.5;
+
+ }; break;
+ case 4 : {
+ // 1-4, first castle:
+ string[] diag= {
+ "$$$$                          ",
+ "$$$$                          ",
+ "$$$$ -                        ",
+ "------                        ",
+ " ----                         ",
+ "  --                          ",
+ "       --------  --------  ---",
+ "      ---------  --------  ---",
+ "     ----------  --------  ---",
+ "---------------  --------  ---"
+ };
+ @ret=newTyleMap( diag);
+ ret.bgm="mario/castle.wav";
+ string[] diag2= {
+ "                   -----------",
+ "                        9     ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "     CCM                      ",
+ "-                -------------",
+ "--              --------------",
+ "---      B     ---------------",
+ "----------   -----------------"
+ };
+ addEastwest(ret, newTyleMap(  diag2));
+ string[] diag3= {
+ "-------                       ",
+ "-----                         ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                             F",
+ "--         -  C              -",
+ "---        -      --         -",
+ "----       -      --   -BBBBB-",
+ "-------  -------  --- --     -"
+ };
+ addEastwest(ret.east, newTyleMap(  diag3));
+ extendStage(ret);
+
+ // Add Fireballs to the first room:
+ TyleChar@ enemy;
+ @enemy=getFireball();
+ @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=25; enemy.y=ret.getHeight()-2;
+
+ // Add Fireballs to the second room:
+ @enemy=getFireball();
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=23; enemy.y=ret.getHeight()-2;
+
+ @enemy=getFireball();
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=28; enemy.y=ret.getHeight()-2;
+
+
+
+ // Add Bowser:
+ @enemy=Bowser();
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=enemy.gloc.getWidth()-3;
+ enemy.y=2; enemy.counter=2.0*math_random();
+ }; break;
+ case 5 : {
+ // 2-1:
+ string[] diag= {
+ "                              ",
+ "                              ",
+ "                   --        -",
+ "                  ---   2    -",
+ "                 ----        -",
+ "                -----        -",
+ "               ------   b9b  -",
+ "       bMb    -------        -",
+ "             --------        -",
+ "            ---------        -",
+ "           ----------        -",
+ "------------------------------"
+};
+ @ret=newTyleMap(diag);
+ string[] diag2= {
+ "                              ",
+ "                              ",
+ "---                           ",
+ "---                           ",
+ "---    $$$$ $$$$              ",
+ "---    bCbCVCbbbS             ",
+ "---    $        $       $$$   ",
+ "---    $$$$$$$$$$             ",
+ "---    bbMbCbCbbb      ---    ",
+ "---                    ----   ",
+ "---              pp    -----  ",
+ "--------------------   -------"
+};
+ addEastwest(ret, newTyleMap(  diag2));
+ string[] diag3= {
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                 -  CC        ",
+ "    pp          --        p   ",
+ "    pp    $    ---        p  $",
+ "-----------   --------   -----"
+};
+ addEastwest(ret.east, newTyleMap(diag3 ));
+ string[] diag4= {
+ "                              ",
+ "                           - f",
+ "                           - f",
+ "         bCb               - f",
+ "                           - f",
+ "                           - f",
+ "     bb  C      -          - f",
+ "                -    bb9   - f",
+ "                -          - f",
+ "  pp            -          - f",
+ "  pp            -        - - B",
+ "------------    ----------^---"
+ };
+ addEastwest(ret.east.east, newTyleMap(  diag4));
+ ret.bgm="mario/overworld.wav";
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret; ret.add(enemy, 2);
+  enemy.x=9; enemy.y=10;
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=11; enemy.y=8;
+ @enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret; ret.add(enemy, 2);
+ enemy.x=22; enemy.y=10;
+ @enemy=newTyleChar("Goomba"); ret.add(enemy, 2); @(enemy.gloc)=ret;
+ enemy.x=24; enemy.y=10;
+
+ // Second room:
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=12; enemy.y=6;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=7; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=9; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=11; enemy.y=10;
+
+// Third room:
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=2; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=8; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=20; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=28; enemy.y=10;
+
+// Fourth room:
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east.east; ret.east.east.east.add(enemy, 2);
+ enemy.x=5; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east.east; ret.east.east.east.add(enemy, 2);
+ enemy.x=20; enemy.y=10;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east.east; ret.east.east.east.add(enemy, 2);
+ enemy.x=10; enemy.y=2;
+
+ extendStage(ret);
+ }; break;
+ case 6 : {
+ // 2-2: The first Water Stage...
+ string[] diag= {
+ "                              ",
+ "                              ",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~$$$~~~~~~~",
+ "~~~~~~~~~$$~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~--M-~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~--~~~~~~~~~~~~~~~",
+ "~~~~~~$$~~~~~~~~~~~~~~~~~~~$$~",
+ "~~~~~~~~~~~~~~$~$~$~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "----------------~   ----------"
+ };
+ @ret=newTyleMap(diag );
+ string[] diag2= {
+ "                         -----",
+ "                     ---------",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~-----",
+ "~~~~~~~~~~~~~~~~~~~~~-~~~~----",
+ "~~~~~~~~~~~$$$$~~~~~-~~~~~~---",
+ "~~~~$$$$~~~~~~~~----~~~~~~~~--",
+ "~~~CMC~~~~~~~~~~~~~~~~~~~~~~Pp",
+ "~~~~~~~~~~~~$~~~~~---~~~~~~~Pp",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~--",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~---",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~----",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~-----",
+ "----------~ $~~$~~$~----------"
+ };
+ addEastwest(ret, newTyleMap( diag2));
+TyleChar@ enemy;
+ for(int i=0; i<4; i++) {
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret;
+ if(i%2!=0) @(enemy.gloc)=ret.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=5+(5*i);
+ enemy.y=11-(3*i);
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret;
+ if(i%2!=1) @(enemy.gloc)=ret.east;
+ enemy.gloc.add(enemy, 2); enemy.x=random(0, enemy.gloc.getWidth()-6);
+ enemy.y=2+random(0, 7);
+ enemy.face="w";
+ }// Enemies loop.
+
+ ret.bgm=("mario/underwater.ogg"); extendStage(ret);
+
+ }; break;
+ case 7 : {
+// 2-3:
+
+ string[] diag= {
+ "                              ",
+ "                    $$$$$$$   ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "            --------------  --",
+ "           -      --     -  - ",
+ "          -       --     -  - ",
+ "-----   ---       --     -  - "
+ };
+ @ret=newTyleMap( diag);
+ string[] diag2= {
+ "                              ",
+ " $$  $$$$                     ",
+ "                        $$$$  ",
+ "                              ",
+ "                              ",
+ "-------------          -------",
+ "--   --     -          -     -",
+ "--   --     -          -     -",
+ "--   --     -   -----  -     -"
+};
+ addEastwest(ret, newTyleMap( diag2));
+ string[] diag3= {
+ "                            f ",
+ "                         -  f ",
+ " $$$    $$$   C     <<   -  f ",
+ " $$$                     -  B ",
+ "        ----------       -----",
+ "-----   -                -----",
+ "-   -   -                 ----",
+ "-   -   -                -----",
+ "-   -   -                -----"
+ };
+ addEastwest(ret.east, newTyleMap( diag3));
+ ret.bgm=("mario/overworld.wav");
+ extendStage(ret);
+ // Add enemies. Just... a ton of random enemies.
+ TyleChar@ enemy;
+ for(int i=0; i<6; i++) {
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=6+(3*i); enemy.y=i; @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.counter=math_random();
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=6+(3*i); enemy.y=random(0, 4); @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.counter=math_random();
+ }// Add enemies.
+ }; break;
+ case 8 : {
+ // 2-4.
+ string[] diag= {
+ "$$$                           ",
+ "$$--                          ",
+ "---                           ",
+ "---                       ----",
+ "---                       ----",
+ "---                           ",
+ "---  -----                    ",
+ "     -----                    ",
+ "     -----      -     --------",
+ "--------------  ----     -----"
+ };
+ @ret=newTyleMap( diag);
+ TyleChar@ enemy;
+ for(int i=0; i<3; i++) {@enemy=newTyleChar("Goomba"); enemy.x=7+i; enemy.y=5; enemy.face="w"; enemy.counter=0.15*i; @(enemy.gloc)=ret; ret.add(enemy, 2);}
+ @enemy=getFireball(); enemy.x=15; enemy.y=2; enemy.counter=0.35; ret.add(enemy, 2);
+  @enemy=getFireball(); enemy.x=25; enemy.y=7; ret.add(enemy, 2);
+ string[] diag2= {
+ " $$$                          ",
+ "S$$$                          ",
+ "   -----                      ",
+ "-----                         ",
+ "---                           ",
+ "                            FF",
+ "          M                   ",
+ "                   -----------",
+ "----              --         -",
+ "------   --   << --          -"
+ };
+ addEastwest(ret, newTyleMap( diag2));
+
+ ret.bgm=("mario/castle.wav");
+ extendStage(ret);
+ // Bunch of fireballs...
+ for(int i=0; i<4; i++) {@enemy=getFireball(); enemy.x=4+(5*i); enemy.y=2*i; enemy.counter=0.15*i; ret.east.add(enemy, 2);}
+ // And the mighty bowser.
+ @enemy=Bowser();
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ enemy.x=25; enemy.y=4; enemy.counter=2.0;
+ //Is it too early to put a fireball on the bridge? Yeah, probably.
+
+
+
+
+ }; break;
+ case 9 : {
+// 3-1:
+
+ string[] diag= {
+
+ "                              ",
+ "                              ",
+ "                              ",
+ "            M  bbb9           ",
+ "         C                    ",
+ "      C                       ",
+ "                              ",
+ "                   pp     pPp ",
+ "                   pp     ppp ",
+ "--------------------------ppp-"
+ };
+
+ @ret=newTyleMap( diag);
+ string[] diag2= {
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "        $$$       bMb         ",
+ "              B             - ",
+ "    pp        B       pp    - ",
+ "    pp        B       pp    - ",
+ "-------  ---------------- ----"
+ };
+ addEastwest(ret, newTyleMap( diag2));
+ TyleChar@ enemy;
+ for(int i=0; i<3; i++) {@enemy=newTyleChar("paratroopa"); enemy.x=8+(4*i); enemy.y=6+i; enemy.counter=0.2*i; @(enemy.gloc)=ret; ret.add(enemy, 2);}
+ for(int i=0; i<5; i++) {@enemy=newTyleChar("Goomba"); enemy.x=5+(5*i); if(enemy.x>29) enemy.x=28; enemy.y=9; enemy.counter=0.2*i; @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);}
+ string[] diag3= {
+ "                              ",
+ "                              ",
+ "                      2       ",
+ "                $$$           ",
+ "                              ",
+ "                              ",
+ "             -----------  -   ",
+ "  pp        -          -  -   ",
+ "  pp       -           -  -   ",
+ "--pp-  ------~~~~~~~~~~-~~----"
+ };
+ addEastwest(ret.east, newTyleMap( diag3));
+ for(int i=0; i<3; i++) {@enemy=newTyleChar("Goomba"); enemy.x=15+i; enemy.y=5; @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.face="w"; enemy.vx=0.15*i;}
+ string[] diag4= {
+ "                              ",
+ "                    bbSb    - ",
+ "      bbCbVbbb             -- ",
+ "                          --- ",
+ "                    bbbb ---- ",
+ "      bbCbbMbb     b     ---- ",
+ "                         ---- ",
+ " pp                      ---- ",
+ " pp                      ---- ",
+ "---------------^^^       ---- "
+ };
+ addEastwest(ret.east.east, newTyleMap( diag4));
+ string[] diag5= {
+ "                              ",
+ "  bCb    $$$$            -  f ",
+ "                        --  f ",
+ "                       ---  f ",
+ "                      ----  f ",
+ "  bbb   Cbb9         -----  f ",
+ "             -      ------  f ",
+ "             -     -------  f ",
+ "             B    --------  B ",
+ " --------------  -------------"
+ };
+ addEastwest(ret.east.east.east, newTyleMap(  diag5));
+ ret.bgm=("mario/overworld.wav"); extendStage(ret);
+
+ // Enemies.
+ // Paratroopas to the first room...
+ // Bunch of goombas...
+ // Goombas on the bridge...
+ // Para troopa by the hammer head brothers.
+ @enemy=newTyleChar("paratroopa"); @(enemy.gloc)=ret.east.east.east; enemy.x=8; enemy.y=8; enemy.face="w"; enemy.gloc.add(enemy, 2);
+ // And the Hammer Head brothers, of course...
+ hammerhead(9, 1, ret.east.east.east); hammerhead(10, 4, ret.east.east.east);
+ // That big Goomba train in the last stretch.
+ for(int i=0; i<7; i++) {@enemy=newTyleChar("Goomba"); enemy.x=5+(3*i); enemy.y=7; ret.east.east.east.east.add(enemy, 2);}
+ // Don't forget the guys on the stairs!
+ // Throw in another para troopa, maybe?
+ @enemy=newTyleChar("paratroopa"); enemy.x=26; enemy.y=0; @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.face="w";
+
+ }; break;
+ case 10 : {
+ // 3-2
+
+string[] diag={ "                              ",
+ "                              ",
+ "                              ",
+ "             S                ",
+ "                              ",
+ "      $$$$                    ",
+ "      $$$$   M             $$$",
+ "           -   -              ",
+ "           -   -              ",
+ "           -   -              ",
+ "----------------       -------"
+ };
+
+ @ret=newTyleMap(diag);
+ string[] diag2= {
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "            2                 ",
+ " $$$$$                        ",
+ "                              ",
+ "   M        -       $$$$      ",
+ "            -                p",
+ "            -                p",
+ "--------   ---    ------------"
+ };
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3= {
+ "                              ",
+ "                       --   f ",
+ "                      ---   f ",
+ "                     ----   f ",
+ "                    -----   f ",
+ "                   ------   f ",
+ "                  -------   f ",
+ " $$$             --------   f ",
+ "                ---------   f ",
+ "          $    ----------   B ",
+ "-----------   ----------------"
+ };
+
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm=("mario/overworld.wav");
+ // Add a ton of enemies... Mostly goombs.
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret;
+ enemy.x=12; enemy.y=9; enemy.counter=math_random();
+ ret.add(enemy, 2);
+ for(int i=0; i<5; i++) {@enemy=newTyleChar("Goomba"); @(enemy.gloc)=ret;
+ enemy.x=2*(i+1); enemy.y=9; enemy.face="w"; enemy.counter=math_random();
+ ret.add(enemy, 2);
+ }// Loopy.
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret;
+ enemy.counter=math_random();
+ enemy.x=random(4, 15); enemy.y=random(4, 9); enemy.face="w";
+ ret.add(enemy, 2);
+
+ for(int i=0; i<4; i++) {
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east;
+ enemy.x=random(3, 28); enemy.face="w";
+ enemy.y=random(3, 9);
+ enemy.counter=math_random();
+ enemy.vx=math_random();
+ enemy.gloc.add(enemy, 2);
+ }// Paratroopas in the second section.
+
+ for(int i=0; i<4; i++) {
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east.east;
+ enemy.x=2*(i+1); enemy.y=9; enemy.counter=math_random(); enemy.face="w"; enemy.vx=math_random();
+ enemy.gloc.add(enemy, 2);
+ }// Goombas in the third section.
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east;
+ enemy.x=12; enemy.y=7; enemy.face="w";
+ enemy.gloc.add(enemy, 2);
+ extendStage(ret);
+
+
+
+ }; break;
+ case 11 : {
+ // 3-3
+
+ string[] diag={ "                              ",
+ "                              ",
+ "                              ",
+ "                           $$$",
+ "                          $   ",
+ "                          ----",
+ "                              ",
+ "                        M     ",
+ "               ------         ",
+ "                              ",
+ "                     ------   ",
+ "                       $ $ $ $",
+ "         -----         -------",
+ "------                        "
+ };
+
+ @ret=newTyleMap(diag);
+ string[] diag2=  {
+ "                        $$$$  ",
+ "                              ",
+ "                              ",
+ "                       ------ ",
+ "                              ",
+ "----                          ",
+ "                              ",
+ "        CCC   --------        ",
+ "                   C C   <<  C",
+ "                              ",
+ "                              ",
+ "      -------                 ",
+ "---                           ",
+ "                      ------  "
+ };
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3= {
+ "                              ",
+ "          $$$$$               ",
+ "                  vv          ",
+ "            2              - f",
+ "                           - f",
+ "----                C>>    - f",
+ "        vv --- ^^ vv       ---",
+ "                           ---",
+ "                            --",
+ "-----^^                      -",
+ "                             -",
+ "                              ",
+ "                              ",
+ "            --                "
+ };
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+//So, throw in a lot of enemies. Specifically a ton of paratroopas.
+ TyleChar@ enemy;
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret;
+ ret.add(enemy, 2);
+ enemy.x=5; enemy.y=7; enemy.face="w";
+
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret;
+ enemy.x=20; enemy.y=7; enemy.face="w"; enemy.counter=2.25;
+
+ // Now we're going to add a ton of paratroopas to the last two rooms... completely randomly.
+ for(int i=0; i<16; i++) {
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east;
+ if(i%2==1) @(enemy.gloc)=ret.east.east;
+ enemy.x=random(1, 27);
+ enemy.y=random(2, 10);
+ if(random(0, 10)>=5) enemy.face="w";
+ enemy.vy=-math_random();
+ enemy.vx=math_random();
+ enemy.counter=math_random();
+ enemy.gloc.add(enemy, 2);
+ }// Troopa loop.
+
+}; break;
+ case 12 : {
+ // 3-4
+
+ string[] diag={
+ "  --------                    ",
+ "  -------                     ",
+ "  ------                ---   ",
+ "  --9--             CC    ----",
+ "                          ----",
+ "                           ---",
+ "                         M  --",
+ "  ------    BBB   BBB      ---",
+ "---------                 ----",
+ "----------            --------"
+ };
+ @ret=newTyleMap(diag);
+ string[] diag2= {
+ "                --------------",
+ "                 -------------",
+ "                           ---",
+ "-----                       --",
+ "----                         -",
+ "---    vv   -----             ",
+ "--  2        -----            ",
+ "-             -------   ----  ",
+ "-              ------   ----- ",
+ "------ vv      ------   ------"
+ };
+ addEastwest(ret, newTyleMap(diag2));
+
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "                            FF",
+ "     vv                       ",
+ "                              ",
+ "                              ",
+ "           C        -BBBBBBBB-",
+ "                   --         ",
+ "                  --          ",
+ "----   ^^       ---           "
+ };
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/castle.wav";
+ extendStage(ret);
+ TyleChar@ enemy;
+ @enemy=getFireball();
+ enemy.x=16; enemy.y=6; enemy.face="w";
+ ret.add(enemy, 2);
+ @enemy=getFireball();
+  enemy.x=19; enemy.y=1; ret.add(enemy, 2);
+ @enemy=getFireball();
+ enemy.x=2; enemy.y=2;
+ ret.east.add(enemy, 2);
+ @enemy=getFireball();
+ enemy.x=2; enemy.y=5;
+ ret.east.add(enemy, 2);
+ for(int i=0; i<3; i++) {
+ @enemy=getFireball();
+ enemy.x=14;
+ enemy.y=i*3;
+ ret.east.add(enemy, 2);
+ enemy.vy=math_random();
+ }// Ouch.
+
+@enemy=getFireball();
+ enemy.x=27; enemy.y=6; ret.east.add(enemy, 2);
+
+ @enemy=Bowser();
+ enemy.x=26; enemy.y=5; enemy.face="w";
+ @(enemy.gloc)=ret.east.east;
+ enemy.gloc.add(enemy, 2);
+ @enemy=getFireball();
+ enemy.x=22;
+ enemy.y=2;
+ ret.east.east.add(enemy, 2);
+ }; break;
+ case 13 : {
+ // 4-1.
+
+ string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "          M  C                ",
+ "                              ",
+ "                           C C",
+ "          C  C                ",
+ "      pp                      ",
+ "      pp                      ",
+ "-----------------    ---------"
+ };
+ @ret=newTyleMap(diag);
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                             2",
+ "                              ",
+ "    $$$$$    $$$$             ",
+ "               pp     pPp    p",
+ "               pp     ppp    p",
+ "-------    -----------ppp-----"
+ };
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3={
+ "              $$$$            ",
+ "                              ",
+ "                              ",
+ "                    M         ",
+ " $$$   $$$$                   ",
+ "                              ",
+ "                    -         ",
+ "p          pp       -  pp   pp",
+ "p          pp       -  pp   pp",
+ "------   ------   ---  ---- --"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ string[] diag4= {
+ "                            f ",
+ "                      -     f ",
+ "                     --     f ",
+ "                    ---     f ",
+ "               pp  ----     f ",
+ "               pp  ----  9  f ",
+ "           pp  pp  ----     f ",
+ "       pp  pp  pp -----     f ",
+ "       pp  pp  pp -----     B ",
+ "-----  --  --  -- ------------"
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=15;
+ enemy.y=1; enemy.face="w";
+ ret.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=5;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=5;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.east.add(enemy, 2);
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ }; break;
+ case 14 : {
+ // 4-2
+ string[] diag= {
+ "-   b                         ",
+ "-   b                         ",
+ "-   bbbbbbbbbbbbbbbbbbbbbbbbbb",
+ "-                        bbbbb",
+ "-                        bbbbb",
+ "-                        bbbbb",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-                        bbbbb",
+ "-                        bbbbb",
+ "-                        bbbbb",
+ "-                             ",
+ "-------    --     -   --------"
+};
+ @ret=newTyleMap(diag);
+ string[] diag2= {
+ "                              ",
+ "                              ",
+ "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+ "bbbbbbbbbbbbbbbb9bbbb         ",
+ "bbbbbbbbbbbbbbbbbbbbb         ",
+ "bbbbbbbbbbbbbbbbbbbbb         ",
+ "                         CCC  ",
+ "                              ",
+ "                              ",
+ "bbbbMb bbbbbbbbbbbbbb         ",
+ "bbb    bbbbbbbbbbbbbb    CCC  ",
+ "bbb$$$ bbbbbbbbbbbbbb         ",
+ "       bbbbbbbbbbbbbb         ",
+ "------------------------------"
+ };
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "bbbbbbb     bbbbbbbbbbbbbbbbbb",
+ "                              ",
+ "                              ",
+ "               Vbb            ",
+ "  CCC                         ",
+ "               C              ",
+ "                C             ",
+ "                 C         C  ",
+ "  CMC                         ",
+ "                     pp      p",
+ "                     pp      p",
+ "------- vvv ------------------"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ 
+ string[] diag4={
+
+ "                            --",
+ "                            --",
+ "bbbbbbbbbbb     bb    bbbbbb--",
+ "                              ",
+ "                       $$$$$$$",
+ "                              ",
+ "                       bbbbbbb",
+ "                       bbbbbbb",
+ "                bb vv  b$$    ",
+ "                       b$$    ",
+ "     pp                bCC bM-",
+ "     pp  -                 bb-",
+ "     pp  -             -     -",
+ "---------- ^^          -------"
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+ string[] diag5={"-                            -",
+ "-                            -",
+ "----------       -----bbbbbb -",
+ "                ------       -",
+ "               -------       -",
+ "              --------       -",
+ "bbbbbbbbb---------  p-       -",
+ "BBBBBBBBBBbbbbbbb 2 p- pPp   -",
+ "                    p- ppp   -",
+ "                    p- ppp   -",
+ "bbbbbbbbbbbbbbb     p- ppp   -",
+ " bbbbbbbbbbbbbbb  ppp- ppp   -",
+ "  bbbbbbbbbbbbbbb Ppp- ppp  v-",
+ "---------------------- ----  -"
+};
+ addEastwest(ret.east.east.east, newTyleMap(diag5));
+ ret.bgm="mario/underworld.wav";
+ extendStage(ret);
+
+ TyleChar@ enemy;
+ for(int i=0; i<3; i++) {
+ @enemy=newTyleChar("Goomba");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w";
+ enemy.x=15+(i*2);
+ enemy.y=8;
+ enemy.vx=math_random();
+ }// The goombas.
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.face="e";
+ enemy.x=14; enemy.y=12; enemy.vx=0.0; enemy.vy=0.0;
+ @enemy=newTyleChar("snail");
+ enemy.x=23; enemy.y=12; enemy.face="w"; enemy.vx=0.73;
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=4; enemy.y=12; enemy.face="w";
+ @enemy=newTyleChar("snail");
+ enemy.vx=0.2;
+ @(enemy.gloc)=ret.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=8; enemy.y=12;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=26; enemy.y=12;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=8; enemy.y=5; enemy.face="w";
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=4; enemy.y=9; enemy.face="w";
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=6; enemy.y=5; enemy.face="w";
+ enemy.vx=0.2;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=6; enemy.y=9; enemy.face="w";
+ enemy.vx=0.1;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=3; enemy.y=5; enemy.face="w";
+ enemy.vx=0.32;
+
+ }; break;
+ case 15 : {
+ // 4-3
+string[] diag={
+ "                             ",
+ "                             ",
+ "                    $$       ",
+ "                    --    $$$",
+ "        $$$  $$$          ---",
+ "                             ",
+ "      $$$----  ---           ",
+ "                      -      ",
+ "                           $$",
+ "     ----    $$$$$$$$$$$$  --",
+ "             $$$  $$$$ $$    ",
+ "             ---  ---- --    ",
+ "                             ",
+ "-------                      "
+ };
+ @ret=newTyleMap(diag);
+
+string[] diag2={
+ "                           F ",
+ "                           F ",
+ "         ---    --         F ",
+ "       M                   F ",
+ "---                        F ",
+ "                           B ",
+ "      ---                 ---",
+ "                          ---",
+ "          --    ---    -- ---",
+ "--                           ",
+ "    ---                      ",
+ "                             ",
+ "                             ",
+ "        ----^^               "
+};
+ 
+addEastwest(ret, newTyleMap(diag2));
+ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ TyleChar@ enemy;
+ for(int i=0; i<8; i++) {
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret;
+ enemy.x=random(1, 26);
+ enemy.y=random(2, 12);
+ enemy.face="w";
+ enemy.counter=math_random();
+ enemy.gloc.add(enemy, 2);
+ @(enemy.gloc)=ret.east;
+ enemy.x=random(1, 26);
+ enemy.y=random(2, 12);
+ enemy.face="w";
+ enemy.counter=math_random();
+ enemy.gloc.add(enemy, 2);
+}// troopa loop. Again.
+
+
+ }; break;
+ case 16 : {
+ // 4-4
+string[] diag={
+ "                              ",
+ "                              ",
+ "       ----                   ",
+ "$         --                  ",
+ " ---      ---                 ",
+ " ----     ----                ",
+ " -----    ---        -  ---  -",
+ "          --        --  ---  -",
+ "       ----        ---  ---  -",
+ "      ----- M     ----  ---  -",
+ "     ------      -----  ---  -",
+ "---------------  -----  ---  -"
+};
+ @ret=newTyleMap(diag);
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "              M          -----",
+ "                              ",
+ "                              ",
+ "---           C               ",
+ "----                   -------",
+ "-----             --          ",
+ "------           ---          ",
+ "-------     --------    $     ",
+ "--------    --------    ------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+// This one loops:
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "                              ",
+ "-------     --        --------",
+ "            ---               ",
+ "             ---------         ",
+ "              ---              ",
+ "------      ><--    ----------",
+ "              -9             -",
+ "       -      -              P",
+ "      --      -              P",
+ "--------      -------   ------"
+ };
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/castle.wav";
+ extendStage(ret);
+ addEastwest(ret.east.east, ret.east.east); // Uh Oh!
+
+ // Could use some fireballs.
+
+ }; break;
+ case 17 : {
+ // 5-1
+ string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "             C                ",
+ "                              ",
+ "                              ",
+ "       C   bMbCb              ",
+ "                              ",
+ "                      pp      ",
+ "                      pp      ",
+ "-------------------------   --"
+ };
+ @ret=newTyleMap(diag);
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                             B",
+ "    bbb                  bb9b-",
+ "            B               B ",
+ "            B           B   - ",
+ "            -           -   - ",
+ "-------     ------------------"
+ };
+ addEastwest(ret, newTyleMap(diag2));
+
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                 $            ",
+ "                $ $           ",
+ "               $   $          ",
+ "              $     $         ",
+ "              bbbb2bb         ",
+ "                 B            ",
+ "-bbS      B      -            ",
+ "-B        -      -            ",
+ "-$        -      -       pPp  ",
+ "-B        -      -       ppp  ",
+ "-------   -      -------------"
+};
+addEastwest(ret.east, newTyleMap(diag3));
+
+string[] diag4={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "         bMb                  ",
+ "                              ",
+ "                             -",
+ "             B              --",
+ "         B   -             ---",
+ "      B  -   -$$$$        ----",
+ "      B  -   -    B      -----",
+ "      -  -   -    -  $  ------",
+ "-------  -   ------  ---------"
+ };
+ addEastwest(ret.east.east, newTyleMap(diag4));
+ string[] diag5={
+ "                            - ",
+ "                            - ",
+ "                            - ",
+ "$$$                         - ",
+ "$$$                         - ",
+ "                            - ",
+ "                        CCCC- ",
+ "--  vv   -                  - ",
+ "--       --                 - ",
+ "--       ---                B ",
+ "--       ----             B   ",
+ "--       -----      pp    -   ",
+ "--       ------     pp    -   ",
+ "--       ---------------------"
+};
+ addEastwest(ret.east.east.east, newTyleMap(diag5));
+
+ string[] diag6={
+ "   -          -               ",
+ "   -          -               ",
+ "   -          -             f ",
+ "   -  ^^ B vv -             f ",
+ "   -     -    -           - f ",
+ "   -     -    -          -- f ",
+ "   -     -    -         --- f ",
+ "   -     -    B        ---- f ",
+ "   -     -            ----- f ",
+ "   -     -           ------ f ",
+ "   B     -          ------- f ",
+ "         -         -------- f ",
+ "         B    B   --------- B ",
+ "-----         -  -------------"
+ };
+ addEastwest(ret.east.east.east.east, newTyleMap(diag6));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ // Add some snails and paratroopas.
+ // And cannons, of course!
+ TyleMap@ cur;
+ @cur=ret;
+ TyleChar@ enemy;
+ while(@cur!=null) {
+ for(int xx=0; xx<cur.getWidth(); xx++) for(int yy=0; yy<cur.getHeight(); yy++) {
+ if(cur.getC(xx, yy)=="B") {
+ @enemy=newTyleChar("cannon");
+ @enemy.gloc=cur;
+ cur.add(enemy, 2);
+ enemy.x=xx; enemy.y=yy;
+ 
+ }// Put in a cannon.
+ }
+ @cur=cur.east;
+ }// Loop for placing cannons.
+
+ }; break;
+ case 18 : {
+ // 5-2
+
+string[] diag={
+ "-   -                         ",
+ "-   -                         ",
+ "-   bbbbb----------bbbbbbbbbbb",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-                     $$      ",
+ "-                     $$      ",
+ "-                     $$      ",
+ "-   C  C                      ",
+ "-                             ",
+ "-           bbbbbb    pp      ",
+ "-           bbbbbb    pp      ",
+ "-           bbbbbb    pp      ",
+ "---------   ------    --    --"
+};
+ @ret=newTyleMap(diag);
+ string[] diag2= {
+ "         -                  --",
+ "         -                  --",
+ "bbbbbbbb9-          bbbbbbbb--",
+ "         -                  --",
+ "         -                  --",
+ "         -                  --",
+ "     CMCC-                  --",
+ "                    bbbbb-  --",
+ "            vv^^         -  --",
+ "      CCC-          $$$$$-  --",
+ "  bbb    -          $$$$$--   ",
+ "         -          bSbbb---  ",
+ "        --           $$$$$ -- ",
+ "       ---           $$$$$ ---",
+ "----------^^      vv-----  ---"
+ };
+ addEastwest(ret, newTyleMap(diag2));
+
+string[] diag3={
+ "--       $                   -",
+ "--       $                   -",
+ "-- pp    -                   -",
+ "-- Pp-----                   -",
+ "---pp-         2bb           -",
+ "pppppppppppp                 -",
+ "----       p      pp         -",
+ "---        p      pp         -",
+ "--    bbCbbppppppppp         -",
+ "-                            -",
+ "                             -",
+ "                             -",
+ "                             -",
+ "          $    $     $       -",
+ "-----------    -------  ^^  --"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/underworld.wav";
+ extendStage(ret);
+
+ // Add plenty of snails, paratroopas and maybe even the Hammerhead Brothers.
+ TyleChar@ enemy;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=5; enemy.y=13;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=8; enemy.y=13;
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=16; enemy.y=8;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=7; enemy.y=12;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=8; enemy.y=5;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.face="e"; enemy.x=7; enemy.y=5;
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=5; enemy.y=13;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="e"; enemy.x=6; enemy.y=13;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=8; enemy.y=13;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="e"; enemy.x=4; enemy.y=13;
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=10; enemy.y=8;
+
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=5; enemy.y=1;
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=20; enemy.y=4;
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=16; enemy.y=13;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.face="w"; enemy.x=20; enemy.y=13;
+
+
+
+
+ }; break;
+ case 19 : {
+ // 5-3.
+
+ string[] diag={
+ "                           -  ",
+ "                           -  ",
+ "                           -  ",
+ "                           -  ",
+ "     2                     -  ",
+ "                           -  ",
+ "                     $$$   B  ",
+ "     B              $   $     ",
+ "     -              -----     ",
+ "                      B       ",
+ "                      B       ",
+ "                      -    M  ",
+ "           -------    -       ",
+ "           B     B            ",
+ "-------                   ----"
+};
+ @ret=newTyleMap(diag);
+ string[] diag2={
+ "                          $$$$",
+ "  B                       $$$$",
+ "  -                       ----",
+ "  B                         B ",
+ "                            - ",
+ "        -------   <<        - ",
+ "         B            C $$$ - ",
+ "B                       $$$ - ",
+ "  ---                       B ",
+ "   B                       B- ",
+ "                       B$$$-- ",
+ "                       ------ ",
+ "      ----                    ",
+ "    $   B                     ",
+ "-----                         "
+};
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3= {
+ "         -                    ",
+ "         B                    ",
+ "----- vvv                     ",
+ "                         -- f ",
+ "                         -- f ",
+ "               vvv       -- f ",
+ "   C                     -- f ",
+ "                         -- f ",
+ "                     B   -- f ",
+ "                     -   -- f ",
+ "   C      ^^^        -   -- f ",
+ "                     B   -- - ",
+ "                         -----",
+ "                         -----",
+ "   C                  ^^^-----"
+ };
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ // Make every B into a cannon.
+ TyleMap@ cur;
+ @cur=ret;
+ TyleChar@ enemy;
+ while(@cur!=null) {
+ for(int xx=0; xx<cur.getWidth(); xx++) {for(int yy=0; yy<cur.getHeight(); yy++) {
+ if(cur.getC(xx, yy)=="B") {
+ @enemy=newTyleChar("cannon");
+ cur.add(enemy, 2); @enemy.gloc=cur;
+ enemy.x=xx; enemy.y=yy; //enemy.counter=math_random();
+ }
+} }
+
+ for(uint i=0; i<5; i++) {
+ @enemy=newTyleChar("paratroopa");
+ cur.add(enemy, 2); @(enemy.gloc)=cur;
+ enemy.x=random(1, 28);
+ enemy.y=random(1, cur.getHeight()-2);
+ enemy.vx=math_random();
+ }// Paratroopas.
+ @cur=cur.east;
+}// Cannonizing.
+  // Then add some paratroopas and such.
+
+
+
+ }; break;
+ case 20 : {
+ // 5-4:
+ string[] diag={
+ "           $$$$               ",
+ "           $$$$               ",
+ "           ----               ",
+ "                              ",
+ "                              ",
+ "                       CCMC   ",
+ "                              ",
+ "                              ",
+ "               C C   $        ",
+ "                     ---------",
+ "                         -----",
+ "                          ----",
+ "                              ",
+ "              -----           ",
+ "------- ---   --------   -----"
+};
+@ret=newTyleMap(diag);
+ ret.bgm="mario/castle.wav";
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "               B              ",
+ "               ---------------",
+ "               ------     ----",
+ "     C    < >  ------      -9-",
+ "                       $$$$   ",
+ "                       $$$$   ",
+ "------                        ",
+ "-----                --    ---",
+ "----                ---    ---",
+ "                   ----    ---",
+ "                   ----    ---",
+ "---------     <    -----------"
+};
+addEastwest(ret, newTyleMap(diag2));
+
+ string[] diag3={
+ "                          -   ",
+ "                          -   ",
+ "                          -   ",
+ "                          -F  ",
+ "------                    -F  ",
+ "-----                     -F  ",
+ "----  <>  > > >           --  ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "---                           ",
+ "----     <<  << >   --BBBBBBB-",
+ "-----              --        -",
+ "------            --         -",
+ "-------           --         -"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+extendStage(ret);
+
+ TyleChar@ enemy;
+
+ @enemy=getFireball();
+ ret.add(enemy, 2);
+ enemy.x=10; enemy.y=random(1, 13);
+
+ @enemy=getFireball();
+ ret.east.add(enemy, 2);
+ enemy.x=24; enemy.y=random(1, 13);
+ @enemy=getFireball();
+ ret.east.add(enemy, 2);
+ enemy.x=24; enemy.y=random(1, 13);
+
+ @enemy=getFireball();
+ ret.east.east.add(enemy, 2);
+ enemy.x=20; enemy.y=random(1, 10);
+ @enemy=Bowser();
+ ret.east.east.add(enemy, 2);
+ @(enemy.gloc)=ret.east.east;
+ enemy.x=26; enemy.y=5; //?
+
+
+
+ }; break;
+ case 21 : {
+ // 6-1.
+ string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                           ---",
+ "                           ---",
+ "                           ---",
+ "                       --- ---",
+ "                           ---",
+ "                           ---",
+ "                  ---      ---",
+ "                           ---",
+ "       CCCC                ---",
+ "              -----        ---",
+ "                           ---",
+ "----------------------     ---"
+};
+@ret=newTyleMap(diag);
+
+string[] diag2={
+ "             ---------        ",
+ "             ---------        ",
+ "                    --        ",
+ "---                 --        ",
+ "---      bbbbbbbbbb2bbbb      ",
+ "---                           ",
+ "---                           ",
+ "---               C           ",
+ "---                           ",
+ "---         b   b             ",
+ "---                           ",
+ "---   bbMb                    ",
+ "---                     ------",
+ "---                     ------",
+ "---     -------------   ------"
+};
+addEastwest(ret, newTyleMap(diag2));
+ string[] diag3={
+ "              --9             ",
+ "              --              ",
+ "              --              ",
+ "              --              ",
+ "      $$$$$$  ---             ",
+ "              ---             ",
+ "$$$   b  b b  ----            ",
+ "   -          ----            ",
+ "   -          -----           ",
+ "   -                          ",
+ "  --   M                      ",
+ "----                          ",
+ "----                          ",
+ "----   bb      -   $     $   $",
+ "----           -----     -----"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+
+ string[] diag4={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "           bbbSb              ",
+ "                              ",
+ " $$$$                         ",
+ "                   CCCMC      ",
+ "             -            -   ",
+ "  pp         -            --  ",
+ "  pp         -     $      --- ",
+ "-----------  -------     ----"
+ };
+ addEastwest(ret.east.east, newTyleMap(diag4));
+ string[] diag5={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "       CCC               -  f ",
+ "                        --  f ",
+ "                      - --  f ",
+ "                     -- --  f ",
+ "    CCC             --- --  f ",
+ "                   ---- --  f ",
+ "                  ----- --  f ",
+ "                 ------ --  B ",
+ "-------         ------- -- ---"
+};
+ addEastwest(ret.east.east.east, newTyleMap(diag5));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ // Add Lakidu to each room.
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="w";
+ ret.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.east.east.add(enemy, 2);
+
+ // As well as some goombas and paratroopas.
+ // Some pre-made spinies might help.
+
+
+
+ }; break;
+ case 22 : {
+ // 6-2.
+
+string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                     $$$$     ",
+ "                              ",
+ "                              ",
+ "                          bbbb",
+ "          9                   ",
+ "                              ",
+ "                              ",
+ "   $$$$              bbbbb    ",
+ "          -                   ",
+ "          -                   ",
+ "      $   -   $               ",
+ "-------   -   ------------    "
+};
+ @ret=newTyleMap(diag);
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Goomba");
+ enemy.x=6; enemy.y=13; enemy.vx=math_random();
+ @(enemy.gloc)=ret; ret.add(enemy, 2);
+ @enemy=newTyleChar("snail");
+ enemy.x=4; enemy.vx=math_random(); enemy.y=13;
+ @(enemy.gloc)=ret; ret.add(enemy, 2);
+  @enemy=newTyleChar("Lakidu");
+ enemy.x=random(1, 28);
+ enemy.y=1; enemy.face="e";
+ ret.add(enemy, 2);
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=20; enemy.y=8; @(enemy.gloc)=ret; ret.add(enemy, 2);
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=15; enemy.y=10; @(enemy.gloc)=ret; ret.add(enemy, 2);
+
+
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "$$$$$                         ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                         bCbVb",
+ "CCMCC                         ",
+ "          b                   ",
+ "                         bbbbb",
+ "                   pp         ",
+ "                   pp         ",
+ "------      ---------------   "
+};
+ addEastwest(ret, newTyleMap(diag2));
+ // Put the HHBros there.
+ hammerhead(27, 10, ret.east);
+ hammerhead(28, 8, ret.east);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=10;
+ enemy.y=1; enemy.face="e";
+ ret.east.add(enemy, 2);
+
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                          - f ",
+ "                         -- f ",
+ "bbbb                  -  -- f ",
+ "                     --  -- f ",
+ "                  -  --  -- f ",
+ "   $      $      --  --  -- B ",
+ "   --------     ---  --  -----"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+// Lakidu. 
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=10;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.add(enemy, 2);
+
+
+
+ }; break;
+ case 23 : {
+ // 6-3
+
+string[] diag={
+ "             $$$$             ",
+ "                              ",
+ "             ----             ",
+ "                   ----       ",
+ "                        $     ",
+ "                         -----",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "        ---                   ",
+ "           ^^                 ",
+ "-------                       "
+};
+ @ret=newTyleMap(diag);
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "           $$$$               ",
+ "               $   $        --",
+ "---B  $    $   B---B          ",
+ "      ------                  ",
+ "                              ",
+ "                         B    ",
+ "                         -    ",
+ "                      ----^^  ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              "
+};
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3={
+ "                              ",
+ "$$$$                          ",
+ "                          - f ",
+ "   $                      - f ",
+ "---- vv                   - f ",
+ "                          - f ",
+ "                          - f ",
+ "            <>      C  ^^ - f ",
+ "                          - f ",
+ "                          - f ",
+ "  M                       - B ",
+ "       ----               ----",
+ "                          ----",
+ "                          ----",
+ "----                      ----"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+
+ // Lakidu, paratroopas, Snails....
+ TyleChar@ enemy;
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.add(enemy, 2);
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.add(enemy, 2);
+
+ for(uint i=0; i<6; i++) {
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=random(1, 28);
+ enemy.y=random(1, enemy.gloc.getHeight()-1);
+ enemy.vx=math_random();
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.x=random(1, 28);
+ enemy.y=random(1, enemy.gloc.getHeight()-1);
+ enemy.vx=math_random();
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.x=random(1, 28);
+ enemy.y=random(1, enemy.gloc.getHeight()-1);
+ enemy.vx=math_random();
+
+
+ }// Paratroopas.
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.x=9; enemy.y=5;
+ @enemy=newTyleChar("snail"); enemy.x=17; enemy.y=4; enemy.vx=math_random();
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+
+}; break;
+ case 24 : {
+ // 6-4.
+
+string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "$$$$$                      M  ",
+ "$$$$$                         ",
+ "------                        ",
+ "                              ",
+ "                         -----",
+ "                            --",
+ "        ------  <<          --",
+ "        ------                ",
+ "        ---9--                ",
+ "                              ",
+ "                      --------",
+ "-------------------   --------"
+ };
+ @ret=newTyleMap(diag);
+
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                  ---------   ",
+ "     CCC      <<          ----",
+ "                              ",
+ "                              ",
+ "                              ",
+ "-------                       ",
+ "-----                         ",
+ "----                          ",
+ "                              ",
+ "                              ",
+ "         ----                 ",
+ "------   ----                 ",
+ "------   ----   ---     ------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3={
+ "                        -     ",
+ "                        -     ",
+ "                        -     ",
+ "----                    - -   ",
+ "-----                   - -FF ",
+ "--------                - -FF ",
+ "                        - ----",
+ "                              ",
+ "                              ",
+ "                              ",
+ "   $$$$$$ ---                 ",
+ "         ----       -BBBBBBBB-",
+ "       ------       -         ",
+ "       ------      --         ",
+ "-----  ------     --         -"
+};
+addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/castle.wav";
+ extendStage(ret);
+
+ TyleChar@ enemy;
+ @enemy=getFireball();
+ ret.add(enemy, 2);
+ enemy.x=11; enemy.y=8;
+ @enemy=getFireball();
+ ret.add(enemy, 2);
+  enemy.x=27; enemy.y=6;
+ @enemy=getFireball();
+ ret.add(enemy, 2); enemy.x=20; enemy.y=14;
+ enemy.vx=math_random(); // Do they use vx or vy?
+
+ @enemy=getFireball();
+ enemy.x=3; enemy.y=3;
+ ret.east.add(enemy, 2);
+ @enemy=getFireball();
+ enemy.x=26; enemy.y=13; ret.east.add(enemy, 2);
+@enemy=getFireball();
+ enemy.x=10; enemy.y=9;
+ ret.east.east.add(enemy, 2);
+ @enemy=getFireball();
+ enemy.x=9; enemy.y=2; ret.east.east.add(enemy, 2);
+
+
+ // Maybe throw in Lakidu in the last room.
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ ret.east.east.add(enemy, 2);
+
+// And a fireball on that last bit right before the switch.
+@enemy=Bowser();
+ enemy.x=27; enemy.y=10;
+ ret.east.east.add(enemy, 2); @(enemy.gloc)=ret.east.east;
+
+
+ }; break;
+ case 25 : {
+ // 7-1.
+
+string[] diag={
+ "                           B  ",
+ "                           B  ",
+ "      2                    -  ",
+ "                           -- ",
+ "                            B ",
+ "                            - ",
+ "       b9                  B- ",
+ "                     -      - ",
+ "                    --      B ",
+ "                   ---    $$$ ",
+ "      bCMb        ----        ",
+ "                 -----        ",
+ "                ------      B ",
+ "          $    -------      - ",
+ "-----------    ---------------"
+};
+ @ret=newTyleMap(diag);
+ // put a trio of snails in the first section,
+ TyleChar@ enemy;
+ for(uint i=0; i<3; i++) {
+ @enemy=newTyleChar("snail");
+ enemy.x=3+(2*i);
+ enemy.y=13;
+ ret.add(enemy, 2); @(enemy.gloc)=ret;
+ }// Snails.
+ // then a pair in the second.
+ @enemy=newTyleChar("snail");
+ enemy.x=23; enemy.y=13;
+ ret.add(enemy, 2); @(enemy.gloc)=ret;
+ @enemy=newTyleChar("snail");
+ enemy.x=27; enemy.y=13; enemy.face="w";
+ ret.add(enemy, 2);
+ @(enemy.gloc)=ret;
+
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "              B               ",
+ "              -bSb            ",
+ "                   B B        ",
+ "  bCbCb            b -        ",
+ "                     -        ",
+ "                     B        ",
+ "              B           pPp ",
+ "         B    -           ppp ",
+ "------   -    ----------------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+ for(uint i=0; i<4; i++) {
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=random(1, 28); enemy.y=random(2, 10);
+ @(enemy.gloc)=ret.east; ret.east.add(enemy, 2);
+ }// Paratroopas.
+
+string[] diag3={
+ "   -                          ",
+ "   -        $$$$$       B     ",
+ "   -                          ",
+ "   -                  B       ",
+ "   -b9b  --------     -       ",
+ "   -            ---   -       ",
+ "   -              --  -       ",
+ "   -----           -- -       ",
+ "                    ---       ",
+ "                     ---------",
+ "          $$$$$     $$$$$-----",
+ "         B               B----",
+ "         -            bM9-----",
+ "    B    -      B        -----",
+ "-----    ---------------------"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+
+string[] diag4={
+ "                              ",
+ "                              ",
+ "                              ",
+ "           S              B---",
+ " $$$                       ---",
+ " $$$                  $    B--",
+ "                      bbbb----",
+ "                          ----",
+ "          bbb             ----",
+ "-----                     B---",
+ "-----         B            ---",
+ "-----    -    -      pp    ---",
+ "-----    -    -      pp    ---",
+ "-----    -    -      pp   $---",
+ "-----    -    ------------ ---"
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+ for(uint i=0; i<3; i++) {
+ @enemy=newTyleChar("snail");
+ enemy.x=16+(2*i);
+ enemy.y=3;
+ @(enemy.gloc)=ret.east.east.east; enemy.gloc.add(enemy, 2);
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=random(4, 25);
+ enemy.y=random(2, 10);
+ @(enemy.gloc)=ret.east.east.east; enemy.gloc.add(enemy, 2);
+ }
+ @enemy=newTyleChar("snail"); enemy.x=27; enemy.y=2; enemy.face="w"; enemy.vx=1.0+math_random();
+ @(enemy.gloc)=ret.east.east.east; enemy.gloc.add(enemy, 2);
+
+ string[] diag5={
+ "                              ",
+ "                              ",
+ "                              ",
+ "--                            ",
+ "---                       - f ",
+ "----                     -- f ",
+ "-----                   --- f ",
+ "------                 ---- f ",
+ "-------               ----- f ",
+ "--------             ------ f ",
+ "---------           ------- f ",
+ "----------         -------- f ",
+ "-----------       --------- f ",
+ "------------     ---------- - ",
+ "------------------------------"
+};
+ addEastwest(ret.east.east.east, newTyleMap(diag5));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ // Enemies galore.
+
+
+ TyleMap@ cur;
+ @cur=ret;
+ while(@cur!=null) {
+ for(int i=0; i<cur.getWidth(); i++) {for(int yy=0; yy<cur.getHeight(); yy++) {
+ if(cur.getC(i, yy)=="B") {
+ @enemy=newTyleChar("cannon"); enemy.x=i; enemy.y=yy;
+ cur.add(enemy, 2); @(enemy.gloc)=cur; }
+ }}
+ @cur=cur.east;
+ }// Cannons.
+
+ for(uint i=0; i<5; i++) {
+ @enemy=newTyleChar("snail");
+ enemy.x=16+i; enemy.y=13-i; enemy.vx=math_random();
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2);
+ }// Snail army on the stairs.
+ @enemy=newTyleChar("paratroopa");
+ enemy.x=15; enemy.y=10; @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2);
+
+}; break;
+ case 26 : {
+ // 7-2
+
+ string[] diag={
+ "                              ",
+ "                              ",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~$$$$$~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~CCC~~~~~~~~-----~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~$$$$$~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~$$$$$~~~~~~",
+ "------          ----      ----"
+};
+@ret=newTyleMap(diag);
+string[] diag2={
+ "        ----------            ",
+ "        ----------            ",
+ "~~~~~~~~----------~~~~vv~~~~~~",
+ "~~~$$$$~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~C~C~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~-------~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~--~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~--~~~vv~~~~~~",
+ "~~~~~~~~~~~~~~~~~--~~~~~~~~~~~",
+ "~~~~~~~~~$$$$$$~~--~~~~~~~~~~~",
+ "~~~~~~~~~~$$$$$~~--~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~--~~~~~~~~~~~",
+ "------           ---      ----"
+};
+ addEastwest(ret, newTyleMap(diag2));
+string[] diag3={
+ "         --                   ",
+ "         --                   ",
+ "~~~~~~~~~--~~~~~$~~~~~~$~~~~~~",
+ "~~~~~~~~~--~~~~~--------~~~~~~",
+ "~~~~~~~~~--~~~~~~~~~~~--~~~~~~",
+ "~~~~~~~~~--~~~~~~~~~~~--~~~~~~",
+ "~~~~~~~~~--~~~~~~~~~~~--~~~~~~",
+ "~~~~~~~~~--------~~~~~--~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~--~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~--~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~--~~~~~~",
+ "~~~~~^^~~~~~~~~~~~~~~~--~~~~~~",
+ "~~~~~~~~~~~~~2~~~~~~~~--~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~--~~~~~~",
+ "------~~~~~~~~~~---~  --  ----"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+string[] diag4={
+ "           -------------------",
+ "           -------------------",
+ "~~~~~~~~~~~~------------------",
+ "~~~~~~~~~~~~~-~~~~~~~~~~~~----",
+ "~~~~~~~~~~~~~-~~~~~~~~~~~~~---",
+ "~~~~~~~$$$$~~-~~~~~~~~~~~~~~--",
+ "~~~~~~~~~~~~~-~~~-~~~~~~~~~~~-",
+ "~~~~~~~~~~~~~-~~~-~~~~~~~~~~pp",
+ "~~~~~~~~~~~~~-~~~-~~~~~~~~~~PP",
+ "~~~~~~$$$$~~~-~~~--~~~~~~~~~~p",
+ "~~~~~~~~~~~~~~~~~~---~~~~~~~~-",
+ "~~~~~~~~~~~~~~~~~~~~-~~~~~~~--",
+ "~~~~~~~~~~~~~~~~~~~~-~~~~~~---",
+ "~~~~~~~~~~~~~~~~~~~~-~~~~~----",
+ "------    ~~~~~~~~~~-~~~~-----"
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+ ret.bgm="mario/underwater.ogg";
+ extendStage(ret);
+ // Lots and lots of baddies. Maybe even Lakidu.
+
+
+ TyleChar@ enemy;
+
+ @enemy=newTyleChar("snail");
+ enemy.x=21; enemy.y=2; @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+
+ TyleMap@ cur;
+ @cur=ret;
+ while(@cur!=null) {
+ for(int i=0; i<cur.getWidth(); i++) {for(int yy=0; yy<cur.getHeight(); yy++) {
+ if(cur.getC(i, yy)=="B") {
+ @enemy=newTyleChar("cannon"); enemy.x=i; enemy.y=yy;
+ cur.add(enemy, 2); @(enemy.gloc)=cur; }
+ }}
+ for(uint i=0; i<7; i++) {
+ @enemy=newTyleChar("paratroopa"); enemy.x=random(1, 28); enemy.y=random(2, cur.getHeight()-1);
+ @(enemy.gloc)=cur; cur.add(enemy, 2);
+ enemy.vx=math_random();
+}
+ @cur=cur.east;
+ }// Cannons.
+
+ for(uint i=0; i<5; i++) {
+ @enemy=newTyleChar("snail");
+ enemy.x=16+i; enemy.y=13-i; enemy.vx=math_random();
+ @(enemy.gloc)=ret.east.east.east; enemy.gloc.add(enemy, 2);
+ }// Snail army on the stairs.
+ 
+}; break;
+ case 27 : {
+ // 7-3!
+
+ string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "           -----------    ----",
+ "          --         -    -   ",
+ "         --          -    -   ",
+ "-----  ---           -    -   "
+};
+ @ret=newTyleMap(diag);
+string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                            M ",
+ "             $$$$        $$$$ ",
+ "                              ",
+ "                              ",
+ "                          -----",
+ "             $$$$         -   ",
+ "--------                  -   ",
+ "--     -                  -   ",
+ "--     -                  -   ",
+ "------ -   ^^   ----  vv  ----"
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+string[] diag3={
+ "                              ",
+ "                              ",
+ " $$$$$         $$$$$$         ",
+ " $$$$$          <<            ",
+ " $$$$$                        ",
+ "         -----------          ",
+ "         -         -          ",
+ "------   -         -          ",
+ "--   -   -         -       M  ",
+ "--   -   -         -          ",
+ "--   -   -         -          ",
+ "--   -   -         -          ",
+ "------   -      ----      ----"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+
+string[] diag4={
+ "                              ",
+ "                              ",
+ "                          - f ",
+ "                C   <     - f ",
+ "                          - f ",
+ "                          - f ",
+ "                          - f ",
+ "                          - f ",
+ "       C   <>     C       - B ",
+ "                          ----",
+ "                          ----",
+ "                          ----",
+ "------          ----      ----"
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+// This needs cannons.
+ TyleMap@ cur;
+ @cur=ret;
+ TyleChar@ enemy;
+ while(@cur!=null) {
+ for(int xx=0; xx<cur.getWidth(); xx++) {for(int yy=0; yy<cur.getHeight(); yy++) {
+ if(cur.getC(xx, yy)=="B") { @enemy=newTyleChar("cannon"); @(enemy.gloc)=cur; cur.add(enemy, 2); enemy.x=xx; enemy.y=yy;}
+}}
+ @enemy=newTyleChar("Lakidu");
+ enemy.x=20;
+ enemy.y=1; enemy.face="e";
+ cur.add(enemy, 2);
+ for(uint i=0; i<7; i++) {
+ @enemy=newTyleChar("paratroopa"); @(enemy.gloc)=cur; cur.add(enemy, 2); enemy.x=random(1, 28); enemy.y=random(1, 7); enemy.vx=math_random();
+ }
+ @cur=cur.east;
+ }// Enemies.
+
+ }; break;
+ case 28 : {
+ // 7-4.
+string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                     -        ",
+ "                     ---      ",
+ "              C   > > ---     ",
+ "                       ---    ",
+ "                        ---   ",
+ "     C   < <              -   ",
+ "                          -   ",
+ "                          -   ",
+ "                          -   ",
+ "------                    ----"
+};
+@ret=newTyleMap(diag);
+
+ string[] diag2={
+ "          -                   ",
+ "          -                   ",
+ "          -                   ",
+ "          -   -----           ",
+ "          -      --           ",
+ "          -       -           ",
+ "          -----   -9 <  >  ---",
+ "                  -        ---",
+ "                  -        ---",
+ "         --   <   ---      ---",
+ "       ----                ---",
+ "     ------          ---   ---",
+ "-----------       ------------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+ string[] diag3= {
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                 C    >>      ",
+ "                              ",
+ "----                       -FF",
+ "---- ^^  VV         -BBBBBBBB-",
+ "----               --        -",
+ "---               --         -",
+ "--               --          -",
+ "-               --           -",
+ "-----          --            -"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ ret.bgm="mario/castle.wav";
+ extendStage(ret);
+ // Lots of stuff. That tries to kill you.
+
+ TyleChar@ enemy;
+ @enemy=getFireball();
+ ret.east.add(enemy, 2);
+ enemy.x=9; enemy.y=9;
+
+ @enemy=getFireball();
+ ret.east.add(enemy, 2);
+ enemy.x=18; enemy.y=10;
+
+@enemy=Bowser();
+ enemy.x=25; enemy.y=6;
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ hammerhead(18, 3, ret.east.east);
+
+ }; break;
+ case 29 : {
+ // 8-1.
+
+string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "              pp              ",
+ "              pp              ",
+ "------------------ -- - -  ---"
+};
+ @ret=newTyleMap(diag);
+string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                   bbMbbbS    ",
+ "                              ",
+ "                              ",
+ "                   bbbb9bb    ",
+ "        2                     ",
+ "     pp    pPp                ",
+ "     pp    ppp       $        ",
+ "----------------------   -----"
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+string[] diag3={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                bbbbb         ",
+ "                              ",
+ "         bbMbb                ",
+ "                              ",
+ "                              ",
+ "                             -",
+ "     pp                     --",
+ "     pp       -            ---",
+ "---------------     ----------"
+};
+addEastwest(ret.east, newTyleMap(diag3));
+ string[] diag4={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "    -                         ",
+ "   --                         ",
+ "  ---                         ",
+ " ----                         ",
+ "-----                         ",
+ "-----                         ",
+ "-----                         ",
+ "------------      --     -  --"
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+
+string[] diag5={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                        --  f ",
+ "                    -   --  f ",
+ "                   --   --  f ",
+ "    bbb            --   --  f ",
+ "                   --   --  f ",
+ "            pp     --   --  f ",
+ "        $   pp     --   --  B ",
+ "---------   ---------   --  --"
+};
+ addEastwest(ret.east.east.east, newTyleMap(diag5));
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ // You know what to do.
+ TyleChar@ enemy;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=3; enemy.y=11;
+ enemy.face="w"; enemy.vx=0.5;
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=8; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=8; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=9; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=11; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=8; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=23; enemy.y=10;
+ enemy.face="w"; enemy.vx=math_random();
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; ret.add(enemy, 2); enemy.x=20; enemy.y=9;
+ enemy.face="e"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2); enemy.x=19; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2); enemy.x=17; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.x=3; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=5;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.x=9; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2); enemy.x=17; enemy.y=1;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=3; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=7; enemy.y=5;
+ enemy.face="w"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=17; enemy.y=5;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=6; enemy.y=3;
+ enemy.face="w"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=14; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=14; enemy.y=11;
+ enemy.face="w"; enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=5; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=16; enemy.y=11;
+ enemy.face="e"; enemy.vx=math_random();
+
+
+
+
+
+ }; break;
+ case 30 : {
+ // 8-2
+string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                           ---",
+ "                           ---",
+ "               bbbbbSb     ---",
+ "                           ---",
+ "                           ---",
+ "               b9bbbbb     ---",
+ "         -                 ---",
+ "      $  -                 ---",
+ "-------  --------------    ---"
+};
+ @ret=newTyleMap(diag);
+
+string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "--                         bbb",
+ "---                           ",
+ "----              2           ",
+ "-----                   bbb   ",
+ "------         bMb            ",
+ "------                        ",
+ "------               pp  9    ",
+ "------    -          pp       ",
+ "------    ----------------    "
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+string[] diag3={
+ "                           V  ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "bbb                      bbCbb",
+ "                              ",
+ "                              ",
+ "       -                      ",
+ "       --                bbCbb",
+ "       ---                    ",
+ "       ----                   ",
+ "       -----  $         $     ",
+ "       ------ -----------  ---"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+
+ string[] diag4={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "bbbCbCb   bCbCb bbbbbbbb      ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "bbbbbbbbb bbbbb bbbb       bbb",
+ "                              ",
+ "                              ",
+ "                              ",
+ "----------                    "
+};
+ addEastwest(ret.east.east, newTyleMap(diag4));
+
+ string[] diag5={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "  $$$$$                  pp f ",
+ "                         pp f ",
+ "                     pp  pp f ",
+ "                     pp  pp f ",
+ "bbbb             pp  pp  pp f ",
+ "                 pp  pp  pp f ",
+ "             pp  pp  pp  pp f ",
+ "      $      pp  pp  pp  pp B ",
+ "      ---------  --  --  -- --"
+};
+addEastwest(ret.east.east.east, newTyleMap(diag5));
+ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ 
+TyleChar@ enemy;
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=5; enemy.y=11;
+ enemy.vx=math_random();
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=3; enemy.y=11;
+ enemy.vx=math_random();
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=10; enemy.y=6;
+ enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=15; enemy.y=8;
+ enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=21; enemy.y=8;
+ enemy.vx=math_random();
+ enemy.face="w";
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=15; enemy.y=11;
+ enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=17; enemy.y=11;
+ enemy.vx=math_random();
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret; enemy.gloc.add(enemy, 2);
+ enemy.x=18; enemy.y=5;
+ enemy.vx=math_random();
+
+
+hammerhead(25, 6, ret.east);
+ hammerhead(28, 3, ret.east);
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.x=15; enemy.y=2;
+ enemy.vx=math_random();
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east; enemy.gloc.add(enemy, 2);
+ enemy.x=25; enemy.y=11;
+ enemy.vx=math_random();
+
+
+
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.x=15; enemy.y=11;
+ enemy.vx=math_random();
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.x=17; enemy.y=11;
+ enemy.vx=math_random();
+ enemy.face="w";
+
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east; enemy.gloc.add(enemy, 2);
+ enemy.x=5; enemy.y=2;
+ enemy.vx=math_random();
+
+
+
+ hammerhead(26, 7, ret.east.east);
+ hammerhead(28, 7, ret.east.east);
+
+ for(uint i=0; i<6; i++) {
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east.east; enemy.gloc.add(enemy, 2); enemy.x=random(1, 28); enemy.y=random(1, 7); enemy.vx=math_random();
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east; enemy.x=random(0, 19);
+ if(math_random()>0.5) enemy.y=7; else enemy.y=3;
+ enemy.vx=math_random(); enemy.face="w";
+ }// Paratroopas.
+
+ for(uint i=0; i<3; i++) {
+ @enemy=newTyleChar("snail");
+ @(enemy.gloc)=ret.east.east.east.east;
+ enemy.gloc.add(enemy, 2);
+ enemy.x=7+i; enemy.y=11; enemy.vx=math_random();
+ if((i&1)==0) enemy.face="e"; else enemy.face="w";
+ @enemy=newTyleChar("paratroopa");
+ @(enemy.gloc)=ret.east.east.east.east; enemy.gloc.add(enemy, 2);
+ enemy.x=random(1, 27); enemy.y=random(1, 11); enemy.vx=math_random();
+ }// More enemies.
+
+
+}; break;
+ case 31 : {
+ // 8-3.
+
+ string[] diag={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "          bbMb        bbb     ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "               bbb            ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "------  -------   ----   -----"
+};
+ @ret=newTyleMap(diag);
+
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                            M ",
+ "                     --       ",
+ "     bbbb            --       ",
+ "                 9   --     b ",
+ "                     --       ",
+ "                     --       ",
+ "            -       $--      $",
+ "----        -------- ---------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "                         -- f ",
+ "                         -- f ",
+ "                         -- f ",
+ "                         -- f ",
+ "                         -- f ",
+ "                         -- f ",
+ "                    ^^   -- f ",
+ "                         -- f ",
+ "                         -- f ",
+ "      $                  -- B ",
+ "-------  ^^   vv         -----"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ret.bgm="mario/overworld.wav"; extendStage(ret);
+
+ 
+ TyleChar@ enemy;
+ TyleMap@ cur;
+ @cur=ret;
+ while(@cur!=null) {
+ for(int i=0; i<cur.getWidth(); i++) {for(int yy=0; yy<cur.getHeight(); yy++) {
+ if(cur.getC(i, yy)=="B") {
+ @enemy=newTyleChar("cannon"); enemy.x=i; enemy.y=yy;
+ cur.add(enemy, 2); @(enemy.gloc)=cur; }
+ }}
+ for(uint i=0; i<8; i++) {
+ @enemy=newTyleChar("paratroopa"); @(enemy.gloc)=cur; cur.add(enemy, 2);
+ enemy.x=random(0, cur.getWidth()-1);
+ enemy.y=random(1, cur.getHeight()-2);
+ enemy.counter=math_random();
+ enemy.face="w";
+ // Find the lowest safe place to stand, and add a snail there.
+ @enemy=newTyleChar("snail"); @(enemy.gloc)=cur; cur.add(enemy, 2);
+ enemy.x=3+(3*i);
+ enemy.counter=math_random();
+ if(math_random()>0.5) enemy.face="e"; else enemy.face="w";
+ int emy=cur.getHeight()-1;
+ while((emy>0)&&(cur.getC(enemy.x, emy)==" ")) emy--;
+ if(emy>0) emy--;
+ else {emy=random(3, 8); enemy.x=random(0, 30);}
+ enemy.y=emy;
+ @enemy=newTyleChar("Lakidu"); cur.add(enemy, 2);
+enemy.x=28; enemy.y=1; enemy.counter=1.0;
+ }// Add Paratroopas?
+ @cur=cur.east;
+ }// Cannons.
+
+
+ }; break;
+ case 32 : {
+ // 8-4. Or at least, the first part of it.
+ TyleChar@ enemy;
+string[] diag={
+ "                         -----",
+ "                          ----",
+ "                           ---",
+ "                            --",
+ "                              ",
+ "                              ",
+ "             -   -            ",
+ "             -   --           ",
+ "       ---   -   ---      ----",
+ "       ---   -   ----         ",
+ "       ---   -   -----        ",
+ "       ---   -   ------       ",
+ "-----  ---   -   -------------"
+};
+ @ret=newTyleMap(diag);
+ret.bgm="mario/castle.wav";
+ @enemy=getFireball();
+ ret.add(enemy, 2);
+ enemy.x=6; enemy.y=random(0, 7);
+ @enemy=getFireball();
+ ret.add(enemy, 2);
+  enemy.x=11; enemy.y=8; enemy.counter=math_random();
+ @enemy=newTyleChar("paratroopa"); ret.add(enemy, 2); @(enemy.gloc)=ret;
+ enemy.x=29; enemy.y=5;
+string[] diag2={
+ "------                        ",
+ "-----                         ",
+ "----                          ",
+ "---                           ",
+ "--          pPp               ",
+ "            ppp               ",
+ "      --    ---     $$$       ",
+ "     --                       ",
+ "------                        ",
+ "                            --",
+ "                           ---",
+ "                          ----",
+ "----- ----- ---------   ------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+
+string[] diag3={
+ "                              ",
+ "                              ",
+ "        $$$$$                 ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "        -----                 ",
+ "        -----                 ",
+ "--                   ----     ",
+ "---                 ------    ",
+ "----               --------   ",
+ "-------------     ------------"
+};
+ addEastwest(ret.east, newTyleMap(diag3));
+ // ^ good place for Lakidu?
+ @enemy=newTyleChar("Lakidu"); ret.east.east.add(enemy, 2); enemy.x=random(10, 20); enemy.y=1;
+// I really need to map this thing out. It's a pipe-maze.
+ // Loops and such. Hmm.
+
+ // So, this next area needs to have two pipes in it.
+ // At least.
+ string[] diag4={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "              pPp         pPp ",
+ "              ppp         ppp ",
+ "             ----- >  <  -----",
+ "             -----       -----",
+ "------ <     -----       -----"
+};
+addEastwest(ret.east.east, newTyleMap(diag4));
+ // first pipe leads to the second room.
+ // Second pipe leads to the rest of the level.
+ // and on that note:
+ extendStage(ret);
+ addEastwest(ret.east.east.east, ret);
+
+
+
+ }; break;
+ }//Stageswitch.
+
+ return ret;
+ }//Set Stage.
+
+ TyleChar getFireball() {
+ TyleChar ret("Fireball");
+ ret.hp=9999999;
+ string[] flames={"mario/flame.wav"};
+ // Needs to rise, then fall.
+// HashMap list=ret.movelist;
+ ret.agility=0.5; // Yes/no/maybe?
+ TTechnique@ teq; @teq=null;
+ for(int i=1; i<11; i++) {
+ @teq=newTechnique(0.15);
+ teq.startSounds=flames;
+ teq.weightless=true;
+ teq.dvy=0.2;
+ teq.recovery=teq.duration;
+ teq.endState="" + (i+1);
+ ret.movelist.set("" + i, teq);
+ ret.movelist.set("air_" + i, teq);
+
+ // On the way down...
+ @teq=newTechnique(0.25); teq.startSounds=flames;
+ teq.recovery=teq.duration; teq.endState="" + (i+11);
+ ret.movelist.set("" + (i+10), teq);
+ ret.movelist.set("air_" + (i+10), teq);
+ }// Fireballs go up...
+ if(@teq!=null) teq.endState="wait"; teq.recovery=1.0;
+ ret.counter=2.0*math_random(); // No telling when it'll pop up...
+ return ret;
+ }// Fireballs.
+ TyleChar Bowser() {
+ TyleChar ret=newTyleChar("Bowser");
+ ret.hp=stage;
+// HashMap list=ret.movelist;
+ ret.width=3; ret.height=4; 
+
+ // I'll Allow his horizontal movement to be controlled by something other than techniques.
+ // Jumping, on the other hand:
+ TTechnique teq=newTechnique(0.5);
+ teq.recovery=0.25;
+ teq.weightless=true;
+ teq.dvy=-0.2;
+ teq.addStartSound("mario/bowser_jump.wav");
+// list.put(new Integer(TyleChar.B), teq);
+ ret.movelist.set("x", teq);
+
+ // Firebreath.
+ teq=newTechnique(5.0); // Only use at long range?
+ teq.addStartSound("mario/flame.wav");
+ HitArea ha=teq.addHitArea(15, 0, 1023, 1, 1);
+ ha.x1=1; ha.xrange1=1; ha.y1=0; ha.yrange1=1; ha.z1=ha.z;
+ teq.damage=1.0;
+ teq.addHitsound("mario/pipe.wav");
+// list.put(new Integer(TyleChar.A), teq);
+// list.put("air_" + TyleChar.A, teq);
+ ret.movelist.set("a", teq);
+ ret.movelist.set("air_a", teq);
+
+ return ret;
+ }// Bowser.
+ void hammerhead(int x, int y, TyleMap@ g)
+ {
+ TyleChar@ ret;
+ @ret=newTyleChar("Hammerhead Brother");
+ ret.x=x; ret.y=y; @(ret.gloc)=g;
+ ret.gloc.add(ret, 2);
+ ret.face="w";
+ ret.counter=math_random();
+ ret.state="b";
+ }// Hammerhead brother.
+
+ int curcoins=0; // For inside a stage.
+
+ void setStageComplete(TyleChar@ me) {
+ int fireworks=(10.0*counter);
+ if(counter<300.0) addPoints(10*(300-counter));
+ string tosay="Score for this level: " + curcoins + ". Time: " + floor(counter) + ". Total score: " + p1coins + ". ";
+ curcoins=0;
+ stage++; counter=0.0; loc=nextStage; checkgloc=0; checkpoint.x=1; checkpoint.y=6;
+// key1.release(key1.l); key1.release(key1.r); key2.release(key2.l); key2.release(key2.r);
+ string toplay="mario/flag.wav"; if(stage%4==1) toplay="mario/bossfall.wav";
+ sb.play_1d(toplay, 0, 0, false);
+ wait(2000);
+ if(stage%4==1) playsong("mario/bd.wav"); else playsong("mario/win.wav");
+  wait(1500);
+ if(stage%4==1) {
+ if(stage<32) {
+ if(output_to_window) show_game_window("Sorry, Mario, but our princess is in another castle.");
+QuadTalker.speak_wait("Sorry, Mario, but our princess is in another castle.");
+}
+ else {
+QuadTalker.speak_wait("You\'ve found Princess Toadstool!");
+}
+ }// Castle.
+  else {
+ if(output_to_window) show_game_window(tosay);
+ fireworks%=10;
+ if((fireworks==1)||(fireworks==3)||(fireworks==6)) {
+ while(fireworks>0) {fireworks--;
+sb.play_1d("mario/smb3_thwomp.wav", random(-4, 4), 0, false); wait(500);}
+ }// Fireworks
+ }// Fireworks.
+ if(output_to_window) show_game_window(tosay);
+ QuadTalker.speak_wait(tosay);
+ wait(2000);
+ }// Meep.
+ void setGameComplete() {
+ stage=1; loc=title; playsong("mario/ending.wav"); wait(12050);
+ hard_mode=true;
+// QuadTalker.speak_wait("Congratulations! You\'ve completed the game! Thanks for playing!");
+ string tosay="Thank you, Mario! Your quest is over. We present you a new quest.";
+ if(output_to_window) show_game_window(tosay);
+ QuadTalker.speak_wait(tosay);
+ level_select();
+ p1coins=0;
+ }// Game Complete.
+ void level_select() {
+ wait(2500);
+ sound snd;
+ snd.load("mario/underwater.ogg");
+ snd.pitch=75;
+ snd.play_looped();
+ snd.volume=BGMVolume;
+ if(output_to_window) show_game_window("Use the directions to select a world.");
+ QuadTalker.speak("Use the directions to select a world.");
+ int mx=1;
+ int sel=-1;
+ while((!key_down(KEY_F4))&&(sel<1)) {
+ if((key_pressed(KEY_LCONTROL))||(key_pressed(KEY_RCONTROL))) {if(QuadTalker.speaking) QuadTalker.stop();}
+ bool speak=true;
+ if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))||(key_pressed(KEY_S))||(key_pressed(KEY_Z))) mx++;
+ else if((key_pressed(KEY_UP))||(key_pressed(KEY_LEFT))||(key_pressed(KEY_A))||(key_pressed(KEY_W))) mx--;
+ else if((key_pressed(KEY_SPACE))||(key_pressed(KEY_RETURN))||(key_pressed(KEY_F))||(key_pressed(KEY_G))||(key_pressed(KEY_H))||(key_pressed(KEY_NUMPAD1))||(key_pressed(KEY_NUMPAD2))||(key_pressed(KEY_NUMPAD3))) sel=mx;
+ else speak=false;
+
+ if(mx<1) mx=8;
+ if(mx>8) mx=1;
+ if(speak) {
+ sb.play_1d("mario/tone.wav", 0, 0, false);
+ QuadTalker.speak_interrupt("World " + mx + ". ");
+ if(output_to_window) show_game_window("--o  World " + mx + " ");
+ }
+ wait(5);
+ }// Level select.
+ 
+ // Fade out music.
+ while(QuadTalker.speaking) {wait(50);}
+ sb.play_2d("mario/coin.wav", 0, 0, 0, 4, false);
+ while(snd.volume>-50) {snd.volume=snd.volume-1; wait(10);}
+ snd.stop();
+ stage= (sel-1)*4; stage++;
+ loc=nextStage;
+ counter=0.0;
+ }// Heh. Heh heh. Hehehehe.
+
+/*   void controllerStep(GamePad[] pads) {
+ for(int i=0; i<pads.length; i++) {
+ if(pads[i]==null) continue;
+ pads[i].poll();
+ KeyC key=(i==0)?key1:key2;
+
+ int xc=pads[i].getXDirection();
+ int yc=pads[i].getYDirection();
+ if(xc==GamePad.LEFT) {keyPressed(key.l); keyReleased(key.r);}
+ else if(xc==GamePad.RIGHT) {keyPressed(key.r); keyReleased(key.l);}
+ else {keyReleased(key.l); keyReleased(key.r);}
+ if(yc==GamePad.UP) {keyPressed(key.d); keyReleased(key.u);}
+ else if(yc==GamePad.DOWN) {keyPressed(key.u); keyReleased(key.d);}
+ else {keyReleased(key.d); keyReleased(key.u);}
+ boolean[] buttons=pads[i].getButtons();
+ for(int j=0; j<buttons.length; j++) {
+ switch (j) {
+ case 0 :
+ case 3 : {
+ if(buttons[j]) keyPressed(key.b);
+ else if((!buttons[0])&&(!buttons[3])) keyReleased(key.b);
+ }; break;
+ case 1 :
+ case 2 : {
+ if(buttons[j]) keyPressed(key.a);
+ else if((!buttons[1])&&(!buttons[2])) keyReleased(key.a);
+ }; break;
+ case 8 : if(buttons[j]) keyPressed(KEY_F1); break;
+ case 9 : {
+ if(buttons[j]) keyPressed(key.start); else keyReleased(key.start);
+ }; break;
+ default : { if(buttons[j]) keyPressed(key.c);
+ else if((!buttons[4])&&(!buttons[5])&&(!buttons[6])&&(!buttons[7])) keyReleased(key.c);
+ }
+ }// Buttonswitch.
+ }// Buttons loop.
+ }// Game Pads Loop. 
+ }// Game Pads.
+*/
+
+   void keyPressed() {
+
+ if(key_pressed(KEY_PRIOR)) {BGMVolume+=5; if(BGMVolume>0) BGMVolume=0; bgm.volume=BGMVolume;}
+ else if(key_pressed(KEY_NEXT)) {BGMVolume-=5; if(BGMVolume<-100) BGMVolume=-100; bgm.volume=BGMVolume;}
+// if((k>=KEY_F1)&&(k<=KEY_F12)) {
+ if(key_pressed(KEY_F1)) {
+
+ // Needs to reveal the position of the character and all enemies.
+ TyleChar@ me=mario;
+
+ string tosay="";
+ 
+ tosay=me.name + " is at " + me.x + ", " + me.y + ". ";
+ if(me.vx!=0.0) tosay += "" + me.name + " is moving. ";
+ if((perana>=0)&&(perana<30)) tosay += " There is a perana plant in column " + perana + ". ";
+ if((@(me.gloc)!=null)&&(me.gloc.team2.length()>0)) for(uint i=0; i<me.gloc.team2.length(); i++) {
+ TyleChar enemy=me.gloc.team2[i];
+ tosay=tosay + " There is a " + enemy.name + " at " + enemy.x + ", " + enemy.y + ". ";
+ }
+ QuadTalker.speak(tosay);
+ while((QuadTalker.speaking)&&((!key_down(KEY_LCONTROL))&&(!key_down(KEY_RCONTROL)))) {wait(5);}
+ if(QuadTalker.speaking) QuadTalker.stop();
+// } catch (Exception malfunction) {}
+
+ }// F1.
+// else if(key_pressed(KEY_F2)) QuadTalker.speak("" + mario.counter);
+ else if(key_pressed(KEY_F5)) {// Set loc to soundtest.
+ if(loc==soundTest) loc=title; else loc=soundTest;
+ }// Sound Test.
+// else if((k==KEY_F11)&&(key1.isKeyPressed(KeyC.C))) try {stage=Integer.parseInt(JOptionPane.showInputDialog("Enter Stage (1-32):")); mario.gloc=setStage();} catch (Exception badanerie) {QuadTalker.speak("Invalid input.");} // Level skip, debug. Remove from final version!
+ else if(key_pressed(KEY_F2)) {
+ string tosave="";
+ tosave = tosave + stage + "\n";
+ tosave = tosave + p1lives + "\n";
+ tosave = tosave + p2lives + "\n";
+ tosave=tosave + p1coins + "\n";
+ tosave = tosave + p2coins + "\n";
+ tosave = tosave + mario.hp + "\n";
+ tosave=tosave + mario.mp + "\n";
+ if(hard_mode) tosave = tosave + "1\n";
+ file saveFile;
+ saveFile.open("asmb.dat", "w");
+ saveFile.write(tosave);
+ saveFile.close();
+ QuadTalker.speak("Saved. ");
+ }// save game.
+ else if(key_pressed(KEY_F3)) {
+ file saveFile;
+ if(saveFile.open("asmb.dat", "r")) {
+ string tosave=saveFile.read(0);
+ string[] lines=string_split(tosave, "\n", false);
+ stage=string_to_number(lines[0]);
+ p1lives=string_to_number(lines[1]);
+ p2lives=string_to_number(lines[2]);
+ p1coins=string_to_number(lines[3]);
+ p2coins=string_to_number(lines[4]);
+ mario.hp=string_to_number(lines[5]);
+ mario.mp=string_to_number(lines[6]);
+ if(lines.length()>7) hard_mode=(lines[7]=="1");
+ if(bgm.playing) bgm.stop();
+ QuadTalker.speak("Loaded.");
+ loc=nextStage; counter=0.0;
+ checkpoint.x=1; checkpoint.y=5;
+ } else QuadTalker.speak("File not found.");
+ }// Load Game.
+ else if(key_pressed(KEY_F6)) {
+ int room=0;
+ TyleMap@ g;
+ @g=mario.gloc;
+ TyleMap @next;
+ while((@g!=null)&&(room<100)) {room++; @next=g.west;
+ if(@next==@g) break;
+ else @g=next;
+}
+ QuadTalker.speak_wait("In room " + room + ".");
+ if((@(mario.gloc.west)==null)&&(@(mario.gloc.east)==null)) QuadTalker.speak(" This is a hidden room.");
+ if(mario.gloc.bgm=="mario/starman.wav") QuadTalker.speak(" In the clouds.");
+ }// Room check.
+ else if(key_pressed(KEY_F7)) QuadTalker.speak_wait("Mario has " + p1coins + " points, and " + p1lives + " lives. ");
+ else if(key_pressed(KEY_F8)) QuadTalker.speak_wait("The accessible camera is at " + camX + ", " + camY + ". ");
+ else if(key_pressed(KEY_F11)) stage=string_to_number(input_box("Level select", "Enter level"));
+ else if(key_pressed(KEY_F4)) {
+ exit();
+ QuadTalker.speak("Are you sure you want to quit? Press enter to quit, or escape to return to the game.");
+ while ((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_ESCAPE))) { wait(5);}
+ if(key_down(KEY_RETURN)) {QuadTalker.speak_wait("Thanks for playing."); exit();}
+ }// Exit.
+// }// Function keys.
+
+/* int c=key1.press(k);
+ KeyC key=key1;
+ if(c==KeyC.none) {c=key2.press(k); key=key2;}
+ if(c==KeyC.none) return;
+ */
+ switch (loc) {
+ case title : {
+ if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {loc=nextStage; counter=0.0; sb.play_1d("mario/coin.wav", 0, 0, false); QuadTalker.stop();}
+// else if((c==KeyC.U)||(c==KeyC.D)) {players^=1; sb.play_1D("mario/tone.wav");}
+ }; break;
+ case paused : {
+ if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {loc=game;
+ // Play sound.
+ sb.play_1d("mario/smb3_pause.wav", 0, 0, false);
+ }
+ else doAccess();
+ }; break;
+ case soundTest : {
+ if((key_pressed(KEY_DOWN))||(key_pressed(KEY_UP))||(key_pressed(KEY_W))||(key_pressed(KEY_Z))) {
+ if((key_down(KEY_DOWN))||(key_down(KEY_Z))) soundx++; else soundx--;
+ uint chs=0; chs+=soundx;
+ if(soundx<0) soundx=soundtest.length()-1;
+ else if(chs>=soundtest.length()) soundx=0;
+// try {
+ string[] parts=string_split(soundtest[soundx], "|", true);
+ QuadTalker.speak_wait(parts[0]);
+ sb.play_1d(parts[1], 0, 0, false);
+// } catch (Exception soundtestBroke) {}
+}// Changed.
+ else if(key_pressed(KEY_RETURN)) loc=paused;
+
+ }; break;
+ case game : {
+ TyleChar@ me=mario;
+ if((key_down(KEY_H))||(key_down(KEY_NUMPAD3))) doAccess();
+ else {//switch (c) {
+ camX=me.x; camY=me.y; // This officially requested.
+// case KeyC.U : // 8:55 AM 1/1/2011: Changed for user-friendly-ness.
+// case KeyC.A : {me.keyPressed(TyleChar.A);
+ if((key_pressed(KEY_UP))||(key_pressed(KEY_W))||(key_pressed(KEY_F))||(key_pressed(KEY_NUMPAD1))) {
+ me.keyPressed("a");
+ // Sometimes, swimming needs to be dealt with.
+// try {
+ if((me.gloc.getC(me.x, me.y)=="~")&&(me.vy>=0.0)) {me.vy=-0.15; me.sounds.insert_last(jump);}
+// } catch (Exception shipwrecked) {}
+ }//; break;
+// case KeyC.B : me.keyPressed(TyleChar.B); break;
+ else if((key_pressed(KEY_G))||(key_pressed(KEY_NUMPAD2))) me.keyPressed("x");
+// case KeyC.U : {
+ // This is only going to do anything when climbing vines or ladders.
+// }; break;
+// case KeyC.D : {
+ // Climb into tunnels.
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_Z))) {
+// try {
+ if(me.gloc.getC(me.x, me.y+1)=="P") {
+ // We need to A) find the bonus Room and B) save the exit information for it.
+ setBonus(me, stage);
+ sb.play_1d("mario/pipe.wav", 0, 0, false);
+ }// Pipe found.
+// } catch (Exception cloggedPipes) {QuadTalker.speak("That pipe is clogged."); }
+ }//; break;
+// case KeyC.L :
+// case KeyC.R : {
+ if((key_down(KEY_LEFT))||(key_down(KEY_A))||(key_down(KEY_RIGHT))||(key_down(KEY_S))) {
+ string c="r";
+  if((key_down(KEY_LEFT))||(key_down(KEY_A))) c="l";
+ if(((me.face=="e")&&(c=="r"))||((me.face=="w")&&(c=="l"))) {
+ me.keyPressed("f");
+ if( ((me.vx>=0.13)||(me.vx<=0.13))&&((key_down(KEY_G))||(key_down(KEY_NUMPAD2)))) me.vx*=0.5;
+ }
+ else me.keyPressed("b");
+ }//; break;
+// case KeyC.START : {
+ else if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {
+ // Play a sound?
+ sb.play_1d("mario/smb3_pause.wav", 0, 0, false);
+ loc=paused;
+// try {bgm.stop();} catch (Exception nostop) {}
+ if(bgm.playing) bgm.pause();
+}//; break;
+ }//Keyswitch in game.
+
+ }; break;
+ }//Locswitch in KeyPressed.
+
+ if(key_pressed(KEY_1)) {
+ warn_wall=!warn_wall;
+ if(warn_wall) QuadTalker.speak("Wall sound active.");
+ else QuadTalker.speak("Wall sound muted.");
+ }
+ else if(key_pressed(KEY_2)) {
+ warn_drop=!warn_drop;
+ if(warn_drop) QuadTalker.speak("Drop sound active.");
+ else QuadTalker.speak("Drop sound muted.");
+ }
+ else if(key_pressed(KEY_3)) {
+ warn_platform=!warn_platform;
+  if(warn_platform) QuadTalker.speak("Platform sound active.");
+ else QuadTalker.speak("Platform sound muted.");
+ }
+ else if(key_pressed(KEY_TAB)) {
+ output_to_window=!output_to_window;
+ if(output_to_window) {QuadTalker.speak("Window output on."); show_game_window("Window Output On!");}
+ else {QuadTalker.speak("Window output off."); show_game_window("Super Mario Brothers, the audio edition!");}
+ }
+ }// Key Pressed.
+
+   void keyReleased () {
+ // Generally, there doesn't seem to be a use for catching anything specific with this.
+// int c=key1.release(k);
+//  if(c==KeyC.none) c=key2.release(k);
+// if(c==KeyC.none) return;
+
+ if(loc==game) {
+ TyleChar@ me=mario; //((player&1)==0)?luigi:mario;
+// switch (c) {
+// case KeyC.A : me.keyReleased(TyleChar.A); break;
+ if((!key_down(KEY_F))&&(!key_down(KEY_NUMPAD1))&&(!key_down(KEY_UP))&&(!key_down(KEY_W))) me.keyReleased("a");
+// case KeyC.B : me.keyReleased(TyleChar.B); break;
+ else if((!key_down(KEY_G))&&(!key_down(KEY_NUMPAD2))) me.keyReleased("x");
+// case KeyC.L :
+// case KeyC.R : {
+
+// if(((me.face=="e")&&(c==KeyC.R))||((me.face=="w")&&(c==KeyC.L))) me.keyReleased(TyleChar.forward);
+// }; break;
+// }
+}//Key Release for game.
+ }// Key Released.
+
+ void doAccess() {
+// try {
+ TyleChar@ me=mario; //((player&1)==0)?luigi:mario;
+// switch (k) {
+ bool play=true;
+ if((key_pressed(KEY_UP))||(key_pressed(KEY_W))) {camY--; if(camY<0) {camY=0; sb.play_1d("mario/smb3_bump.wav", 0, 0, false);}}//; break;
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_Z))) {camY++; if(camY>=me.gloc.getHeight()) {camY=me.gloc.getHeight()-1; 
+ int dn=3;
+ // Determine whether or not this indicates a bottomless pit.
+ // We do this by checking every space between mario.y and camY.
+ for(int i=me.y+1; i<=camY; i++) {
+ string cn=me.gloc.getC(camX, i);
+ if((cn!=" ")&&(cn!="$")&&(cn!="~")&&(cn!="W")&&(cn!="w")) {dn=2; if(i-me.y<=2) dn=1; i=camY;}
+ }// Pit check loop.
+sb.play_1d("drop" + dn + ".wav", 0, 0, false);}}
+ else if((key_pressed(KEY_LEFT))||(key_pressed(KEY_A))) {camX--; if(camX<0) {camX=0; sb.play_1d("mario/smb3_bump.wav", 0, 0, false);}}
+ else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_S))) {camX++; if(camX>me.gloc.getWidth()) {camX=me.gloc.getWidth(); sb.play_1d("mario/hit.wav", 0, 0, false);}}
+ else if((key_pressed(KEY_G))||(key_pressed(KEY_NUMPAD2))) {camX=me.x; camY=me.y;
+ if(output_to_window) set_display_text(me.gloc);
+}
+ else if(key_pressed(KEY_V)) {
+ // Note, this is relative to Mario, not the camera's y position.
+ bool safe=false;
+ for(int i=0; i<me.gloc.getHeight(); i++) {
+ string cn=me.gloc.getC(camX, i);
+ if((cn!=" ")&&(cn!="$")&&(cn!="~")) {
+ if(i>me.y) {safe=true;
+ if(i-me.y<=2) sb.play_1d("drop1.wav", 0, 0, false);
+ else sb.play_1d("drop2.wav", 0, 0, false);
+ wait(250);
+ // check to see if there are more directly beneath this space, so as to avoid being too repetitive?
+
+ for(int i2=i+1; i2<me.gloc.getHeight(); i2++) {
+ cn=me.gloc.getC(camX, i2);
+ if((cn==" ")||(cn=="$")||(cn=="~")) i2=me.gloc.getHeight();
+ else i=i2; // I think that works.
+ }// Stack loop.
+ }// Platform below.
+ else {
+ // We want to make sure of how big this stack is, and whether or not the bottom of it is at or below Mario's height.
+ int stackHeight=1;
+ for(int i2=i+1; i2<me.gloc.getHeight(); i2++) {
+ cn=me.gloc.getC(camX, i2);
+ if((cn==" ")||(cn=="$")||(cn=="~")) i2=me.gloc.getHeight();
+ else {i=i2; stackHeight++;}
+ }// Stack loop.
+ if(stackHeight>3) stackHeight=3;
+ if(i>=me.y) {safe=(i>me.y); sb.play_1d("low.wav", 0, 0, false);}
+ else sb.play_2d("platform" + stackHeight + ".wav", 0, camera.y, 0, i, false);
+ wait(250);
+ }// Platform above or wall ahead.
+ }// Something solid.
+ }// Platform check.
+
+ if(!safe) sb.play_1d("drop3.wav", 0, 0, false);
+
+ }// Do platform check directly above and below the camera's position.
+ else if(key_pressed(KEY_SLASH)) {
+
+ }// Describe verbally what's going on with the camera.
+ else if((!key_pressed(KEY_F))&&(!key_pressed(KEY_NUMPAD1))) play=false;
+// }//KeySwitch in doAccess.
+ if(!play) return;
+ string toplay="mario/smb3_bump.wav";
+/* float stereoX=((float)camX)/((float)(me.gloc.getWidth()));
+ stereoX*=2.0f; stereoX-=1.0f;
+ if(stereoX<-1.0f) stereoX=-1.0f; else if(stereoX>1.0f) stereoX=1.0f;*/
+// float stereoX=(float)(camera.getAudioPosition(camX, camY).getX());
+
+// switch (me.gloc.getC(camX, camY)) {
+ string c=me.gloc.getC(camX, camY);
+ if(c==" ") toplay="mario/tone.wav";
+ else if(c=="b") toplay="mario/brick.wav";
+ else if((c=="p")||(c=="P")) toplay="mario/pipeFound.wav";
+ else if((c=="C")||(c=="4")||(c=="5")||(c=="6")||(c=="7")||(c=="8")||(c=="9"))  sb.play_1d("mario/coin.wav", 0, 0, false);
+ else if((c=="S")||(c=="M")||(c=="2")||(c=="3")||(c=="V")) toplay="mario/grow.wav";
+ else if(c=="1") toplay="mario/1up.wav";
+ else if(c=="$") toplay="mario/coin.wav";
+ else if(c=="~") toplay="mario/stomp.wav";
+ else if((c=="f")||(c=="F")) toplay="mario/flag.wav";
+// }// Charswitch in doAccess.
+ sb.play_1d(toplay, 0, 0, false);
+ if(me.gloc.team2.length()>0)  for(uint i=0; i<me.gloc.team2.length(); i++) {
+ TyleChar@ enemy=me.gloc.team2[i];
+ if((enemy.x==camX)&&(enemy.y==camY)) {
+ QuadTalker.speak(enemy.name);
+ }//Play Enemy sounds.
+ }// Enemies.
+ if((perana==camX)&&(camY<me.gloc.getHeight()-1)&&(c==" ")&&(me.gloc.getC(camX, camY+1)=="p")) QuadTalker.speak("Perana Plant");
+ if(output_to_window) setOutput(camY);
+// } catch (Exception failure) {sb.play("mario/hit.wav");}
+ }//Accessible camera. Sorta.
+ int getBGMVolume() {return BGMVolume;}
+ void playsong(string str) {
+// playsong( (str));
+ if(curbgm!=str) {
+ bgm.close();
+ bgm.stream(str);
+ bgm.play();
+ curbgm=str;
+ }
+ else {if(!bgm.playing) bgm.play();}
+ if(bgm.playing) bgm.volume=BGMVolume;
+ }
+/* void playsong(File f) {
+try {
+ if(getBGMVolume()<0.0f) return; // Umm... Hmm.
+ if(f==null) {bgm.stop(); return;}
+
+ if((curbgm==null)||(!f.getName()==(curbgm.getName()))||(bgm==null)) try {
+ if(bgm!=null)  {try { try { bgm.stop();} catch (Exception unstoppable) {} bgm.kill();} catch (Exception nonpe) {}}
+  bgm=new SoundPlayer(f, f.getName().indexOf(".mid")>0);
+ wait(250);
+ bgm.play();
+ curbgm=f;
+// bgm.setLoop();
+ wait(500);
+ bgm.setVolume(getBGMVolume());
+ } catch (Exception failedToStart) {}
+ else try {
+ bgm.play();
+ } catch (Exception pointless) {}
+ } catch (Exception playsongHasFailed) {}
+ }//Playsong.
+*/
+
+ void addCoin() {
+ int coins=p1coins; //((player&1)==0)?p2coins:p1coins;
+// coins++;
+ coins+=200;
+ curcoins+=200;
+// if(coins%100==0) {
+ if((coins/200)%100==0) {
+// try {sb.stop("mario/coin.wav");} catch (Exception nostop) {}
+sb.play_1d("mario/1up.wav", 0, 0, false);
+ if((player&1)==0) p2lives++; else p1lives++;
+ }// 1up.
+ if((player&1)==0) p2coins=coins; else p1coins=coins;
+ p1coins=coins;
+ }//Add coin.
+ void addPoints(int pts) {
+ int coins=p1coins; //((player&1)==0)?p2coins:p1coins;
+// coins++;
+ coins+=pts;
+ curcoins+=pts;
+// if(coins%100==0) {
+ if(((coins/200)%100==0)||(coins%20000<pts)) {
+// try {sb.stop("mario/coin.wav");} catch (Exception nostop) {}
+sb.play_1d("mario/1up.wav", 0, 0, false);
+ if((player&1)==0) p2lives++; else p1lives++;
+ }// 1up.
+ if((player&1)==0) p2coins=coins; else p1coins=coins;
+ p1coins=coins;
+
+ }// Add Points.
+ void hitEnemy(TyleChar@ me, TyleChar@ enemy, float stereoX) {
+ int sx=100.0*stereoX;
+ if(enemy.hp<=0.0) return; // Dead enemies can't hurt you.
+ if(starpower>0.0) {enemy.hp=-1.0; sb.play_1d("mario/kick.wav", camera.x, enemy.x, false);}
+ else if(@(me.lastHit)==null) {me.hp-=1.0; me.mp=0.0;
+ if(me.hp>0.0) {sb.play_1d("mario/pipe.wav", 0, 0, false); @(me.lastHit)=newTechnique(0.1); me.hitTimer=0.0;}
+ else {
+ loc=dying; counter=0.0; playsong("mario/death.ogg"); if((player&1)==0) p2lives--; else p1lives--;
+ }//Death.
+ }//Hitting Mario/Luigi.
+
+ }//Meh.
+   void step(double dt) {
+ if(loc!=paused) counter+=dt;
+ switch (loc) {
+ case game : {
+
+ TyleChar@ me=mario; //((player&1)==0)?luigi:mario;
+ int x=me.x; int y=me.y; string face=me.face;
+ me.step(dt);
+ camera.x=me.x; camera.y=me.y;
+ if(@(me.gloc)==null) {@(me.gloc)=setStage(); if(@(me.gloc) /*still*/ ==null) setGameComplete();
+ else if(me.y>=me.gloc.getHeight()) me.y=me.gloc.getHeight()-2;
+}// setstage.
+// try {
+//Iterator it=me.sounds.iterator();
+ /*float stereoX=(2.0f*( ((float)(me.x))/((float)(me.gloc.getWidth()))))-1.0f;
+ if(stereoX<-1.0f) stereoX=-1.0f; else if(stereoX>1.0f) stereoX=1.0f;*/
+// Point2D audioPosition=camera.getAudioPosition(me.x, me.y);
+// float stereoX=(float)(audioPosition.getX());
+// while(it.hasNext()) {
+ while(me.sounds.length()>0) {
+ string f=me.sounds[0]; me.sounds.remove_at(0);
+ if(f==jump) {
+ // Catch water.
+ if(me.hp>1.0) f=("mario/jumpbig.wav");
+ if(me.gloc.getC(me.x, me.y)=="~") f=("mario/stomp.wav"); // Swimming. :-/
+ }// Jump stuff
+ else if((f!="")&&(string_contains(f, "fire", 1)>=0)) {
+ if(firex>=0.0) {
+ if(fire2>=0.0) {f=("null.wav");}
+ else {fire2=(me.x); firey2=me.y; fdir2=1.0; if(me.face=="w") fdir2=-1.0; }//(me.face=="w")?-1.0:1.0;}
+ }//Second fireball.
+ else {firex=(me.x); firey=me.y; fdir=1.0; if(me.face=="w") fdir=-1.0; }//(me.face=="w")?-1.0:1.0;}
+ }// Fireball.
+ else if(f==bumpblock) {
+// try {
+ string c=me.gloc.getC(me.x, me.y-1);
+ if(c=="b") {
+ if(me.hp<2.0) f=("mario/smb3_bump.wav");
+ else {me.gloc.setC(me.x, me.y-1, " "); addPoints(50);}
+}
+ else if(c=="C") {
+
+  sb.play_1d("mario/coin.wav", camera.x, me.x, false);
+ addCoin();
+ f=("mario/smb3_bump.wav");
+ me.gloc.setC(me.x, me.y-1, 'B');
+ }
+ else if((c=="f")||(c=="F")) setStageComplete(me);
+ else if(c=="M") {
+ f=("mario/smb3_bump.wav");
+ sb.play_1d( ("mario/grow.wav"), camera.x, me.x, false);
+ TyleChar mushroom=newTyleChar("flower");
+if(me.hp<2.0) mushroom.name="mushroom"; //:"flower");
+ mushroom.height=1; mushroom.x=me.x; mushroom.y=me.y-2;
+ TTechnique teq=newTechnique(1.0);
+ teq.addStartSound("mario/" + mushroom.name + ".wav");
+// mushroom.movelist.put(new Integer(TyleChar.A), teq);
+ mushroom.movelist.set("a", teq);
+ me.gloc.add(mushroom, 2);
+ me.gloc.setC(me.x, me.y-1, "B");
+ @(mushroom.gloc)=me.gloc; mushroom.x=me.x; mushroom.y=me.y-2;
+ }
+ else if(c=="S") {
+ f=("mario/smb3_bump.wav");
+ sb.play_1d(("mario/grow.wav"), camera.x, me.x, false);
+ TyleChar mushroom=newTyleChar("star");
+ mushroom.height=1; mushroom.x=me.x; mushroom.y=me.y-2;
+ TTechnique teq=newTechnique(1.0);
+ teq.addStartSound("mario/" + mushroom.name + ".wav");
+// mushroom.movelist.put(new Integer(TyleChar.A), teq);
+ mushroom.movelist.set("a", teq);
+ me.gloc.add(mushroom, 2);
+ me.gloc.setC(me.x, me.y-1, "B");
+ @(mushroom.gloc)=me.gloc; mushroom.x=me.x; mushroom.y=me.y-2;
+ }
+ else if(c=="2")  {
+  f= ("mario/smb3_bump.wav");
+ sb.play_1d( ("mario/grow.wav"), camera.x, me.x, false);
+ TyleChar mushroom=newTyleChar("1up");
+ mushroom.height=1; mushroom.x=me.x; mushroom.y=me.y-2;
+ TTechnique teq=newTechnique(1.0);
+ teq.addStartSound("mario/" + mushroom.name + ".wav");
+// mushroom.movelist.put(new Integer(TyleChar.A), teq);
+ mushroom.movelist.set("a", teq);
+ me.gloc.add(mushroom, 2);
+ me.gloc.setC(me.x, me.y-1, "B");
+ @(mushroom.gloc)=me.gloc; mushroom.x=me.x; mushroom.y=me.y-2;
+ }
+ else if((c=="4")||(c=="5")||(c=="6")||(c=="7")||(c=="8")||(c=="9")) {
+ f= ("mario/smb3_bump.wav");
+ sb.play_1d("mario/coin.wav", camera.x, me.x, false);
+ addCoin();
+ string coins="" + (string_to_number(c)-1);
+// int coins=(int)(me.gloc.getC(me.x, me.y-1));
+// coins--;
+ if(coins=="3") me.gloc.setC(me.x, me.y-1, "B"); else me.gloc.setC(me.x, me.y-1, coins);
+ 
+ }
+ else if(c=="V") {
+ f= ("mario/grow.wav");
+ sb.play_1d("mario/grow.wav", camera.x, me.x, false);
+ climb(@me);
+ wait(1000);
+ } //; break; // Vine, not falling platform.
+ else {
+f= ("mario/smb3_bump.wav");
+// System.out.print(me.gloc.getC(me.x+1, me.y)); // Horizontal pipes aren't working.
+// try {
+if(me.gloc.getC(me.x+1, me.y)=="P") {
+ if(@nexit==null) {
+ if(stage==16) {
+ string[] diag={
+ "                           ---",
+ "                           -FF",
+ "                              ",
+ "                              ",
+ "                              ",
+ "       --          -BBBBBBBBB-",
+ "     - --         --          ",
+ "  -  - -C        --           ",
+ " --  - -        --            ",
+ "---    -----   --             "
+};
+ @nexit=newTyleMap(diag);
+ nexit.bgm="mario/castle.wav";
+ exitPoint.x=0; exitPoint.y=nexit.getHeight()-2;
+ TyleChar@ enemy;
+ @enemy=Bowser();
+ @(enemy.gloc)=nexit;
+ nexit.add(enemy, 2);
+ enemy.x=26; enemy.y=4;
+ for(int i=0; i<5; i++) {
+ @enemy=getFireball();
+ nexit.add(enemy, 2);
+ enemy.x=5*(i+1); enemy.y=i+1;
+ }// Fireballs.
+ extendStage(nexit);
+ } // 4-4 maze.
+else {
+ string[] diag= {
+ "               F ",
+ "            -  F ",
+ "           --  F ",
+ "          ---  F ",
+ "         ----  F ",
+ "        -----  F ",
+ "       ------  F ",
+ "      -------  F ",
+ "     --------  F ",
+ " pp ---------  F ",
+ " PP----------  B ",
+ "-----------------"
+  };
+ @nexit=newTyleMap( diag); nexit.bgm= ("mario/overworld.wav");
+extendStage(nexit);
+ }// Normal.
+ }// Define nexit.
+ if(@nexit!=null) @(me.gloc)=nexit; @nexit=null;
+ if(@exitPoint!=null) {me.x=exitPoint.x; me.y=exitPoint.y;} else {me.x=2; me.y=me.gloc.getHeight()-3;}
+ f= ("mario/pipe.wav"); camera.x=me.x; camera.y=me.y;
+ }//} catch (Exception brokenPipe) {QuadTalker.speak("That pipe is clogged.");}
+ }
+//else f= ("mario/smb3_bump.wav"); // Why was this commented out?
+// }// Switch for bumping bricks.
+// } catch (Exception error) {f= ("mario/smb3_bump.wav");}
+ }//Bumpblock.
+ if(@gloc==null) {;}
+ else if((gloc.getC(me.x, me.y)=="f")||(me.gloc.getC(me.x, me.y)=="F")) {setStageComplete(me); return;}
+ sb.play_1d(f, camera.x, me.x, false);
+}
+
+ me.sounds.resize(0);
+if(@(me.gloc)==null) {@(me.gloc)=setStage(); return;}
+ if(output_to_window) {
+ // Refresh every five seconds or so.
+ if(refresh_timer.elapsed>5000) {refresh_timer.pause(); set_display_text(me.gloc);
+refresh_timer.restart(); refresh_timer.resume();}
+if((key_down(KEY_H))||(key_down(KEY_NUMPAD3))) setOutput(camY); else setOutput(me.y);
+}
+  if(me.gloc.getC(me.x, me.y)=="w") QuadTalker.speak_interrupt("Welcome to the Warp Zone!");
+ else if(me.gloc.getC(me.x, me.y)=="$") {
+ addCoin(); sb.play_1d("mario/coin.wav", camera.x, me.x, false);
+ me.gloc.clear(me.x, me.y);
+ }// Coin.
+
+ int stereoX;
+ // Check for things that make noise or move. Particularly, floating platforms.
+ if(counter-floor(counter)<dt)  {for(int xx=Math_max(0, me.x-5); xx<=Math_min(me.x+5, gloc.getWidth()); xx++) {for(int yy=0; yy<me.gloc.getHeight(); yy++) {
+ string cn=gloc.getC(xx, yy);
+ if(cn==">") {
+ // So, we need to find the edge of this moving platform and move it.
+ // Also, does it turn around?
+ // There is a slight issue with the range of this; the platform can only move within 5 spaces of Mario. So if it goes to the edge of that range, it needs to turn around automatically.
+ stereoX=xx;
+ int x2=xx+1;
+ while((x2<=gloc.getWidth())&&(gloc.getC(x2, yy)==cn)) x2++;
+ string become=">"; if(xx>=me.x+4) become="<";
+ while(x2>xx) {
+ if(gloc.getC(x2, yy)==" ") {gloc.setC(x2, yy, become); gloc.clear(x2-1, yy);}
+ else { gloc.setC(x2-1, yy, "<");}
+ x2--;
+ }// O.O.
+
+
+// float volumeY=4.0f-absolute(4.0f*(float)(yy-me.y));
+// if(volumeY<-15f) volumeY=-15f;
+ sb.play_2d("platform2.wav", camera.x, camera.y, stereoX, yy, false);
+
+ if((me.x-xx>=0)&&(me.x-xx<4)&&(me.y==yy-1)) me.x++; //} catch (Exception slideToDoom) {}
+ xx+=5; // Let's not be redundant. :P.
+
+ }// Platforms move to the right.
+ else if(cn=="<") {
+
+ // It's ok to increment xx, this time, since we want to go from left to right.
+ stereoX=xx; //=(float)(camera.getAudioPosition(xx, yy).getX());
+ string become="<"; if((xx==0)||(xx<=me.x-4)||(gloc.getC(xx-1, yy)!=' ')) become=">";
+
+ while((xx<=gloc.getWidth())&&(xx<me.x+5)&&(gloc.getC(xx, yy)=="<")) {
+ if(become=="<") {gloc.setC(xx-1, yy, become); gloc.clear(xx, yy);
+// try {
+if((me.x==xx)&&(me.y==yy-1)) me.x--;//} catch (Exception noRide) {}
+}
+ else gloc.setC(xx, yy, become);
+ xx++; // Something's wrong, here.
+ }// Yeah.
+
+// float volumeY=4.0f-absolute(4.0f*(float)(yy-me.y));
+// if(volumeY<-15f) volumeY=-15f;
+ sb.play_2d("platform1.wav", camera.x, camera.y, stereoX, yy, false);
+
+ }// Platforms move to the left.
+ else if(cn=="^") {
+
+ stereoX=xx; //(float)(camera.getAudioPosition(xx, yy).getX());
+
+ while((xx<=gloc.getWidth())&&(gloc.getC(xx, yy)==cn)) {
+ gloc.clear(xx, yy);
+ if(yy<=0) gloc.setC(xx, gloc.getHeight()-1, cn); else gloc.setC(xx, yy-1, cn);
+// try {
+if((me.x==xx)&&(me.y==yy-1)&&(me.y>0)) me.y--;
+//} catch (Exception noClimb) {}
+ xx++;
+ }// Yeah...
+ yy--; if(yy<0) yy=gloc.getHeight()-1;
+// float volumeY=4.0f-absolute(4.0f*(float)(yy-me.y));
+// if(volumeY<-15f) volumeY=-15f;
+ sb.play_2d("mario/fast.wav", camera.x, camera.y, stereoX, yy, false);
+
+
+ }// Platforms move up.
+ else if(cn=="v") {
+
+ stereoX=xx; //(float)(camera.getAudioPosition(xx, yy).getX());
+
+ while((xx<=gloc.getWidth())&&(gloc.getC(xx, yy)==cn)) {
+ gloc.clear(xx, yy);
+ gloc.clear(xx, yy);
+ if(yy<me.gloc.getHeight()-1) gloc.setC(xx, yy+1, cn); else gloc.setC(xx, 0, cn);
+
+
+ xx++;
+ }// Yeah...
+ yy++; 
+// float volumeY=4.0f-absolute(4.0f*(float)(yy-me.y));
+// if(volumeY<-15f) volumeY=-15f;
+ sb.play_2d("mario/hit.wav", camera.x, camera.y, stereoX, yy, false);
+
+yy=gloc.getHeight();
+
+ }// Platforms move down.
+ else if((cn=="p")&&(yy>0)&&(me.gloc.getC(xx, yy-1)==" ")&&(stage>1)) {
+ int ccount=floor(counter);
+ if(ccount%2==1) {
+  if(((perana>xx)||(perana>=xx+5))&&(me.gloc.getC(xx, yy+1)!="P")&&(perana-xx>3)&&((me.x!=perana)||(me.x!=yy-1))) {
+ perana=xx;
+ sb.play_2d("mario/perana.wav", camera.x, camera.y, xx, yy, false);
+ }// Don't put it on top of horizontal pipes, silly!
+ else if((perana==xx)||(perana<0)) {
+ // If it's not less than xx, and not >=30, and it's been here for at least a second, the implication is that we're at the edge, so jump to something else.
+ perana=32;
+ sb.play_2d("mario/pipeFound.wav", camera.x, camera.y, xx, yy-2, false);
+ }// If we're at the right edge of the room, then break.
+ else if(perana<me.x-5) perana=-1;
+}// These should last for more than one seconds, so they're actually circumventable.
+ }// Perana plant.
+ }}
+ if(output_to_window) set_display_text(me.gloc);
+}// Continuous scan.
+// } catch (Exception platformExplosion) {}
+
+
+ // Do Platform check.
+ if((me.x!=x)||(me.y!=y)||(me.face!=face)||(key_down(KEY_V))) {
+ // Since we know there is a small y-range, we can do the whole screen in that direction. Better to limit to five for horizontal, though.
+ // We need to check for three things: platforms above, gaps below, and walls on the same vertical level.
+ // Give precedent to the direction that the character is facing, but check the opposite direction as well.
+// System.out.print(" * "); // Debug.
+// HashMap soundscape=new HashMap(); // <File, Point2D.Float>.
+ string[] soundscape;
+ Point2D[] spoints; // Having to modify this whole setup for BGT.
+ // Let's go from left to right. Top-to-bottom for platforms?
+
+ for(int xx=Math_max(0, me.x-5); xx<=Math_min(me.x+5, me.gloc.getWidth()); xx++) {
+ for(int yy=0; yy<me.gloc.getHeight(); yy++) {
+// try {
+ if((xx==me.x)&&(yy>=me.y)) continue; // Don't bother with what's directly below.
+ string cn=me.gloc.getC(xx, yy);
+ string toplay="";
+ if(cn==" ") {
+ if((yy>me.y)&&((me.x!=x)||(me.face!=face))) {
+ // Determine whether or not this is a pit of doom.
+ // Oh, and if Mario/Luigi is in mid air, no need to be silly with this. I.E, if you're jumping/falling, we don't need to hear this for each y-space you move.
+ toplay= ("drop3.wav");
+ for(int y2=yy; y2<me.gloc.getHeight(); y2++) if((me.gloc.getC(xx, y2)!=" ")&&(me.gloc.getC(xx, y2)!="$")) {
+ if(y2-yy<=2) toplay= ("drop1.wav"); else toplay= ("drop2.wav");
+ y2=9000;
+ }// Not a pit of doom.
+ ; 
+
+ }// Dropoff.
+ }// open space.
+ else if(cn=="$") {
+ toplay= ("mario/coinspin.wav");
+ }// Coin.
+ else {
+ if(yy>me.y) continue;
+ if((cn=="M")||(cn=="C")) {soundscape.insert_last("mario/flashingBrick.wav"); Point2D pnt(xx, yy);  spoints.insert_last(pnt);}
+ else if((cn=="p")||(cn=="P")) {soundscape.insert_last("mario/pipeFound.wav"); Point2D pnt(xx, yy); spoints.insert_last(pnt);}
+ // Determine if this is on or touching a block at the character's level.
+ // Also, be sure to skip to the bottom of this stack so as not to have redundant sounds.
+ int stackHeight=0;
+ bool wall=true;
+ for(int y2=yy; (y2<me.gloc.getHeight())&&(y2<=me.y); y2++) {
+ if((me.gloc.getC(xx, y2)!=" ")&&(me.gloc.getC(xx, y2)!="$")) {
+ //stackHeight=y2-yy;
+ }// Wall continues.
+ else {
+ stackHeight=y2-yy;  yy=y2-1; y2=9000; wall=false;
+ stackHeight=Math_min(stackHeight, 3);
+ }// Bottom of stack found.
+ }// Loop-thing.
+// toplay= (
+if (!wall) {if(warn_platform) toplay="platform" + stackHeight + ".wav"; }
+ else if(warn_wall) {if(stackHeight<=1) toplay="low.wav";
+ else if(stackHeight==2) toplay="mid.wav";
+ else toplay="high.wav";}
+// );
+ }// Barrier of some kind.
+
+ if((!warn_drop)&&(string_contains(toplay, "drop", 1)>=0)) toplay="";
+
+ if(toplay!="") {
+ // Add to the soundscape, but first...
+/*  stereoX=(2.0f*( ((float)(me.x))/((float)(me.gloc.getWidth()))))-1.0f;
+ if(stereoX<-1.0f) stereoX=-1.0f; else if(stereoX>1.0f) stereoX=1.0f;*/
+ stereoX=xx; //(float)(camera.getAudioPosition(xx, yy).getX());
+// float volumeY=4.0f-absolute(4.0f*(float)(yy-me.y));
+ int volumeY=yy;
+ if(volumeY<-15) volumeY=-15;
+// if(toplay.getName().toLowerCase().indexOf("drop3")>=0) volumeY=Math_max(0.0f, volumeY); // Pits are way too quiet at times.
+ if((indexOf(soundscape, toplay)>=0)&&(xx>=me.x)) {
+
+ Point2D ap=spoints[indexOf(soundscape, toplay)]; //(Point2D)(soundscape.get(toplay));
+ if(((ap.getX())>stereoX)&&((me.face!="e")||(stereoX>=camera.x))) continue; // West takes priority.
+ // Count how many there are.
+ int count=0;
+ for(uint ixen=0; ixen<soundscape.length(); ixen++) {if(soundscape[ixen]==toplay) count++;}
+ if((count>4)&&(toplay!="mario/coinspin.wav")) continue;
+ } // Priority check.
+// soundscape.put(toplay, new Point2D.Float(stereoX, volumeY));
+ Point2D toadd(stereoX, volumeY);
+ soundscape.insert_last(toplay); spoints.insert_last(toadd);
+// System.out.print(" + ");
+ } // Toplay is non-null.
+// } catch (Exception topofail) {System.err.println(" Exception in platform check: " + topofail + ". ");}
+ }// Y-Loop.
+ } // X-loop.
+// Iterator sit=soundscape.keySet().iterator();
+// while(sit.hasNext()) {
+// System.out.print(" = ");
+ while(soundscape.length()>0) {
+// File toplay=(File)(sit.next());
+ string toplay=soundscape[0]; soundscape.remove_at(0);
+// Point2D ap=(Point2D)(soundscape.get(toplay));
+ Point2D ap=spoints[0]; spoints.remove_at(0);
+ sb.play_2d(toplay, camera.x, camera.y, ap.x, ap.y, false); //(float)(ap.getX()), (float)(ap.getY()));
+ if(key_down(KEY_V)) wait(500);
+// System.out.print("!");
+ }// Soundscape loop.
+ }// Moving happened.
+// } catch (Exception noSound) {System.err.println("Error in sounds: " + noSound + ". "); noSound.printStackTrace();}
+ if(starpower>0.0) starpower-=dt;
+ if(@gloc!=@(me.gloc)) {@gloc=me.gloc; sb.play_1d("mario/tone.wav", 0, 0, false);
+ set_display_text(me.gloc);
+ // Make Checkpoints happen.
+ checkpoint.x=me.x; checkpoint.y=me.y;
+ checkgloc++; // This is not stable. fix it later.
+ int room=0;
+ TyleMap@ g;
+ @g=mario.gloc;
+ TyleMap @next;
+ while((@g!=null)&&(room<100)) {room++; @next=g.west;
+ if(@next==@g) break;
+ else @g=next;
+}
+ checkgloc=room;
+ if(checkgloc>5) checkgloc=1;
+ checkgloc--; if(checkgloc<0) checkgloc=0;
+}// Changing gloc.
+ if(me.y>=me.gloc.getHeight()-1) {
+ me.y=me.gloc.getHeight()-2;
+ loc=dying; counter=0.0; playsong("mario/death.ogg"); if((player&1)==0) p2lives--; else p1lives--;
+ }// Death by falling.
+// key1.release(key1.l); key1.release(key1.r);
+// key2.release(key2.l); key2.release(key2.r);
+
+ // 12:05 AM 8/31/2011: It was previously possible to become immortal after taking one hit. Let's fix that:
+ if(@(me.lastHit)!=null) {
+ me.hitTimer+=dt; if(me.hitTimer>=5.0) @(me.lastHit)=null;
+ }
+
+// try {
+ for(uint i=0; i<me.gloc.team2.length(); i++) {
+ TyleChar@ enemy=me.gloc.team2[i]; //(TyleChar)(me.gloc.team2.get(i));
+ bool hit=((me.x==enemy.x)&&(me.y==enemy.y));
+ bool stomped=((me.x==enemy.x)&&(me.y==enemy.y-1));
+///* float stereoX=((float)enemy.x)/((float)(me.gloc.getWidth()));
+// stereoX*=2.0f; stereoX-=1.0f;
+// if(stereoX<-1.0f) stereoX=-1.0f; else if(stereoX>1.0f) stereoX=1.0f;*/
+// float stereoX=(float)(camera.getAudioPosition(enemy.x, enemy.y).getX());
+// float volumeY=4.0f-absolute(4.0f*(float)(enemy.y-me.y));
+// if(volumeY<-15f) volumeY=-15f;
+  int stereoX=enemy.x; int volumeY=enemy.y;
+ enemy.step(dt);
+ if(hard_mode) enemy.step(dt*0.5);
+
+ if((enemy.name==("mushroom"))||(enemy.name==("flower"))) {
+ if(enemy.state=="wait") enemy.setState("a");
+ if(hit) {
+ if(me.hp>1.0) me.mp=99999999;
+ me.hp=2.0;
+ addCoin(); addCoin(); addCoin(); addCoin(); //addCoin();
+ sb.play_1d("mario/powerup.wav", camera.x, stereoX, false);
+ enemy.hp=-1.0;
+ }//Hit a mushroom.
+ }
+ else if(enemy.name==("star")) {
+ if(enemy.state=="wait") enemy.setState("a");
+ if(hit) {
+  starpower=12.0;
+ enemy.hp=-1.0;
+ sb.play_1d("mario/powerup.wav", camera.x, stereoX, false);
+ addCoin(); addCoin(); addCoin(); addCoin(); //addCoin();
+ }//Starpower!
+ }// Stars. 
+ else if(enemy.name==("1up")) {
+ if(enemy.state=="wait") enemy.setState("a");
+ if(hit) {
+ sb.play_1d("mario/1up.wav", 0, 0, false); if((player&1)==0) p2lives++; else p1lives++;
+ enemy.hp=-1.0;
+ }}// 1up.
+ else if((enemy.name==("Goomba"))||(enemy.name==("Kuribo"))||(enemy.name=="spiny")||(enemy.name=="snail") ) {
+// You know, you're going to want to put the snails and the spinies in here, too.
+ if((hard_mode)&&(enemy.name!="spiny")) enemy.name="snail";
+ if(enemy.x>=me.gloc.width) {enemy.face="w"; enemy.x=28;}
+ if((enemy.face!="w")&&(enemy.face!="e")) enemy.face="w";
+ if(enemy.vx==0.0) {enemy.vx=1.0; sb.play_2d("mario/kick.wav", camera.x, camera.y, stereoX, volumeY, false);
+ int targx=enemy.x+1; if(enemy.face=="w") targx=enemy.x-1;
+ if(@(enemy.gloc)==null) continue; //???
+ string cn=enemy.gloc.getC(targx, enemy.y);
+ if((cn!=" ")&&(cn!="~")) { if(enemy.face=="w") enemy.face="e"; else enemy.face="w"; sb.play_2d("mario/stop.wav", camera.x, camera.y, stereoX, volumeY, false);}// Turn around.
+ else { if(enemy.face=="w") enemy.x+=-1; else enemy.x+=1;}
+}
+
+ if((stomped)&&(enemy.name!="spiny")) {sb.play_1d("mario/stomp.wav", camera.x, stereoX, false); @(enemy.lastHit)=newTechnique(1.0); enemy.hp=-1.0; me.y-=2;
+ // Catch getting stuck inside bricks.
+ if(me.y<0) me.y=0;
+ string cnn=me.gloc.getC(me.x, me.y); if((cnn!=" ")&&(cnn!="$")&&(cnn!="~")) me.y++;
+ if(enemy.name=="snail") {
+ sound kick;
+ kick.load("mario/kick.wav");
+ kick.pitch=100;
+ // Three things to check.
+ // First, figure out the x range.
+ // That involves checking for walls, as well as for pits.
+ int xrange=0;
+ int dx=1;
+ if(me.face!="e") dx=-1;
+ for(int xx=0; (xx>=0)&&(xx<me.gloc.getWidth()); xx+=dx) {
+ if(me.gloc.getC(xx, enemy.y)!=" ") {xrange=xx-enemy.x; xx=-5;}
+ }// X Range loop for shells.
+
+ // Next, check to see if any enemies fall into this range.
+ for(uint jj=0; jj<me.gloc.team2.length(); jj++) {
+
+ TyleChar@ enemy2;
+ @enemy2=me.gloc.team2[jj];
+ if(@enemy2==@enemy) continue;
+ if(enemy2.y!=enemy.y) continue;
+ if(((xrange<0)&&(enemy2.x<enemy.x)&&(enemy2.x-enemy.x>=xrange))||((xrange>=0)&&(enemy2.x>=enemy.x)&&(enemy2.x-enemy.x<=xrange))) {
+ enemy2.hp=-1.0;
+ kick.pan=3*(enemy2.x-camera.x);
+ kick.volume=-5;
+ kick.play_wait();
+ kick.pitch=kick.pitch+20;
+ if((kick.pitch==200)||(kick.pitch==300)||(kick.pitch==400)) {p1lives++; p2lives++; sb.play_1d("mario/1up.wav", 0, 0, false);}
+ }// Hit.
+ }// Enemy loop for shells.
+ wait(50);
+ sb.play_2d("mario/smb3_bump.wav", camera.x, camera.y, enemy.x+xrange, enemy.y, false);
+ // However, note that the shell can bounce back and hit Mario!
+ if(absolute(xrange)==2) hitEnemy(me, enemy, stereoX);
+ }// Snail Shells need to hit things.
+}
+ else if(hit) {
+ hitEnemy(me, enemy, stereoX);
+ }//Hit.
+ if((enemy.name!="snail")&&((( floor(firex) == enemy.x)&& (absolute(enemy.y-firey)<=2))||((enemy.x==floor(fire2))&&(absolute(enemy.y-firey2)<2)))) {
+ if(enemy.name!="snail") enemy.hp=-1.0; else QuadTalker.speak_interrupt("Boing!");
+ if(firex==enemy.x) firex=-1.0; else fire2=-1.0; // Infinite fireballs is just cheap. :P.
+ sb.play_2d("mario/kick.wav", camera.x, camera.y, stereoX, volumeY, false);}//Fireball.
+ }//Goombas. Kuribo?
+ else if(enemy.name==("paratroopa")) {
+
+ // Jumping.
+// if((enemy.movelist==null)||(!enemy.movelist.containsKey(new Integer(TyleChar.A)))) {
+ if(!(enemy.movelist.exists("a"))) {
+// if(enemy.movelist==null) enemy.movelist=new HashMap();
+ TTechnique teq=newTechnique(0.3); teq.recovery=1.0; teq.weightless=true; teq.dvy=-0.15;
+// enemy.movelist.put(new Integer(TyleChar.A), teq);
+// enemy.movelist.put("air_" + TyleChar.A, teq);
+ enemy.movelist.set("a", teq);
+ enemy.movelist.set("air_a", teq);
+ }// Add Jump.
+ if((enemy.counter==0.0)&&(enemy.state!="a")) {if(!enemy.setState("a")) {enemy.state="a"; enemy.counter=0.5;} if(enemy.vy>=0.0) enemy.vy=-0.25;}
+ else sb.play_2d("mario/hit.wav", camera.x, camera.y, stereoX, volumeY, false); // I have a bad feeling about this.
+ if((enemy.face!="w")&&(enemy.face!="e")) enemy.face="w";
+ if(enemy.vx==0.0) {enemy.vx=0.75; sb.play_2d("mario/kick.wav", camera.x, camera.y, stereoX, volumeY, false); if(enemy.x<=0) enemy.face="e"; else if((@(enemy.gloc)!=null)&&(enemy.x>=enemy.gloc.getWidth())) enemy.face="w";
+ if(enemy.y<=0) {enemy.state="wait"; enemy.counter=3.0; enemy.y++;} // None of this floating-at-the-top thing.
+ int targx=enemy.x+1; if(enemy.face=="w") targx=enemy.x-1;
+
+ string cn=enemy.gloc.getC(targx, enemy.y);
+ if((cn!=" ")&&(cn!="~")) { if(enemy.face=="w") enemy.face="e"; else enemy.face="w"; sb.play_2d("mario/stop.wav", camera.x, camera.y, stereoX, volumeY, false);}// Turn around.
+ else {if(enemy.face=="w") enemy.x--; else enemy.x++;}
+}
+
+ if(stomped) {sb.play_1d("mario/stomp.wav", camera.x, stereoX, false); enemy.hp=1.0; enemy.name="Goomba"; me.y-=2; if(me.y<0) me.y=0;}
+ else if(hit) {
+ hitEnemy(me, enemy, stereoX);
+ }//Hit.
+ if((( floor(firex) == enemy.x)&& (absolute(enemy.y-firey)<=2))||((enemy.x==floor(fire2))&&(absolute(enemy.y-firey2)<2))) { enemy.hp=-1.0;
+ if(firex==enemy.x) firex=-1.0; else fire2=-1.0; // Infinite fireballs is just cheap. :P.
+ sb.play_2d("mario/kick.wav", camera.x, camera.y, stereoX, volumeY, false);}//Fireball.
+
+ }// Paratroopas.
+ else if(enemy.name==("Fireball")) {
+ if(hit) hitEnemy(me, enemy, stereoX);
+// if(enemy.y>=enemy.gloc.getHeight()-1) {enemy.y--; if(!enemy.setState(1)) System.out.print(" . Fireball won\'t move. ");}
+ // New strategy:
+ if(enemy.face=="w") {
+ if(enemy.vy>=0.0) {enemy.vy=-0.15; enemy.sounds.insert_last( ("mario/flame2.wav"));}
+ if(enemy.y<=2) {enemy.face="e"; sb.play_1d("mario/flame.wav", camera.x, stereoX, false);}
+ }// Rising.
+ else {
+ if(enemy.vy<=0.0) {enemy.vy=0.25; enemy.sounds.insert_last( ("mario/flame.wav")); }
+ if(enemy.y>=gloc.getHeight()-1) {
+ sb.play_1d("mario/flame2.wav", camera.x, stereoX, false);
+enemy.face="w"; enemy.y--; enemy.vy=-0.5;}// Change direction.
+ }// Falling.
+// if((enemy.sounds!=null)&&(enemy.sounds.length()>0)) try {sb.play("mario/flame.wav", stereoX, volumeY); enemy.sounds.clear();} catch (Exception silentFire) {}
+ if(enemy.sounds.length()>0) {
+ int count=counter*10;
+ if(count%3==1) sb.play_2d(enemy.sounds[0], camera.x, camera.y, stereoX, volumeY, false);
+ enemy.sounds.resize(0);}
+ @(enemy.gloc)=null; // Risky, but I want fireballs to be able to travel through solid objects.
+ }// Fireballs.
+ else if(enemy.name=="Lakidu") {
+
+ if(enemy.vx<=0.0) {
+ if(enemy.x<=0) enemy.face="e";
+ else if(enemy.x>=me.gloc.getWidth()) enemy.face="w";
+ enemy.vx=0.25;
+ sb.play_2d("mario/smb2_throw.wav", camera.x, camera.y, enemy.x, enemy.y, false);
+ if(random(0, 10)>8) {
+ sb.play_1d("mario/smb2_pickup.wav", camera.x, enemy.x, false);
+ TyleChar@ spiny;
+ @spiny=newTyleChar("spiny");
+ spiny.x=enemy.x;
+ spiny.y=4;
+ spiny.face="w";
+ @(spiny.gloc)=me.gloc;
+ me.gloc.add(spiny, 2);
+ spiny.vy=0.25;
+ spiny.vx=math_random();
+ }// throw spiny.
+ }// Keep moving, turn around, or throw egg.
+ else {
+
+ }// Moving.
+
+ if((stomped)&&(enemy.name!="spiny")) {sb.play_1d("mario/stomp.wav", camera.x, stereoX, false); @(enemy.lastHit)=newTechnique(1.0); enemy.hp=-1.0;
+}
+ if((( floor(firex) == enemy.x)&& (absolute(enemy.y-firey)<=2))||((enemy.x==floor(fire2))&&(absolute(enemy.y-firey2)<2))) { enemy.hp=-1.0;
+ if(firex==enemy.x) firex=-1.0; else fire2=-1.0; // Infinite fireballs is just cheap. :P.
+ sb.play_2d("mario/kick.wav", camera.x, camera.y, stereoX, volumeY, false);}//Fireball.
+
+ }// Lakidu.
+ else if(enemy.name==("Bowser")) {
+ if(me.x<enemy.x) enemy.face="w"; else enemy.face="e";
+
+ // Bowser does some combination of these:
+// Bowser AI.
+
+ int count=100*counter;
+ if(me.x<enemy.x) enemy.face="w"; else enemy.face="e";
+ // Bowser breathes fire periodicly. Every two or three seconds?
+ int fbx=enemy.x;
+ if(enemy.face=="e") fbx+=(count/100)%10;
+ else fbx-=(count/100)%25;
+ if(count%100<5) sb.play_2d("mario/flame.wav", camera.x, camera.y, fbx, enemy.y, false);
+ if((me.y==enemy.y)&&((me.x==fbx)||(me.x==fbx+1))) hitEnemy(me, enemy, stereoX);
+// Bowser moves toward Mario if Mario is in range.
+ if((enemy.vx<=0.0)&&(me.x>=20)) {
+ if(enemy.x<=20) enemy.face="e"; // Don't let Bowser be dumb.
+enemy.vx=0.5; sb.play_2d("mario/bowser_land.wav", camera.x, camera.y, enemy.x, enemy.y, false);}
+ // Bowser jumps every few seconds if Mario is in range.
+ if((me.x>=20)&&(me.y<=enemy.y)&&(count%100<5)&&( (count/100)%3==1)&&(enemy.vy>=0.0)) {enemy.vy=-0.5; enemy.y--; sb.play_2d("mario/bowser_jump.wav", camera.x, camera.y, enemy.x, enemy.y, false);}
+
+ if((absolute(me.y-enemy.y)<=1)&&(enemy.x-me.x>=0)&&(enemy.x-me.x<=3))
+ { hitEnemy(me, enemy, stereoX);}
+
+ if((absolute(me.x-enemy.x)<=5)&&( (( floor(firex) == enemy.x)&& (absolute(enemy.y-firey)<=2))||((enemy.x==floor(fire2))&&(absolute(enemy.y-firey2)<2)))) { enemy.hp--;
+  firex=-1.0; fire2=-1.0;
+ if(enemy.hp<=0.0) {sb.play_1d("mario/bossfall.wav", 0, 0, false); addPoints(48000);}
+ sb.play_2d("mario/kick.wav", camera.x, camera.y, stereoX, volumeY, false);}//Fireball.
+
+ }// This one looks difficult. T.T.
+ else if(enemy.name=="cannon") {
+  int count=counter*10;
+ uint ccc=count%50;
+ if(ccc==i) {
+ TyleChar@ bullet;
+ @bullet=newTyleChar("bullet");
+ bullet.x=enemy.x; bullet.y=enemy.y;
+ if(me.x<enemy.x) bullet.face="w";
+ else bullet.face="e";
+ bullet.vx=0.5;
+ enemy.gloc.add(bullet, 2);
+ sb.play_2d("mario/smb3_thwomp.wav", camera.x, camera.y, enemy.x, enemy.y, false);
+ }
+ }// Cannons.
+ else if(enemy.name=="bullet") {
+ enemy.vy=0;
+  if(hit) hitEnemy(me, enemy, stereoX);
+ else if(stomped) {enemy.hp=-1; mario.vy=-0.25; sb.play_2d("mario/stomp.wav", camera.x, camera.y, enemy.x, enemy.y, false); enemy.y++;}
+ if(enemy.vx<=0.0) {
+ enemy.vx=0.5;
+ sb.play_2d("mario/brick.wav", camera.x, camera.y, enemy.x, enemy.y, false);
+ if((enemy.x<0)||(enemy.x>=me.gloc.getWidth())||((me.gloc.getC(enemy.x, enemy.y)!=" ")&&(me.gloc.getC(enemy.x, enemy.y)!="~"))) enemy.hp=-1.0;
+ }// Moving...
+
+ }// Bullets.
+ else if(enemy.name=="Hammerhead Brother") {
+ // I could give them boomarang hammers, but that's complicated.
+ // How about they can move, and whatever is below them is vulnerable? Oh, jees, in that case it's hard to escape them.
+ // Well, ok, they aren't attacking _all_ the time.
+ // They do need to be able to jump, though.
+ // They'll only bother to jump when they're below Mario?
+ if(enemy.counter<=0.0) {
+ // Adjust Vy/Vx.
+ if(enemy.x>me.x) enemy.face="w";
+ else if(enemy.x<me.x) enemy.face="e";
+ if(absolute(me.x-enemy.x)>1) {enemy.counter=0.3; enemy.vx=0.3; sb.play_2d("mario/kick.wav", camera.x, camera.y, enemy.x, enemy.y, false);}
+ if(me.y<enemy.y) {sb.play_2d("mario/bowser_jump.wav", camera.x, camera.y, enemy.x, enemy.y, false); enemy.counter=0.5; enemy.y=Math_max(me.y-1, 1); enemy.state="a";}
+ if(enemy.counter==0.0) {enemy.state="b"; enemy.counter=1.0; sb.play_2d("mario/smb3_shuffle.wav", camera.x, camera.y, enemy.x, enemy.y, false);}
+ }// AI.
+ else {
+ if(enemy.state=="b") {
+ if((starpower<=0.0)&&(absolute(me.x-enemy.x)<3)&&(me.y>=enemy.y)) hitEnemy(me, enemy, stereoX);
+ else enemy.counter*=math_random(); //alert("Hammers thrown!", "Distances between Mario and the Hammerhead Brother throwing: " + absolute(me.x-enemy.x) + ", " + (me.y-enemy.y) + ". Starpower is " + starpower + ". ");
+ int count=enemy.counter*10;
+ if(count%3==0) sb.play_1d("mario/smb3_shuffle.wav", camera.x, enemy.x, false);
+ }// Attacking
+ }// Just keep doin' what you're doin'.
+
+ if((stomped)||((enemy.x==firex)&&(absolute(enemy.y-firey)<2))||((enemy.x==fire2)&&(absolute(enemy.y-firey2)<2))) {enemy.state="wait"; enemy.hp=-1.0; sb.play_1d("mario/smb3_kick.wav", camera.x, enemy.x, false);
+ addPoints(800);
+}
+
+ if(hit) hitEnemy(me, enemy, stereoX);
+ }// HHBros.
+ if(enemy.y>=gloc.getHeight()) enemy.hp=-1.0;
+ if((enemy.hp<=0.0)&&((@(enemy.lastHit)==null)||(enemy.hitTimer>1.0))) {
+ if(enemy.y>=gloc.getHeight()) {
+
+ }// No points from people who fall to their deaths.
+  else addPoints(200); // Most of them should be 200, but whatever.
+
+me.gloc.team2.remove_at(i); i--;}
+ else if(@(enemy.lastHit)!=null) enemy.hitTimer+=dt;
+ }// Enemies.
+// } catch (Exception enemyError) {}
+
+// try {
+ if(firex>=0.0) {firex+=2.5*dt*fdir;
+ // Check to see if it's still valid.
+ if(floor(firex)==perana) {sb.play_2d("mario/kick.wav", camera.x, camera.y, firex, firey, false); if(perana<15) perana=32; else perana=-1;}
+ if((firex>=gloc.getWidth())||(firex<0.0)||(gloc.getC(floor(firex), firey)!=" ")) {sb.play_1d("mario/smb3_bump.wav", 0, 0, false); firex=-1.0;}
+ }// Fireball1.
+ if(fire2>=0.0) {fire2+=2.5*dt*fdir2;
+ if(floor(fire2)==perana) {sb.play_2d("mario/kick.wav", camera.x, camera.y, fire2, firey2, false); if(perana<15) perana=32; else perana=-1;}
+ if((fire2>=gloc.getWidth())||(fire2<=0.0)||(gloc.getC(floor(fire2), firey2)!=" ")) {sb.play_1d("mario/smb3_bump.wav", 0, 0, false); fire2=-1.0;}
+ }// Fireball2.
+// } catch (Exception fireballError) {firex=-1.0; fire2=-1.0;}
+ if((me.x==perana)&&(starpower<=0.0)) {
+ if((me.y<me.gloc.getHeight()-1)&&(me.gloc.getC(me.x, me.y+1)=="p")) hitEnemy(me, newTyleChar("Perana Plant"), me.x);
+ }// Check for perana plants.
+ if(BGMVolume>-100)  {
+  if(loc==game) {
+ if(starpower>0.0) playsong( ("mario/starman.wav"));
+ else playsong(me.gloc.bgm);
+}
+// try {bgm.setVolume(BGMVolume);} catch (Exception noVol) {}
+ bgm.volume=BGMVolume;
+ // Put in time limit things here.
+ } //catch (Exception noMusic) {}
+
+ }; break;
+ case nextStage : {
+ TyleChar@ me=mario; //((player&1)==0)?luigi:mario;
+ if(me.hp<1.0) {
+ me.hp=1.0;
+ if(players>1) player^=1;
+// me=((player&1)==0)?luigi:mario;
+ me.hp=Math_max(1.0, me.hp);
+ }
+ if(counter>2.0) {
+ @(me.gloc)=setStage();
+ if(@(me.gloc)!=null) {
+ string tosay="World " + (((stage-1)/4)+1) + ", level ";
+  if(stage%4==0) tosay = tosay +"4"; else tosay = tosay + "" + (stage%4);
+  tosay=tosay + ", " + me.name + " has " + p1lives + " lives left. ";
+ if(output_to_window) show_game_window("--- " + tosay);
+QuadTalker.speak_wait(tosay);}
+ me.x=1;
+ if(@(me.gloc)!=null) {
+ me.y=me.gloc.getHeight()-3;
+ me.x=checkpoint.x; me.y=checkpoint.y;
+ int count=0;
+ while((count<checkgloc)&&(@(me.gloc.east)!=null)) {count++; @(me.gloc)=me.gloc.east;}
+ if(me.y>=me.gloc.getHeight()-1) me.y=me.gloc.getHeight()-3;
+
+ // 11:53 PM 8/30/2011: It's possible to wind up stuck inside walls here, so let's put in a failsafe for that.
+ 
+ string cn=me.gloc.getC(me.x, me.y);
+ while((cn!=" ")&&(cn!="~")&&(cn!="$")&&(cn!="W")&&(cn!="w")&&(cn!="F")&&(cn!="f")) {
+ if(me.y>0) me.y--; else me.y=me.gloc.getHeight()-2;
+cn=me.gloc.getC(me.x, me.y);
+}
+ 
+
+ }
+else { setGameComplete();}
+ loc=game; counter=0.0;
+// alert("Starting stage", "Stage is " + stage + ". Position is " + me.x + ", " + me.y + ". Gloc height is " + me.gloc.getHeight() + ". ");
+ }//Starting.
+ }; break;
+ case dying : {
+ mario.state="wait"; luigi.state="wait";
+ perana=-1;
+ if(counter>5.0) {loc=nextStage; counter=0.0;
+ if( (( (player&1)==0)&&(p2lives<0))||(( (player&1)!=0)&&(p1lives<0))) {
+ wait(150);
+ sb.play_1d("mario/gameover.wav", 0, 0, false);
+ if(output_to_window) show_game_window("GAME OVER");
+ stage=1+(4*((stage-1)/4));
+ checkpoint.x=1; checkpoint.y=5; checkgloc=0;
+ wait(5000);
+ if( (player&1)==0) p2lives=5; else p1lives=5;
+ }
+ }
+ }; break;
+ }//Locswitch in step.
+
+ }//Step.
+
+
+    void main () {
+
+ show_game_window("Super Mario Brothers, the audio edition!");
+ init(50, 0.001);
+ sb.pan_step=3;
+ sb.volume_step=3;
+ if(screen_reader_is_running(JAWS)) install_keyhook();
+QuadTalker.speak("Super Mario Brothers! Press enter to play, F5 to learn game sounds, and F1 while playing to learn Mario\'s position.");
+ while(!key_pressed(KEY_ESCAPE)) {
+ keyPressed();
+ step(speed*t);
+ keyReleased();
+ wait(t);
+ if((key_down(KEY_LMENU))&&(key_down(KEY_F4))) exit();
+ }// Loop in main.
+
+}//Main?
+
+ void setBonus(TyleChar@ me, int s) {
+ switch (s) {
+ case 1 :
+ case 21 :
+ case 25 : {
+if(s<10)  @nexit=me.gloc.east.east.east;
+ else if(s>10) @nexit=me.gloc.east;
+  if(s>23) @nexit=me.gloc.east.east;
+//  exitPoint=new Point(7, 6); // Maybe.
+ exitPoint.x=7; exitPoint.y=6;
+ if(s>23) {exitPoint.x=17; exitPoint.y=5;}
+ string[] diag=   {
+"-  bbbbbbbbbbbbbp",
+"-               p",
+"-               p",
+"-      $$$$     p",
+"-     $$$$$$    p",
+"-     $$$$$$    p",
+"-      $$$$     p",
+"-   --------  ppp",
+"-   --------  Ppp",
+"-----------------"
+ };
+ @(me.gloc)=newTyleMap(diag); extendStage(me.gloc);
+ me.gloc.bgm= ("mario/underworld.wav");
+ }; break;
+ case 2 :
+ case 29 : {
+ // There are multiple possibilities, actually.
+ // One is that we're going into the actual hidden room:
+ if(@(me.gloc.east)!=null) {
+ @nexit=me.gloc.east; exitPoint.x=2; exitPoint.y=8; me.x=1; me.y=1;
+ string[] diag= {
+ "-  bbbbbbbbbbp-",
+ "-            p-",
+ "-            p-",
+ "-            p-",
+ "-            p-",
+ "-            p-",
+ "-            p-",
+ "-  $$$$$$$$$$p-",
+ "-  bbbbbbbbb9p-",
+ "-            pp",
+ "-  $$$$$$$$$$Pp",
+ "---------------"
+ };
+ @(me.gloc)=newTyleMap( diag); extendStage(me.gloc); me.gloc.bgm=nexit.bgm;
+ }// Hidden Room.
+ else {
+ // Warp Zone.
+ if(me.x>=me.gloc.getWidth()-3) stage=5;
+ else if(me.x>=me.gloc.getWidth()-7) stage=9;
+ else stage=13;
+ @(me.gloc)=setStage(); @nexit=null; me.x=1; if(@(me.gloc)!=null) me.y=me.gloc.getHeight()-3;
+ QuadTalker.speak_wait("Warped to world " + ((stage/4)+1) + ". ");
+ }// Warp Zone.
+ }; break;
+ case 9 : {
+ @nexit=me.gloc.east.east; exitPoint.x=2; exitPoint.y=6;
+
+ string[] diag= {
+ "  --   $$$$$$$$      p-",
+ "  --   $$$$$$$$      p-",
+ "     bbbMbbbb$bbb    p-",
+ "     bbb$bbbb$bbb    p-",
+ "     bb$b    b$bb    p-",
+ "-    b$b      b$b    p-",
+ "     bb        bb    p-",
+ "                     p-",
+ "                   ppp-",
+ "                   Ppp-",
+ "-----------------------"
+ };
+ @(me.gloc)=newTyleMap( diag);
+ me.x=1; me.y=0; me.gloc.bgm= ("mario/underworld.wav"); extendStage(me.gloc); //???
+
+ }; break;
+ case 13 : {
+ @nexit=me.gloc.east; exitPoint.x=2; exitPoint.y=6;
+
+ string[] diag= {
+"                  p-",
+"                  p-",
+"                  p-",
+"                  p-",
+"                  p-",
+"                  p-",
+"                M p-",
+"   bbbbbbbbbb     p-",
+"   b        b   ppp-",
+"   $$$$$$$$$$   Ppp-",
+ "-------------------"
+ };
+ @(me.gloc)=newTyleMap( diag);
+ me.x=1; me.y=0; me.gloc.bgm= ("mario/underworld.wav"); extendStage(me.gloc); //???
+
+
+ }; break;
+ case 14 : {
+ // warpzone in 4-2.
+ @nexit=null;
+ if(@(me.gloc.west)==null) {
+ if(me.x>=me.gloc.getWidth()-5) stage=21;
+ else if(me.x<=22) stage=29;
+ else stage=25;
+}
+ else stage=17;
+ @(me.gloc)=setStage();
+ me.x=1; me.y=5;
+
+ 
+ QuadTalker.speak_wait("Warped to world " + ((stage/4)+1) + ". ");
+ }; break;
+ case 17 : {
+ @nexit=me.gloc.east.east; exitPoint.x=1; exitPoint.y=0; //???
+ string[] diag={
+ "                      --------",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~----",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~---",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~--",
+ "~~~~~~~~$$$$$$$$$$~~~~~~~~~~~-",
+ "~~~~~~~~----------~~~~~~~~~~pp",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~PP",
+ "~~~~~~~~$$$$$$$$$~~~~~~~~~~~--",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~---",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~----",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~-----",
+ "~~~~~~~~~~~~~~~~~~~~~~~~------",
+ "------~~~~~~~~~~--------------"
+};
+ @nexit=me.gloc.east; exitPoint.x=2; exitPoint.y=1;
+ @(me.gloc)=newTyleMap(diag);
+ me.gloc.bgm="mario/underwater.ogg"; extendStage(me.gloc);
+ }; break;
+ case 32 : {
+ // Crazy mazy in 8-4.
+
+ // Room 2: 13, 4. Well, that's where the pipe is. Mario would be at 13, 3.
+ // Room 4:
+ // 15, 7, (to room 2)
+ if((me.x==15)&&(me.y==7)) {@(me.gloc)=me.gloc.west.west; me.x=1; me.y=5;}
+ // 27, 7 (advance)
+ else if((me.x==27)&&(me.y==7)) {
+ // That second pipe in the horizontal platform room goes here: 
+string[] diag= {
+ "-   ---------- ^^             ",
+ "-                             ",
+ "-                             ",
+ "-                     v       ",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-          --      vv         ",
+ "-      -   --                 ",
+ "-      -   --                 ",
+ "-      -   --                 ",
+ "-      -   --                 ",
+ "--------   --              ---"
+};
+ TyleMap@ ret;
+ @ret=newTyleMap(diag);
+ ret.bgm="mario/castle.wav"; 
+ string[] diag2={
+ "--------                      ",
+ " -------                      ",
+ "  ------                      ",
+ "  ------  ----                ",
+ "   -----  ----                ",
+ "    ----  ----                ",
+ "     ---  ----                ",
+ "      --  ----                ",
+ "          ----     MC         ",
+ "          ----          pPp   ",
+ "   -----  ----          ppp   ",
+ "   -----  ----          ppp   ",
+ "-- -----^^--------------------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+ // ^ that pipe goes to the water level.
+
+ string[] diag3={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "     pPp          pPp         ",
+ "     ppp          ppp         ",
+ "     ppp          ppp         ",
+ "------------------------------"
+};
+ // Second pipe points backward.
+ // First one is the way to advance.
+ addEastwest(ret.east, newTyleMap(diag3));
+extendStage(ret);
+ @(me.gloc)=ret;
+ me.x=1; me.y=1;
+ addEastwest(ret.east.east, ret.east); // That sounds like death.
+
+ }// Advancing from room 4.
+ // 25, 8 goes to the water level?
+ else if((me.x==25)&&(me.y==8)) {
+ @nexit=me.gloc.east;
+if(@exitPoint!=null) {
+ exitPoint.x=19; exitPoint.y=7;
+}
+ string[] diag= {
+ "                              ",
+ "                              ",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~-----",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~----",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~---",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~--",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~Pp",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~--",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~~---",
+ "~~~~~~~~~~~~~~~~~~~~~~~~~~----",
+ "-----~~~~~~~~~~~~~~~~~~~~-----"
+};
+TyleMap@ ret;
+ @ret=newTyleMap(diag);
+ ret.bgm="mario/underwater.ogg"; extendStage(ret);
+ addEastwest(ret, ret);
+ TyleChar@ enemy;
+ for(uint i=0; i<10; i++) {
+  @enemy=newTyleChar("paratroopa"); @(enemy.gloc)=ret; ret.add(enemy, 2);
+enemy.x=random(1, ret.getWidth()-1); enemy.y=random(1, ret.getHeight()-2);
+ enemy.counter=math_random(); enemy.vx=math_random();
+  @enemy=newTyleChar("snail"); @(enemy.gloc)=ret; ret.add(enemy, 2);
+enemy.x=random(1, ret.getWidth()-1); enemy.y=random(1, ret.getHeight()-2);
+ enemy.counter=math_random(); enemy.vx=math_random();
+ @enemy=getFireball(); ret.add(enemy, 2);
+enemy.x=random(1, ret.getWidth()-1); enemy.y=random(1, ret.getHeight()-2);
+ enemy.counter=math_random(); enemy.vx=math_random();
+
+
+ }// Add enemies. Lots of enemies.
+ @(me.gloc)=ret; me.x=1; me.y=0;
+
+ }// Water level.
+ // 6, 8 (advance)
+ else if((me.x==6)&&(me.y==8)) {
+
+ string[] diag={
+ "-     --------------          ",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-                             ",
+ "-                        CCM  ",
+ "-                             ",
+ "-         -                   ",
+ "-        --                   ",
+ "-       ---             ------",
+ "-      ----             ------",
+ "-     -----             ------",
+ "----------- <  >        ------"
+};
+ TyleMap@ ret;
+ @ret=newTyleMap(diag);
+ string[] diag2={
+ "                              ",
+ "                              ",
+ "                              ",
+ "                              ",
+ "                    $$$$$$$   ",
+ "                              ",
+ "                              ",
+ "                    -----     ",
+ "  ------    vv      ------    ",
+ "------              -------   ",
+ "-----               --------  ",
+ "----                --------- ",
+ "-------             ----------"
+};
+ addEastwest(ret, newTyleMap(diag2));
+ string[] diag3={
+ "                -          ---",
+ "                -           --",
+ "                -           FF",
+ "                -      -------",
+ "       --       --            ",
+ "       --        ---          ",
+ "       --          ---        ",
+ " --    --          ----      -",
+ "---    --                   BB",
+ "---    --                  BBB",
+ "---    --        -BBBBBBBBBBB-",
+ "---    --       --            ",
+ "----   ---      -            -"
+};
+ addEastwest(ret.east, newTyleMap(diag3)); 
+ret.bgm="mario/castle.wav";
+ extendStage(ret);
+
+ // Put multiple bowsers in this one.
+TyleChar@ enemy;
+ @enemy=Bowser();
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=25; enemy.y=9;
+ @enemy=Bowser();
+ @(enemy.gloc)=ret.east.east; ret.east.east.add(enemy, 2);
+ enemy.x=random(5, 26); enemy.y=random(2, 9);
+
+ // And... like... Laokidu, and the HHBros.
+ // And cannons wouldn't hurt. :P.
+
+@(me.gloc)=ret; me.x=1; me.y=1;
+
+ }// Advance.
+ // 19, 8 (backward)
+
+ }; break;
+ }// Stageswitch in setBonus.
+ me.x=1; me.y=1;
+ }// Bonus/ hidden stage / quelque-quoi.
+ void climb(TyleChar@ me) {
+ if(stage/4==3) {
+ string[] diag={
+ "                             -",
+ "    $$$  $$$                w-",
+ "              --------------w-",
+ "    ---   ----    -          -",
+ "  $$$$$ $$$$      -          -",
+ "  $$$$$ $$$$      -          -",
+ "  ----- ----      -          -",
+ "                  -          -",
+ "    $$$$$$        -          -",
+ "   -- --   --  $$ - P  P  P  -",
+ "                  - p  p  p  -",
+ "    - $$$  $$$ $$ - p  p  p  -",
+ "------------------------------"
+ };
+ TyleMap@ ret;
+ @ret=newTyleMap(diag);
+ ret.bgm="mario/overworld.wav";
+ extendStage(ret);
+ @(me.gloc)=ret; me.x=1; me.y=ret.getHeight()-2;
+ }// Stage 4 warp zone.
+ else {
+ TyleMap@ next=me.gloc;
+ while(@next.east!=null) @next=next.east;
+ string[] diag= {
+ "                              ",
+ "   $$$$$$$$$$$$               ",
+ "   $$$$$$$$$$$$               ",
+ "     c    c   c  c            ",
+ ">>>                           ",
+ "                          $$$ ",
+ "                              ",
+ "------------------------------"
+ };
+
+ @(me.gloc)=newTyleMap(diag );
+ extendStage(me.gloc);
+ @(me.gloc.east)=next; me.gloc.bgm= ("mario/starman.wav");
+ me.y=me.gloc.getHeight()-3; me.x=1;
+ }// Default.
+ }// Climbing. Usually into the clouds, but not exclusively.
+
+
+
+string[] display_text;
+ timer refresh_timer;
+
+ void set_display_text(TyleMap@ g) {
+ if(@g==null) return;
+ string text=g.toString();
+ text=string_replace(text, "S", "b", true);
+ text=string_replace(text, "2", " ", true);
+ // I'm sure I'm forgetting something crucialicious.
+ display_text=string_split(text, "\n", true); 
+ }// Set display text.
+
+ void setOutput(int dispY) {
+ int chl=0; chl+=display_text.length();
+ if((dispY<0)||(dispY>=chl)) return;
+
+ string ret=display_text[dispY];
+ if(camY==dispY)  ret[camX]="x";
+ if(mario.y==dispY) {ret[mario.x]="("; if(mario.face!="e") ret[mario.x]=")";}
+ if(@(mario.gloc)!=null) {
+ for(uint i=0; i<mario.gloc.team2.length(); i++) {
+ TyleChar@ enemy; @enemy=mario.gloc.team2[i];
+ if((@enemy!=null)&&(enemy.hp>0.0)&&(enemy.y==dispY)&&(enemy.x>=0)&&(enemy.x<30)) {
+ string id=enemy.name[0];
+ if((enemy.name=="star")||(enemy.name=="Star")) id="*";
+ else if((enemy.name=="Mushroom")||(enemy.name=="mushroom")) id="+";
+ else if((enemy.name=="Flower")||(enemy.name=="flower")) id="[";
+ else if(enemy.name=="1up") id="!";
+ else if((enemy.name=="Goomba")||(enemy.name=="goomba")||(enemy.name=="Kuribo")||(enemy.name=="kuribo")) id="o";
+ else if((enemy.name=="paratroopa")||(enemy.name=="Paratroopa")) id="O";
+ else if((enemy.name=="snail")||(enemy.name=="Snail")) id="=";
+ else if(enemy.name=="Bowser") {id="R";
+ int count=100*counter;
+
+ // Bowser breathes fire periodicly. Every two or three seconds?
+ int fbx=enemy.x;
+ if(enemy.face=="e") fbx+=(count/100)%10;
+ else fbx-=(count/100)%25;
+ if((fbx>=0)&&(fbx<30)) ret[fbx]="{";
+
+ }// Bowser.
+ ret[enemy.x]=id;
+ }// How do we represent enemies, Hmm?
+ else if((@enemy!=null)&&(enemy.name=="Bowser")) {
+ if(absolute(enemy.y-dispY)<=1) {
+ int fishx=enemy.x;
+ for(int j=fishx; (j<fishx+3)&&(j<30); j++) {ret[j]="r";}
+}// Oy.
+}// Bowser.
+ }// Enemies.
+ }// Non-null gloc.
+
+ // Show fireballs.
+ if((firex>=0.0)&&(firey==dispY)&&(firex<30.0)) {uint fx=0; fx+=firex; if(fx<ret.length()) ret[fx]="\"";}
+ if((fire2>=0.0)&&(firey2==dispY)&&(fire2<30.0)) {uint fx=0; fx+=fire2; if(fx<ret.length()) ret[fx]="\"";}
+
+ // Let's add platform information, since otherwise this is as tedious as having the accessible camera without cues.
+ if(dispY<chl-1) {for(uint xx=0; xx<ret.length(); xx++) {
+ if(((ret[xx]==" ")||(ret[xx]=="~"))&&(display_text[dispY+1][xx]!=" ")&&(display_text[dispY+1][xx]!="~")&&(display_text[dispY+1][xx]!="$")&&(display_text[dispY+1][xx]!="w")) {
+ if(ret[xx]=="~") ret[xx]="#"; else ret[xx]="-";
+ for(int yy=dispY-1; (yy>=0)&&(dispY-yy<=5); yy--) {
+ if((yy<0)||(yy>=chl)||(xx<0)||(xx>29)) continue;
+ uint x2=xx; if(x2>=display_text[yy].length()) continue;
+ if((display_text[yy][xx]!=" ")&&(display_text[yy][xx]!="~")&&(display_text[yy][xx]!="$")&&(display_text[yy][xx]!="w")) {
+ if(dispY-yy<=2) ret[xx]="x"; else ret[xx]="u";
+ yy=0;
+ }// Platform found.
+ }// Look for platforms.
+}
+ else if(ret[xx]=="-") ret[xx]="7"; // So as not to be confused with below.
+ else  if((ret[xx]==" ")||(ret[xx]=="~")) for(int yy=dispY-1; (yy>=0)&&(dispY-yy<=5); yy--) {
+ if((yy<0)||(yy>=chl)||(xx<0)||(xx>29)) continue;
+ uint x2=xx; if(x2>=display_text[yy].length()) continue;
+ if((display_text[yy][xx]!=" ")&&(display_text[yy][xx]!="~")&&(display_text[yy][xx]!="$")&&(display_text[yy][xx]!="w")) {
+ if(dispY-yy<=2) ret[xx]="c"; else ret[xx]="a";
+ yy=0;
+ }// Platform found.
+ }// Look for platforms.
+
+}
+ int chx=0; chx+=ret.length();
+ if((perana>=0)&&(perana<30)&&(perana<chx)&&((ret[perana]=="-")||(ret[perana]=="u")||(ret[perana]=="x"))&&(display_text[dispY+1][perana]=="p")) ret[perana]=":";
+}// Platform check.
+ show_game_window(ret);
+
+ }// Set Output.

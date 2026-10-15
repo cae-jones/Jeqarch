@@ -1,0 +1,2786 @@
+#include "geom.bgt" // Jeqocon2: local copies of c:\bgIncludes
+#include "custom_voice.bgt"
+#include "FiniteStateMachine.bgt"
+
+string random(string[] str) {
+if(str.is_empty()) return "";
+ if(str.length()==1) return str[0];
+return str[random(0, str.length()-1)];
+}
+
+// Zombie types. Or at least, the basic zombie types.
+string[] zomnames={"Canine", "Normal", "Giant", "Stalker", "Reaper", "Lamprey", "Matriarch", "Tyrant"}; // The Dire is not included in this list.
+
+// Object types:
+const int solid=1, platform=2, breakable=4, amb=8, lute=9, misc=10, trap=11, safezone=12, deathtrap=13;
+class Object {
+int slot;
+string filename;
+string name;
+int type;
+vector v;
+Rectangle@ bounds;
+string terrain;
+Object() {init();}
+Object(Rectangle @ b) {init(); @bounds=b;}
+Object(string n, Rectangle@ b) {init(); name=n; @bounds=b;}
+Object(string n, int t, Rectangle@ b) {init(); name=n; type=t; @bounds=b;}
+void init() {
+slot=-1;
+filename="";
+name="";
+type=0;
+v.x=0; v.y=0; v.z=0;
+@bounds=newRectangle(0, 0, 1, 1);
+}
+Object@ clone() {
+Rectangle@ b=null; if(@bounds!=null) @b=newRectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+Object@ ret=newObject(name, type, b);
+ret.filename=filename;
+ret.v.x=v.x; ret.v.y=v.y; ret.v.z=v.z;
+ret.terrain=terrain;
+return ret;
+}
+}// Object.
+Object@ newObject(string n, int t, Rectangle@ b) {Object ret(n, t, b); return ret;}
+Object@ newObject(string n, Rectangle@ r) {Object ret(n, r); return ret;}
+
+
+class Zombie : FSM {
+int slot;
+Rectangle@ bounds;
+ vector v;
+int awareness; //How sensitive the zombie is to your presence. This is the maximum distance where it will notice you, or the loudest sound, or something.
+Rectangle@ target;
+double speed; // Normal. Doubles when it chases you.
+double health;
+string name; // Doubles as the directory path. zombies\name\*.wav
+double aspeed; // how long they take to recover from an attack. Randomly between aspeed and aspeed/10
+double exp;
+Object@ atop;
+int fallchance; // How likely this zombie is to walk off the edge of its platform.
+double strength;
+Zombie() {init(random(zomnames));}
+Zombie(string n) {init(n);}
+Zombie(string n, double x, double y) {init(n); bounds.x=x; bounds.y=y;}
+void init(string n) {
+counter=0.0; state=0;
+name=n;
+@bounds=newRectangle(0,0,1,2);
+slot=-1;
+v.x=0; v.y=0;
+awareness=1;
+@target=null;
+speed=1.0;
+health=50;
+aspeed=3.0;
+exp=1;
+@atop=null; fallchance=0;
+strength=15;
+if(n.is_empty()) return;
+name=string_to_upper_case(n[0]) + string_right(n, n.length()-1);
+n=string_to_lower_case(n);
+if(n=="canine") {
+ bounds.height=1;
+bounds.width=1.25;
+health=60;
+speed=4;
+awareness=5;
+fallchance=50; // Those are out of 100.
+strength=10;
+}
+else if(n=="normal") {
+health=100;
+awareness=2;
+speed=1;
+aspeed=4;
+fallchance=10;
+exp=2;
+}// Normal.
+else if(n=="giant") {
+bounds.width=1.5;
+bounds.height=2.5;
+health=150;
+speed=0.1*random(7, 13);
+strength=25;
+aspeed=4;
+fallchance=25;
+exp=4;
+}//Giant
+else if(n=="tyrant") {
+health=500;
+speed=0.1*random(7,20);
+strength=40;
+bounds.width=0.01*random(90,150);
+bounds.height=0.01*random(190,300);
+awareness=4;
+fallchance=100; // This is because it chases you, not because it dives headlong into pits. Tyrants that fall into pits should respawn.
+exp=10;
+}
+else if(n=="stalker") {
+health=100;
+speed=2;
+strength=random(10, 20);
+aspeed=2;
+bounds.width=0.5;
+bounds.height=1.5;
+awareness=4;
+fallchance=5;
+exp=3;
+}
+else if(n=="matriarch") {
+health=300;
+exp=8;
+strength=random(25, 40);
+awareness=4;
+fallchance=50;
+}
+else if(n=="reaper") {
+exp=4;
+speed=2;
+strength=random(10, 30);
+bounds.width=0.75;
+fallchance=5;
+awareness=3;
+}// Reaper
+else if(n=="lamprey") {
+exp=2;
+speed=1.5;
+bounds.height=1.5;
+strength+=random(-5, 10);
+awareness=1;
+fallchance=0;
+health=150;
+exp++;
+}// Lamprey.
+else if(n=="dire") {
+health=400;
+speed=4;
+awareness=5;
+strength=40;
+aspeed=2.5;
+bounds.width=2;
+bounds.height=1.5;
+fallchance=100; // They will chase you. And respawn in pits.
+exp=15;
+}// Dires.
+else if(name=="Amorphous") {
+speed=2.5; 
+aspeed=2.5;
+bounds.width=2;
+bounds.height=1.5;
+fallchance=100; // They will chase you. And respawn in pits.
+exp=15;
+strength=30;
+ health=700;
+}// Amorphous
+else if(string_left(n, 6) == "raider") {
+speed=2.5; aspeed=3.0;
+ int weapon=random(2, weaponNames.length()-1);
+ weapon=(weapon<<4)|(random(0, weaponNames[weapon].length()-1));
+ strength=weapon;
+ health=1000;
+bounds.width=1.0; bounds.height=2.0;
+exp=25;
+fallchance=-1; // Better idea.
+fallchance=100; // Umm.
+awareness=5;
+}// Raiders.
+ else if(n=="hulk") {
+ strength=60;
+ health=1500;
+ speed=2.5;
+ fallchance=75;
+ bounds.width=2; bounds.height=4;
+ aspeed=3;
+awareness=3;
+exp=30;
+}// Hulks.
+else if(n=="tentacle") {
+// I actually want these to ignore gravity and slide along walls.
+fallchance=75;
+health=100;
+strength=25; // Much?
+speed=3.5;
+awareness=3;
+bounds.width=2.0;
+bounds.height=0.75; // Ouch. Can the machete hit that? It kinda needs to, because it is the best weapon for these in real life, right? ... Right?
+aspeed=4.0; // It drags you more than damages you.
+exp=7; // Hopefully.
+}// Tentacles.
+else if(n=="behemoth") {
+strength=100; // Shut up; you have armor by now.
+speed=1.0; // Hmm.
+bounds.width=2.0;
+bounds.height=4.0;
+fallchance=100; //?
+awareness=5; //???
+aspeed=2.5; //???
+exp=35;
+health=2000;
+// Maybe the Behemoth should be resistant to bullets? Actually, the Axe, Hammer, Chainsaw, Flamethrower, Vulcan and explosives are the only weapons that make sense against it.
+}// Behemoth.
+
+v.x=speed;
+//exp=5; // 9:42 PM 1/11/2015: was that set this entire time? That's... why?
+}// init.
+
+bool setState(int s) {
+if (counter!=0.0) return false;
+counter=aspeed/random(1, 20);
+return true;
+}
+void always(double dt) {
+double dx=v.x*dt;
+double dy=v.y*dt;
+Rectangle@ b=newRectangle(bounds.x+dx, bounds.y+dy, bounds.width, bounds.height);
+
+if(@atop==null) {
+if(@map==null) {
+if(b.y<=0.0) b.y=0.0;
+}
+else {
+if(b.y<map.bounds.y) {
+if(fallchance>=50) {b.y=map.bounds.y+map.bounds.height;
+ // Teleport the zombie to either the platform that the player's on, or if that isn't possible, very close to the player's position.
+ v.y=0.0;
+ if(@(me.atop)!=null) {@atop=me.atop; b.y=atop.bounds.y+atop.bounds.height; if((b.x>=atop.bounds.x+atop.bounds.width)||(b.x+b.width<=atop.bounds.x)) b.x=random(atop.bounds.x, atop.bounds.x+atop.bounds.width);}
+ else {b.x=me.bounds.x+random(-3, 3); b.y=me.bounds.y+random(-3, 3);}
+} // One of the stronger zombies will not die in a pit.
+else health=0.0;
+}// fall off the bottom of the map.
+else {
+for(uint i=0; i<map.objects.length(); i++) {
+Object@ o=map.objects[i];
+if((o.type<8)&&(o.bounds.collide(b))) {
+if(((o.type==solid)||(o.type==platform))&&(@atop==null)&&(round(b.y, 1)>=round(o.bounds.y+o.bounds.height, 1))) {@atop=o; playsound("sounds/steps/" + o.terrain + "/run" + random(1, 9) + ".wav", b, false);}
+else if(o.type==solid) {v.x*=-1; playsound(getBump(o.terrain), b);}
+}// Collided with something that might be solid.
+}// Loop.
+}// Look for stuff to collide with.
+}// Map.
+}// Collision detection.
+else {
+if(!b.collide(atop.bounds)) {
+if((random(0, 100)<fallchance)||(@target==null)) {
+v.x*=-1; v.y=0.0; @b=bounds;
+}// No fall.
+else @atop=null;
+}// Edge?
+}
+if((round(b.x, 0)!=round(bounds.x, 0))&&(@atop!=null)) playsound("sounds/steps/" + atop.terrain + "/run" + random(1, 9) + ".wav", b);
+bounds.x=b.x; bounds.y=b.y;
+if((@atop==null)||(!bounds.collide(atop.bounds))) v.y-=9.8*dt;
+
+if((absolute(me.bounds.x-bounds.x)<=awareness)&&(absolute(me.bounds.y-bounds.y)<=3*awareness/2)) {
+if((bounds.x<me.bounds.x)&&(v.x<=0.0)) v.x=speed*random(1, 2);
+else if((bounds.x>me.bounds.x+me.bounds.width)&&(v.x>=0.0)) v.x=-speed*random(1, 2);
+if(slot<0) slot=playsound("sounds/zombies/" + name + "/growl" + random(1, 7) + ".wav", bounds, true);
+@target=me.bounds;
+}// Aware.
+}// DT.
+
+
+void clearSlot() {if(slot>=0) 
+{bool success=pool.destroy_sound(slot);
+//if(!success) alert("Trouble", "Cannot destroy sound! Trying again, with a loop...");
+//int tries=0;
+//while((!success)&&(tries<1000)) {
+//success=pool.destroy_sound(slot);
+//tries++;
+//}
+//if(tries>0) alert("Results", "Took " + tries + " tries. " + ((tries>=1000) ? "Gave up." : "Successful."));
+}
+ slot=-1;
+}
+void play(string fn) {clearSlot(); slot=playsound(fn, bounds, true);}
+}// Zombie.
+
+sound_pool pool(300);
+Map@ map;
+Char me;
+int playsound(string fn, Rectangle@ b, bool persistent=false) {
+vector c=camera;
+return pool.play_extended_2d(fn, c.x, c.y, b.x, b.y, 0, b.width, 0, b.height, false, 0,
+0, 0, 100, persistent);
+}
+int play_looped(string fn, Rectangle@ b, bool persistent=false) {
+vector c=camera;
+return pool.play_extended_2d(fn, c.x, c.y, b.x, b.y, 0, b.width, 0, b.height, true, 0,
+0, 0, 100, persistent);
+}
+
+class Map {
+Rectangle@ bounds;
+Object@[] objects;
+string bgm;
+Zombie@[] zombies;
+string name;
+Map() {init();}
+vector startpoint;
+Map(Rectangle@ b) {init(); @bounds=b;}
+Map(double w, double h) {init(); @bounds=newRectangle(0, 0, w, h);}
+Map(string n, Rectangle@ b) {init(); name=n; @bounds=b;}
+Map(string n, double w, double h) {init(); name=n; @bounds=newRectangle(0, 0, w, h);}
+Map(string fn) {
+if(!load(fn)) init();
+}// Load.
+void init() {@bounds=newRectangle(0, 0, 100,100); bgm="music.mp3";}
+Zombie@ addZombie(string n, double x, double y) {Zombie z(n, x, y); zombies.insert_last(z); return z;}
+Zombie@ addZombie(string n, Object@ o) {Zombie@ z=addZombie(n, random(o.bounds.x, o.bounds.x+o.bounds.width), o.bounds.y+o.bounds.height); @(z.atop)=o; return z;}
+Object@ add(Object@ o) {objects.insert_last(o); return o;}
+Zombie@ add(Zombie@ z) {zombies.insert_last(z); return z;}
+bool load(string fn) {
+if(!file_exists(fn)) return false;
+objects.resize(0); zombies.resize(0); // GAAAAAAH!
+file fin; fin.open(fn, "r");
+ string txt=fin.read(0); fin.close();
+string[] lines=string_split(txt, "\n", true);
+@bounds=newRectangle(0,0,100,100);
+for(uint i=0; i<lines.length(); i++) {
+string[] words=string_split(lines[i], " ", true);
+if(words[0]=="bgm") bgm=words[1];
+if(words[0]=="width") bounds.width=string_to_number(words[1]);
+if(words[0]=="height") bounds.height=string_to_number(words[1]);
+if(words[0]=="x") bounds.x=string_to_number(words[1]);
+if(words[0]=="y") bounds.y=string_to_number(words[1]);
+if(words[0]=="zombie") {
+double x=string_to_number(words[1]);
+double y=string_to_number(words[2]);
+ addZombie(words[3], x, y);
+}
+if(words[0]=="start") {double x=string_to_number(words[1]); double y=string_to_number(words[2]); vector v(x, y); if(startpoints.length()<=stage) startpoints.resize(stage+1); startpoints[stage]=v; me.bounds.x=x; me.bounds.y=y;}
+if(words[0]=="obj") {
+Object o;
+o.filename=words[1];
+o.name=string_replace(words[2], "_", " ", true);
+o.type=string_to_number(words[3]);
+o.v.x=string_to_number(words[4]);
+o.v.y=string_to_number(words[5]);
+o.bounds.x=string_to_number(words[6]);
+o.bounds.y=string_to_number(words[7]);
+o.bounds.width=string_to_number(words[8]);
+clipboard_copy_text("Line " + i + ", " + o.name);
+o.bounds.height=string_to_number(words[9]);
+o.terrain=words[10];
+add(o);
+}// Object.
+}// loop.
+// Attach zombies to platforms.
+ for(uint i=0; i<zombies.length(); i++) {
+for(uint j=0; j<objects.length(); j++) {
+Object@ o=objects[j];
+if((o.type>=8)||( ((o.type)&3)==0)) continue;
+Zombie@ z=zombies[i];
+if((z.bounds.collide(o.bounds))&&(round(z.bounds.y, 1)==round(o.bounds.y+o.bounds.height, 1))) @(z.atop)=o;
+}// Ugh!
+}// loop.
+return true;
+}// Load.
+void save(string fn) {
+string txt="x " + bounds.x + "\ny " + bounds.y + "\nwidth " + bounds.width + "\nheight " + bounds.height + "\nbgm " + bgm + "\nstart " + startpoint.x + " " + startpoint.y;
+for(uint i=0; i<objects.length(); i++) {
+Object@ o=objects[i];
+txt += "\nobj "
+ + o.filename + " "
+ + string_replace(o.name, " ", "_", true) + " "
+ + o.type + " "
++ o.v.x + " "
+ + o.v.y + " "
+ + o.bounds.x + " "
+ + o.bounds.y + " "
+ + o.bounds.width + " "
+ + o.bounds.height + " "
+ + o.terrain;
+}// objects.
+for(uint i=0; i<zombies.length(); i++) txt += "\nzombie " + zombies[i].bounds.x + " " + zombies[i].bounds.y + " " + zombies[i].name;
+
+file fout; fout.open(fn, "w"); fout.write(txt); fout.close();
+}// save map.
+}
+class Weapon {
+string name;
+string ammoName;
+int ammo;
+double range;
+double damage;
+int mode;
+}
+string[][] weaponNames;
+class Char : FSM {
+Rectangle@ bounds;
+vector v;
+bool east;
+bool crouching;
+int[][] weapons;
+int[][] ammos;
+int ammo9mm;
+int ammo30cal;
+int ammo56;
+int ammo762;
+int medkits;
+int shells;
+int weaponClass;
+int weapon;
+int weaponMode;
+int[][] modes;
+int armor;
+double health;
+Object@ atop;
+int attachments; // I.E, scopes, silencers, bracers, suppressors. 10:23 AM 6/16/2013
+int arrows;
+int gas;
+int knives=0; // 6:05 PM 11/15/2013
+int grenades=0, warheads=0;
+bool leg; bool ankle;
+int voice=1;
+Char() {ammo9mm=0; ammo30cal=0; ammo56=0; ammo762=0; shells=0; medkits=0; @bounds=newRectangle(0,0,1,1.85); health=100; armor=0; v.x=0; v.y=0; weaponClass=1; weapon=0; counter=0.0; state=0; attachments=0; arrows=0; ankle=false; leg=false; gas=0; voice=random(1, 56);}
+}
+class Bullet {
+Rectangle@ bounds;
+vector v;
+int hits;
+double damage;
+string name; // For sounds.
+double counter;
+Bullet() {@bounds=newRectangle(0,0, 0.01, 0.01); counter=2.0;}
+}
+Bullet@ newBullet(string name, double x, double y) {Bullet ret; ret.name=name;
+ret.bounds.x=x; ret.bounds.y=y;
+// Check name.
+return ret;
+}
+Bullet@[] bullets;
+
+int leftEdge=-1, rightEdge=-1;
+
+vector camera(0, 0);
+
+void initWeaponNames() {
+weaponNames.resize(13);
+weaponNames[0].resize(1);
+weaponNames[0][0]="Field kit";
+weaponNames[1].resize(4);
+weaponNames[1][0]="Axe";
+weaponNames[1][1]="Shield";
+weaponNames[1][2]="Hammer";
+weaponNames[1][3]="Machete"; // 10:26 AM 6/16/2013: Had "Sword" here before Swamp 2.9 got to the Machete.
+weaponNames[2].resize(3);
+weaponNames[2][0]="G19";
+weaponNames[2][1]="G17";
+weaponNames[2][2]="Two pistols";
+weaponNames[3].resize(3);
+weaponNames[3][0]="Citori";
+weaponNames[3][1]="Benelli";
+weaponNames[3][2]="AA12";
+weaponNames[4].resize(3);
+weaponNames[4][0]="Winchester";
+weaponNames[4][1]="Marlin";
+ weaponNames[4][2]="Remington";
+weaponNames[5].resize(5);
+weaponNames[5][0]="MP5";
+ weaponNames[5][1]="Uzi";
+ weaponNames[5][2]="UMP45";
+ weaponNames[5][3]="M1928";
+ weaponNames[5][4]="Vector";
+ weaponNames[6].resize(7);
+weaponNames[6][0]="AR15";
+weaponNames[6][1]="M16";
+weaponNames[6][weaponNames[6].length()-1]="AK47";
+weaponNames[6][1]="M16";
+weaponNames[6][2]="M4A1";
+weaponNames[6][3]="ACR";
+weaponNames[6][4]="Aug";
+ weaponNames[6][5]="SCARH";
+weaponNames[7].resize(4);
+weaponNames[7][0]="Shortbow";
+weaponNames[7][1]="Longbow";
+ weaponNames[7][2]="Crossbow";
+ weaponNames[7][3]="Knives";
+weaponNames[8].resize(3);
+ weaponNames[8][0]="Chainsaw";
+ weaponNames[8][1]="Flamethrower";
+weaponNames[8][2]="Motorcycle"; //Bwahahahahaha! 12:36 PM 11/14/2013
+ weaponNames[9].resize(2);
+weaponNames[9][0]="M40";
+ weaponNames[9][1]="WA2000";
+ weaponNames[10].resize(2);
+ weaponNames[10][0]="M60";
+ weaponNames[10][1]="M240";
+ weaponNames[11].resize(2);
+ weaponNames[11][0]="Vulcan";
+ weaponNames[11][1]="XM301";
+weaponNames[12].resize(4); // Umm...
+ weaponNames[12][1]="M79";
+ weaponNames[12][0]="Grenade";
+weaponNames[12][3]="Scorpion";
+weaponNames[12][2]="RPG7";
+
+// I DON'T FEEL LIKE IT!
+// (But I'll totally want to add that Motorcycle at some point. :P ) 10:27 AM 6/16/2013
+}
+
+int stage=0;
+double exp=0;
+double level=0;
+double rep=0;
+Object@ last=null;
+custom_voice voice;
+bool paused=false;
+vector[] startpoints={
+newVector(5, 2.5),
+newVector(220,212),
+newVector(5, 5)
+};
+string[] intros={
+"Sounds/man1, 2, and 3 should cover it. Wait, are those even present after version 1.8? Hmm... Uh... Get to the gas station, mkay?",
+"Refugees are held up in an old store turned Safe Zone, well past the Kai Mart. They need more supplies, but their truck is out of fuel. You\'ll need to find fuel, then take it to the Safe Zone.",
+ "Our truck is ready for a trip into town, to retrieve crates of supplies from a warehouse. Rumor has it that the zombies have mutated even further in this part of town, so watch out!",
+ "We\'ve heard a distress signal from some survivors trapped in a hospital. Entering from the ground is insanely dangerous, but there is a helicopter you can use, if you can reach it.",
+ "The helicopter will be waiting on the roof. Go inside, find the survivors, and lead them up and out.",
+"This subdivision is swarmed! Get as many survivors to our truck as you can!",
+ "We\'ve made radio contact with a safe zone across the city. The only safe way to reach them is either by air, or by making a path through the sewers.",
+ "We\'ve lost contact with the Safe Zone east of Wilson Bridge! We need to either find the survivors, or reach Ranger Park!",
+ "Tree-like Behemoths are invading ranger park! Watch out for their tentacles!",
+ "In the end, it\'s not the zombies, but our fellow survivors who are our biggest threat. Get as many supplies and allies out of the mall as you can!"
+};
+
+void main() {
+voice.load_config("voice.cfg");
+voice.config_path="voice.cfg";
+pool.behind_pitch_decrease=4; // Needs to be noticeable.
+pool.pan_step=2; pool.volume_step=3; //?
+pool.max_distance=10;
+show_game_window("Swamp in Sidescroller form!");
+if(screen_reader_is_running(JAWS)) install_keyhook();
+paused=true;
+@map=null;
+me.health=100;
+me.armor=0;
+me.ammo9mm=40;
+initWeaponNames();
+me.weapons.resize(weaponNames.length());
+clipboard_copy_text("" + me.weapons.length());
+me.ammos.resize(me.weapons.length());
+me.modes.resize(weaponNames.length());
+for(uint i=0; i<me.ammos.length(); i++) {
+me.ammos[i].resize(weaponNames[i].length());
+me.weapons[i].resize(me.ammos[i].length());
+me.modes[i].resize(me.ammos[i].length());
+for(uint j=0; j<me.ammos[i].length(); j++) {me.ammos[i][j]=0; me.weapons[i][j]=0; me.modes[i][j]=0;}
+}
+me.weapons[0][0]=1; me.ammos[0][0]=2;
+me.weapons[1][0]=1; me.ammos[1][0]=1;
+me.weapons[2][0]=1; me.ammos[2][0]=15;
+me.weaponClass=1; me.weapon=0;
+// 6:26 AM 6/9/2015: Load voice from progress.ini:
+if(file_exists("progress.ini")) {
+file fin;
+fin.open("progress.ini", "r");
+string[] lines=string_split(fin.read(0), "\n", true);
+fin.close();
+if(lines[6][0]==" ") lines[6]=string_right(lines[6], lines[6].length()-1);
+me.voice=string_to_number(lines[6]);
+}// Voice.
+paused=true;
+while(!key_pressed(KEY_F4)) {
+if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) voice.stop();
+if(paused) {
+menu();
+}// main menu.
+else if(@map==null) {
+Map m;
+@map=m;
+if(!map.load("level" + stage)) debug_mode();
+if((stage>=0)&&(stage<startpoints.length())) {me.bounds.x=startpoints[stage].x; me.bounds.y=startpoints[stage].y;}
+//alert("Results", "Map has " + map.objects.length() + " Objects, and " + map.zombies.length() + " zombies.");
+for(uint i=0; i<map.objects.length(); i++) {
+if(map.objects[i].slot<0) map.objects[i].slot=play_looped(map.objects[i].filename, map.objects[i].bounds, true);
+if(map.objects[i].v.length()!=0) movers.insert_last(map.objects[i]);
+}
+allyslots.resize(0);
+for(uint i=0; i<allies.length(); i++) {
+allyslots.insert_last(play_looped("sounds/radar/player.wav", allies[i].bounds, true));
+}// ally beacons.
+}// Load map.
+else {
+keycheck();
+step(time.elapsed);
+if((@(me.atop)!=null)&&(me.atop.name=="Exit")) {pool.destroy_all();
+sound snd;
+movers.resize(0);
+snd.load("sounds/player/success.wav");
+snd.play_wait();
+leftEdge=-1; rightEdge=-1; hurtslot=-1;
+stage++;
+if(stage<intros.length()) voice.speak_wait(intros[stage]);
+@map=null;
+@(me.atop)=null;
+me.health=100;
+@map=null;
+movers.resize(0);
+crates=0;
+garbage_collect();
+}
+}// playing.
+
+double tt=20;
+tt-=time.elapsed;
+if (tt<=0.0) tt=1;
+time.restart(); time.resume();
+wait(tt);
+}
+
+}// Loop.
+timer time;
+
+string[] mainmenu={
+"Play game",
+"Save game",
+"Load game",
+"Voice options",
+"Stereo sound test",
+"Movement help",
+"Weapons help",
+"Information help",
+"Navigation help",
+"Exit"
+};
+int menuX=-1;
+void menu() {
+bool speak=true;
+ if((key_pressed(KEY_UP))||(key_pressed(KEY_LEFT))||(key_pressed(KEY_A))||(key_pressed(KEY_W))) menuX--;
+else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))||(key_pressed(KEY_S))||(key_pressed(KEY_D))) menuX++;
+else if((key_pressed(KEY_RETURN))||(key_pressed(KEY_SPACE))) {
+speak=false;
+string str=mainmenu[menuX];
+if(str=="Voice options") {voice.options_menu(); speak=true;}
+else if(str=="Stereo sound test") pool.play_stationary("sounds/menu/SpeakerTest.wav", false);
+else if(str=="Movement help") voice.speak_interrupt("Use the arrow keys, or A, S, W, and D, to move. Up, or W, will cause your character to jump. Hold shift while moving left or right to run. Holding down, or S, will cause your character to crouch.");
+else if(str=="Weapons help") voice.speak_interrupt("Press spacebar to shoot, r to reload, and t to change mode. Use the number row on your keyboard to select weapons. Press a number more than once to select alternative weapons in that category. Use the tilde key to select your Field kit, and the plus and minus keys to select even more weapons, if you have them!");
+else if(str=="Information help") voice.speak_interrupt("Press, z, to hear your weapon and ammo, x to hear your health and armor, c to hear your score, and v to hear your location. Press q to hear your current quest.");
+else if(str=="Navigation help") voice.speak_interrupt("This game is a 2D side scroller. All platforms emit sound from whatever part of it is closest to you. To get a better idea of the size and shape of a platform, you can hold alt, and use the movement keys, to pan the camera a short distance. You\'ll hear the sound of wind on either end of the platform on which you stand. Always be sure there\'s something below you before stepping off a platform, as falling to the bottom edge of the map is deadly!");
+else if(str=="Exit") exit();
+else if(str=="Play game") {pool.play_stationary("sounds/menu/enter.wav", false); paused=false; time.restart(); time.resume();}
+else if(str=="Save game") {string inp=input_box("Save file name", "Enter save file name and press enter, or leave blank to cancel."); if(inp!="") save_game(inp);}
+else if(str=="Load game") {string inp=input_box("Save file name", "Enter save file name and press enter, or leave blank to cancel."); if(inp!="") load_game(inp);}
+}
+else if(key_pressed(KEY_ESCAPE)) {pool.play_stationary("sounds/menu/back.wav", false); paused=false; time.restart(); time.resume();}
+else speak=false;
+if(menuX<0) menuX=mainmenu.length()-1; else if(menuX>=mainmenu.length()) menuX=0;
+if(speak) {
+pool.play_stationary("sounds/menu/select.wav", false);
+voice.speak_interrupt(mainmenu[menuX]);
+}
+}
+void keycheck() {
+if((key_down(KEY_LCONTROL))&&(key_down(KEY_U))) debug_mode();
+
+if(key_pressed(KEY_LMENU) or key_pressed(KEY_RMENU)) {
+pool.play_2d("sounds/weapons/Winchester/ScopeOn.wav", camera.x, camera.y, camera.x, camera.y, false);
+ping=pool.play_2d("sounds/weapons/M40/ScopePing.wav", camera.x, camera.y, camera.x, camera.y, true);
+}// Sound for starting the camera.
+if((key_down(KEY_LMENU))||(key_down(KEY_RMENU))) {
+if(key_pressed(KEY_M)) debugMovers();
+bool scope=false;
+if(( ((me.attachments)&4)==4 )&&(me.weaponClass==4)&&(me.weapons[me.weaponClass][me.weapon]>0)) scope=true;
+else if((me.weaponClass==9)&&(me.weapons[me.weaponClass][me.weapon]>0)) scope=true;
+double dt=0.001*time.elapsed;
+double d=(scope) ? 8.0 : 4.0;
+
+if((key_down(KEY_RIGHT))||(key_down(KEY_D))) { camera.x+=d*dt; if(camera.x-me.bounds.x+(0.5*me.bounds.width)>=d) camera.x=me.bounds.x+(0.5*me.bounds.width)+d;}
+else if((key_down(KEY_LEFT))||(key_down(KEY_A))) { camera.x-=d*dt; if(me.bounds.x+(0.5*me.bounds.width)-camera.x>=d) camera.x=me.bounds.x+(0.5*me.bounds.width)-d;}
+if((key_down(KEY_UP))||(key_down(KEY_W))) { camera.y+=d*dt; if(camera.y-me.bounds.y>=d) camera.y=me.bounds.y+d;}
+else if((key_down(KEY_DOWN))||(key_down(KEY_S))) { camera.y-=d*dt; if(me.bounds.y-camera.y>=d) camera.y=me.bounds.y-d;}
+ else if((me.weaponClass==9)&&(key_pressed(KEY_SPACE))) {
+ if(me.ammos[9][me.weapon]>0) {
+ me.ammos[9][me.weapon]--;
+ playsound("sounds/weapons/" + weaponNames[9][me.weapon] + "/Fire.wav", me.bounds, false);
+me.counter=0.4;
+ Bullet@ b=newBullet("Sniper", me.bounds.x+0.5, me.bounds.y+0.5);
+ b.bounds.width=0.0762; b.bounds.height=0.0762; // So it's 10 times the normal size, whatever.
+ b.bounds.width*=10.0; b.bounds.height*=10.0; // Too likely to miss.
+ // Aim for the camera.
+ b.v.x=camera.x-b.bounds.x; b.v.y=camera.y-b.v.y; b.v.x*=2.5; b.v.y*=2.5; // Does maintaining the ratio actually work?
+ b.counter=5.0; b.hits=random(1, 3)+me.weapon; b.damage=random(100, 400)+(100*me.weapon);
+ bullets.insert_last(b);
+makeNoise(me.bounds, 6+me.weapon);
+} else playsound("sounds/weapons/" + weaponNames[9][me.weapon] + "/empty.wav", me.bounds, false);
+}// I'mma Firin' my Sniper
+}// camera.
+else if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) {
+bool steps=true;
+if(key_pressed(KEY_LEFT) or key_pressed(KEY_A)) x--;
+else if(key_pressed(KEY_RIGHT) or key_pressed(KEY_D)) x++;
+else if(key_pressed(KEY_W) or key_pressed(KEY_UP)) y++;
+else if(key_pressed(KEY_DOWN) or key_pressed(KEY_S)) y--;
+else steps=false;
+
+if(x<map.bounds.x) x=map.bounds.x;
+ if(x>map.bounds.x+map.bounds.width) x=map.bounds.x+map.bounds.width;
+if(y<map.bounds.y) y=map.bounds.y;
+if(y>map.bounds.y+map.bounds.height) y=map.bounds.y+map.bounds.height;
+
+if(steps) {
+Object@ o=null;
+for(uint i=0; i<map.objects.length(); i++) {
+if(map.objects[i].bounds.contains(x, y)) {@o=map.objects[i]; i=map.objects.length();}
+}
+if(@o==null) pool.play_2d("sounds/radar/radar.wav", camera.x, camera.y, x, y, false);
+else if(o.type>=8) pool.play_2d("sounds/radar/item.wav", camera.x, camera.y, x, y, false);
+ else if(y<round(o.bounds.y+o.bounds.height, 0)) pool.play_2d(getBump(o.terrain), camera.x, camera.y, x, y, false);
+ else pool.play_2d("sounds/steps/" + o.terrain + "/run" + random(1, 9) + ".wav", camera.x, camera.y, x, y, false);
+}// Find something to step on?
+}// Canedar, because bleh, I say.
+else {
+if(ping>=0) {pool.destroy_sound(ping); ping=-1;}
+camera.x=me.bounds.x+(me.bounds.width*0.5); camera.y=me.bounds.y;
+x=camera.x; y=camera.y;
+if(!bumped) {
+if((key_down(KEY_LEFT))||(key_down(KEY_A))) {me.v.x=-2.0; me.east=false;}
+else if((key_down(KEY_RIGHT))||(key_down(KEY_D))) {me.v.x=2.0; me.east=true;}
+else {bumped=false; me.v.x=0;}
+if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) me.v.x*=2.0;
+} else {
+if((!key_down(KEY_LEFT))&&(!key_down(KEY_RIGHT))&&(!key_down(KEY_A))&&(!key_down(KEY_D))) {bumped=false; me.v.x=0;}
+me.v.x=0.0;
+}
+
+if(((key_down(KEY_DOWN))||(key_down(KEY_S)))&&(!me.crouching)&&(@(me.atop)!=null)&&(round(me.v.x, 0)==0)) {me.crouching=true; playsound("sounds/weapons/m40/crouchOn.wav", me.bounds, false);}
+else if((me.crouching)&&((@(me.atop)==null)||((!key_down(KEY_DOWN))&&(!key_down(KEY_S))) )) {me.crouching=false; playsound("sounds/weapons/m40/CrouchOff.wav", me.bounds, false);}
+if(((key_pressed(KEY_UP))||(key_pressed(KEY_W)))&&(me.v.y==0.0)&&(@(me.atop)!=null)) {
+me.v.y=9.8;
+playsound("sounds/weapons/m40/crouchOff.wav", me.bounds, false);
+}// Jump.
+if((me.v.y>0.0)&&(!key_down(KEY_UP))&&(!key_down(KEY_W))) me.v.y=0.0;
+if((key_pressed(KEY_SPACE))&&(me.counter==0.0)) {
+if((me.weaponClass>=0)&&(me.weaponClass<me.weapons.length())&&(me.weapon>=0)&&(me.weapon<me.weapons[me.weaponClass].length())&&(me.weapons[me.weaponClass][me.weapon]>0)) {
+if(me.ammos[me.weaponClass][me.weapon]<=0) pool.play_2d("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/empty.wav", camera.x, camera.y, me.bounds.x+(0.5*me.bounds.width), me.bounds.y, false);
+else {
+if(me.weaponClass==1) {
+if(me.weapon==0) {
+pool.play_2d("sounds/weapons/Axe/Fire.wav", camera.x, camera.y, me.bounds.x+(0.5*me.bounds.width), me.bounds.y, false);
+me.counter=0.3;
+Bullet@ b=newBullet("Axe", me.bounds.x-1, me.bounds.y+0.5);
+if(me.crouching) b.bounds.y=me.bounds.y;
+b.bounds.width=me.bounds.width+2.0;
+b.bounds.height=1.0;
+b.hits=1;
+b.damage=random(50, 200);
+b.v.x=0; b.v.y=0;
+b.counter=0.3;
+bullets.insert_last(b);
+}// axe.
+else if(me.weapon==2) {
+pool.play_2d("sounds/weapons/Hammer/Fire.wav", camera.x, camera.y, me.bounds.x+(0.5*me.bounds.width), me.bounds.y, false);
+me.counter=1.0;
+Bullet@ b=newBullet("Hammer", me.bounds.x-1, me.bounds.y+0.5);
+if(me.crouching) b.bounds.y=me.bounds.y;
+b.bounds.width=me.bounds.width+2.0;
+b.bounds.height=1.5;
+b.hits=random(1, 3);
+b.damage=random(70, 500);
+b.v.x=0; b.v.y=0;
+b.counter=0.5;
+bullets.insert_last(b);
+
+}// Hammer?
+else if(me.weapon==3) {
+pool.play_2d("sounds/weapons/Machete/Fire.wav", camera.x, camera.y, me.bounds.x+(0.5*me.bounds.width), me.bounds.y, false);
+me.counter=0.3;
+Bullet@ b=newBullet("Sword", me.bounds.x-1, me.bounds.y+0.6);
+if(me.crouching) b.bounds.y=me.bounds.y;
+b.bounds.width=me.bounds.width+2.0;
+b.bounds.height=0.5;
+b.hits=1;
+b.damage=random(50, 350);
+b.v.x=0; b.v.y=0;
+b.counter=0.25;
+bullets.insert_last(b);
+
+}// Machete.
+else {
+ pool.play_stationary("sounds/weapons/Shield/Fire.wav", false);
+me.counter=0.3; //?
+Rectangle@ b=newRectangle(me.bounds.x, me.bounds.y+0.5, me.bounds.width+0.5, 1);
+ if(me.crouching) b.y=me.bounds.y;
+if(!me.east) b.x-=0.5;
+for(uint i=0; i<map.zombies.length(); i++) {
+if(map.zombies[i].bounds.collide(b)) {map.zombies[i].bounds.x+=(me.east) ? random(1, 3) : random(-3, -1);
+map.zombies[i].clearSlot();
+ map.zombies[i].play("sounds/Zombies/" + map.zombies[i].name + "/Shield" + random(1, 3) + ".wav");
+}}
+}// Repel.
+
+}// melee weapons.
+else if(me.weaponClass==2) {
+// Silencers?
+ pool.play_2d("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/" + ((me.modes[me.weaponClass][me.weapon]==1) ? "silenced" : "fire") + ".wav", camera.x, camera.y, me.bounds.x+(0.5*me.bounds.width), me.bounds.y, false);
+if(me.weapon==2) {playsound("sounds/weapons/G19/Silenced.wav", me.bounds, false);
+if(me.ammos[2][2]>1) {
+playsound("sounds/Weapons/G17/Silenced.wav", me.bounds, false); // Jeqocon2: was sounds/g17/
+me.ammos[me.weaponClass][me.weapon]--;
+Bullet@ b2=newBullet("Bullet", me.bounds.x+(0.5*me.bounds.width), me.bounds.y+(0.75*me.bounds.height));
+me.counter=0.25;
+b2.counter=0.5*random(1, 7);
+ if(me.crouching) b2.bounds.y=me.bounds.y;
+ b2.bounds.width=0.009; b2.bounds.height=0.009;
+ b2.hits=1; b2.damage=random(25, 50);
+ b2.v.x=8.0; b2.v.y=0.01*random(-20, 20);
+if(me.modes[me.weaponClass][me.weapon]==1) {
+b2.damage*=0.01*random(33, 55);
+b2.v.x*=0.1*random(7, 10);
+//makeNoise(me.bounds, 0);
+}
+else {
+makeNoise(me.bounds, 4);
+}// Sound?
+if(me.east) b2.v.x=-absolute(b2.v.x);
+bullets.insert_last(b2);
+
+}// second bullet.
+}
+me.ammos[me.weaponClass][me.weapon]--;
+Bullet@ b=newBullet("Bullet", me.bounds.x+(0.5*me.bounds.width), me.bounds.y+(0.75*me.bounds.height));
+me.counter=0.25;
+b.counter=0.5*random(1, 7);
+ if(me.crouching) b.bounds.y=me.bounds.y;
+ b.bounds.width=0.009; b.bounds.height=0.009;
+ b.hits=1; b.damage=random(25, 50);
+ b.v.x=8.0; b.v.y=0.01*random(-20, 20);
+if(me.modes[me.weaponClass][me.weapon]==1) {
+b.damage*=0.01*random(33, 75);
+b.v.x*=0.1*random(7, 10);
+//makeNoise(me.bounds, 0);
+}
+else {
+makeNoise(me.bounds, 7);
+}// Sound?
+if(!me.east) b.v.x=-absolute(b.v.x);
+bullets.insert_last(b);
+}// Pistols.
+else if(me.weaponClass==3) {
+ me.ammos[me.weaponClass][me.weapon]--;
+ pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Fire.wav", false);
+ Bullet@ b=newBullet("Shell", me.bounds.x+0.5, me.bounds.y+0.35);
+  b.bounds.width=0.1;
+ b.bounds.height=0.25;
+ b.damage=random(50, 300); if(me.weapon==1) b.damage=math_min(200, b.damage);
+ b.hits=random(2, 5)-me.weapon;
+ b.v.x=random(4, 8);
+ b.counter=(random(1, 3)+me.weapon)*0.5;
+me.counter=0.4-(0.125*me.weapon);
+if(!me.east) b.v.x*=-1;
+ b.v.y=random(-2, 1)*0.25;
+bullets.insert_last(b);
+makeNoise(me.bounds, 15-(me.weapon*3));
+}// Shotguns.
+else if(me.weaponClass==4) {
+ pool.play_stationary("sounds/Weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Fire.wav", false);
+makeNoise(me.bounds, 10+me.weapon);
+me.ammos[me.weaponClass][me.weapon]--;
+ // scope
+bool scope=false;
+if(( ((me.attachments)&4)==4 )&&(me.weaponClass==4)&&(me.weapons[me.weaponClass][me.weapon]>0)) scope=true;
+Bullet@ b=newBullet("Bullet", me.bounds.x+0.5, me.bounds.y+0.75);
+ if(me.crouching) b.bounds.y=me.bounds.y;
+ b.bounds.width=0.03; b.bounds.height=0.03;
+b.damage=random(50, 200);
+ b.hits=1;
+ b.v.x=(scope) ? random(10, 12) : random(6, 10);
+ b.v.y=(scope) ? 0.0 : 0.01*random(-50, 50);
+ if(!me.east) b.v.x*=-1.0;
+  b.counter=(scope) ? 10 : 5;
+ me.counter=0.3; //?
+b.damage+=random(10, 25)*me.weapon;
+ bullets.insert_last(b);
+}// Sport Rifles.
+else if(me.weaponClass==5) {
+if(((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT)))&&(me.ammos[me.weaponClass][me.weapon]>=3)) {
+ Bullet@ b=newBullet("Burst", me.bounds.x+0.5, me.bounds.y+(0.75*me.bounds.height));
+ if(me.crouching) b.bounds.y=0.25+me.bounds.y;
+ b.v.x=10;
+ b.damage=random(75, 225);
+ b.bounds.width=1.0; b.bounds.height=0.01;
+if(!me.east) b.v.x*=-1;
+ b.hits=1; // Hmm.
+ b.counter=random(1, 3);
+ makeNoise(me.bounds, 12);
+ me.ammos[5][me.weapon]-=3;
+ b.damage+=random(0, 5)*me.weapon;
+ bullets.insert_last(b);
+ me.counter=0.35;
+ pool.play_stationary("sounds/weapons/" + weaponNames[5][me.weapon] + "/Burst.wav", false);
+}// Burst Fire.
+else if(me.ammos[me.weaponClass][me.weapon]>0){
+Bullet@ b=newBullet("Bullet", me.bounds.x+0.5, me.bounds.y+(0.75*me.bounds.height));
+ b.hits=1;
+ b.bounds.width=0.009; b.bounds.height=0.009;
+b.v.x=random(8, 12); b.v.y=0.01*random(-25, 25);
+ if(!me.east) b.v.x*=-1;
+ b.damage=random(25, 80);
+ if(me.modes[me.weaponClass][me.weapon]==2) {
+ pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Suppressed.wav", false);
+ me.counter=0.2;
+b.damage*=0.75;
+makeNoise(me.bounds, 2);
+}// suppressed.
+else {pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Fire.wav", false); makeNoise(me.bounds, 8);
+me.counter=0.25;
+}
+b.counter=random(1, 3); b.damage+=random(0, 5)*me.weapon;
+me.ammos[me.weaponClass][me.weapon]--;
+ bullets.insert_last(b);
+}// Normal.
+}// Submachineguns
+ else if(me.weaponClass==6) {
+if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) {
+ if((key_down(KEY_LSHIFT))&&((me.weapon==6)||(weaponNames[6][me.weapon]=="M16"))) {
+pool.play_stationary("sounds/weapons/" + weaponNames[6][me.weapon] + "/BFire.wav", false);
+ Bullet@ b=newBullet("Sword", me.bounds.x-1.5, me.bounds.y+0.75);
+ b.bounds.width=3+me.bounds.width; b.bounds.height=0.5;
+b.counter=0.2;
+me.counter=0.25;
+ b.damage=random(30, 210+(4*level));
+ b.hits=1; //?
+  bullets.insert_last(b);
+}// Bayonet.
+ else if(me.ammos[6][me.weapon]>=3) {
+ pool.play_stationary("sounds/weapons/" + weaponNames[6][me.weapon] + "/Burst.wav", false);
+Bullet@ b=newBullet("Burst", me.bounds.x+0.5, me.bounds.y+(0.75*me.bounds.height));
+ b.bounds.width=1.0762; b.bounds.height=0.762;
+ b.v.x=10+me.weapon;
+if(me.weapon<6) b.v.y=random(-0.2*me.weapon, 0.2*me.weapon);
+ if(!me.east) b.v.x*=-1.0;
+ if(me.crouching) b.bounds.y=me.bounds.y+0.25;
+b.hits=1;
+ b.damage=random(40+(2*me.weapon), 300+(25*me.weapon));
+ b.damage*=2.75;
+ bullets.insert_last(b);
+me.ammos[6][me.weapon]-=3;
+b.counter=5;
+makeNoise(me.bounds, 16);
+}// Burst.
+}// Bayonet/burst.
+else if(me.ammos[6][me.weapon]>0) {
+ pool.play_stationary("sounds/weapons/" + weaponNames[6][me.weapon] + "/Fire.wav", false);
+me.counter=0.2+(0.02*me.weapon);
+ if(me.weapon==weaponNames[6].length()-1) me.counter=0.2; // Bwahahaha?
+ // I have no idea how the damage, range, etc should scale, so I'll just have it increase?
+// And the accuracy will decrease, except for the AK47.
+Bullet@ b=newBullet("Bullet", me.bounds.x+0.5, me.bounds.y+(0.75*me.bounds.height));
+b.counter=5;
+ b.bounds.width=0.0762; b.bounds.height=0.00762;
+ b.v.x=10+me.weapon;
+if(me.weapon<6) b.v.y=random(-0.15*me.weapon, 0.15*me.weapon);
+ if(!me.east) b.v.x*=-1.0;
+ if(me.crouching) b.bounds.y=me.bounds.y+0.25;
+b.hits=1;
+ b.damage=random(40+(2*me.weapon), 300+(25*me.weapon));
+ bullets.insert_last(b);
+me.ammos[6][me.weapon]--;
+makeNoise(me.bounds, 7);
+}// Normal shooting.
+}// Assault Rifles.
+else if((me.weaponClass==7)&&(me.ammos[7][me.weapon]>0)) {
+Bullet@ b=newBullet((me.weapon>2) ? "Knife" : "Arrow", me.bounds.x+0.5, me.bounds.y+(0.5*me.bounds.height));
+pool.play_stationary("sounds/weapons/" + weaponNames[7][me.weapon] + "/Fire.wav", false);
+me.ammos[7][me.weapon]--;
+b.hits=1;
+ if(me.weapon>2) {
+b.bounds.width=0.5; b.bounds.height=0.5;
+ b.v.x=random(4, 8);
+ b.damage=random(40, 500);
+ b.hits=1;
+ b.counter=random(2, 4);
+ b.v.y=0.01*random(-111, 111);
+ if(!me.east) b.v.x*=-1.0;
+ if(me.crouching) b.bounds.y=me.bounds.y+0.15;
+
+ me.counter=0.05*random(0, 4);
+}// Knives.
+ else {
+b.bounds.width=0.5; b.bounds.height=0.1+(0.1*me.modes[7][me.weapon]);
+b.damage=random(15, 200);
+if((me.weapon==2)||((me.weapon==1)&&(me.modes[7][1]==1))) b.damage=random(40, 300);
+ else if(me.modes[7][me.weapon]==2) b.damage=random(50, 600);
+ b.v.x=random(7, 11); if(!me.east) b.v.x*=-1.0;
+ b.v.y=0.01*random(-25, 45);
+b.counter=random(2, 5)+me.modes[7][me.weapon];
+}// Arrows.
+ bullets.insert_last(b);
+}// Archery and knives.
+else if((me.weaponClass==8)&&(me.ammos[me.weaponClass][me.weapon]>0)) {
+ if(me.weapon==1) {
+Bullet@ b=newBullet("Flame", me.bounds.x, me.bounds.y+1);
+ if(me.crouching) b.bounds.y=me.bounds.y;
+ b.bounds.width=3; b.bounds.height=1;
+ if(!me.east) b.bounds.x-=2;
+ b.v.x=random(2, 10);
+ b.counter=random(2, 5);
+ b.hits=random(1, 5);
+ b.damage=random(50, 400);
+me.counter=0.35;
+ me.ammos[8][1]-=50;
+pool.play_stationary("sounds/weapons/Flamethrower/Fire.wav", false);
+if(!me.east) b.v.x*=-1.0;
+ bullets.insert_last(b);
+makeNoise(me.bounds, 2);
+}// Flamethrower.
+else {
+Bullet@ b=newBullet("Chainsaw", me.bounds.x-2, me.bounds.y+((me.weapon==0) ? 1 : 0));
+ b.bounds.width=5; b.bounds.height=(me.weapon==0) ? 1 : 3;
+if((me.crouching)&&(me.weapon==0)) b.bounds.y=0.1+me.bounds.y;
+b.damage=(random(50, 200)*1.5)-(10*me.weapon);
+ b.hits=random(1, 5);
+ b.counter=0.3;
+me.counter=0.3+(0.1*me.weapon);
+if(me.weapon==0) me.ammos[8][me.weapon]-=50; else me.ammos[8][me.weapon]-=random(0, 25);
+bullets.insert_last(b);
+weaponSound.stop();
+ weaponSound.load("sounds/weapons/" + weaponNames[8][me.weapon] + "/Fire.wav");
+ weaponSound.play();
+makeNoise(me.bounds, 6+me.weapon);
+}// Chainsaw and Motorcycle attack about the same.
+
+}// Hmm.
+else if((me.weaponClass==10)&&(me.ammos[me.weaponClass][me.weapon]>=5)) {
+pool.play_stationary("sounds/weapons/" + weaponNames[10][me.weapon] + "/Fire.wav", false);
+Bullet@ b=newBullet("Burst", me.bounds.x, me.bounds.y+(0.5*me.bounds.height));
+ if(me.crouching) b.bounds.y=me.bounds.y+0.1;
+ b.bounds.width=2; b.bounds.height=1;
+b.hits=random(1, 3);
+ b.damage=random(50, 300)+(50*me.weapon);
+makeNoise(me.bounds, 9+(9*me.weapon));
+b.v.x=10+(2*me.weapon);
+b.v.y=(me.crouching) ? 0 : (me.v.y!=0.0) ? 0.1*random(-2, 10) : 0.1*random(-5, 5);
+ b.counter=random(3, 8);
+if(!me.east) b.v.x*=-1.0;
+ me.counter=0.5;
+ me.ammos[10][me.weapon]-=5;
+if(!me.east) b.bounds.x-=b.bounds.width;
+bullets.insert_last(b);
+}// Machineguns.
+else if((me.weaponClass==11)&&(me.ammos[me.weaponClass][me.weapon]>=10)) {
+if(weaponSound.playing) weaponSound.seek(0); else {weaponSound.stop(); weaponSound.load("sounds/weapons/" + weaponNames[11][me.weapon] + "/Fire.wav"); weaponSound.play();}
+Bullet@ b=newBullet("Vulcan", me.bounds.x+0.5, me.bounds.y+0.25);
+ b.bounds.width=3; b.bounds.height=1.5;
+if(!me.east) b.bounds.x-=3;
+if(@(me.atop)==null) {me.v.x=random(1, 15); me.counter=5.0; if(me.east) me.v.x*=-1.0;}
+ else me.counter=0.3;
+ b.counter=random(2, 5+me.weapon);
+ b.damage=random(200, 600)+(me.weapon*random(100, 250));
+ b.v.x=random(7, 12);
+ b.hits=random(2, 7);
+ me.ammos[11][me.weapon]-=10;
+b.v.y=0.0;
+bullets.insert_last(b);
+}// Gatlanguns.
+else if((me.weaponClass==12)&&(me.ammos[12][me.weapon]>0)) {
+ me.ammos[12][me.weapon]--;
+ if(me.weapon==0) {
+// So, you toss this kinda haphazardly?
+// If you're crouching, it just kinda rolls.
+ playsound("sounds/weapons/Grenade/throw.wav", me.bounds, false);
+Bullet@ b=newBullet("Grenade", me.bounds.x, (me.crouching) ? me.bounds.y+0.1 : me.bounds.y+(0.75*me.bounds.height));
+b.bounds.width=0.3; b.bounds.height=b.bounds.width;
+b.counter=3.0;
+b.v.x=random(1, 6);
+b.v.y=0.0; if(!me.crouching) b.v.y=2.0;
+if(me.east) b.bounds.x+=me.bounds.width; else {b.bounds.x-=b.bounds.width; b.v.x*=-1.0;}
+b.hits=10;
+bullets.insert_last(b);
+// Missing something? Probablies.
+ b.damage=random(100, 500); // It shouldn't, though.
+}// Hand Grenade.
+ else if(me.weapon==1) {
+playsound("sounds/weapons/M79/Fire.wav", me.bounds, false);
+ Bullet@ b=newBullet("Grenade", me.bounds.x, me.bounds.y+((me.crouching) ? 0.1 : 1));
+ b.v.x=random(4, 12);
+ b.v.y=((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) ? 0.5 : 2.5; // Umm... This seems a bit weird.
+ b.hits=10;
+ b.damage=random(100, 500); // Again, meh.
+// Else? I don't think so?
+b.bounds.width=0.3; b.bounds.height=0.3;
+if(!me.east) b.v.x*=-1.0;
+bullets.insert_last(b);
+
+}// M79.
+else if(me.weapon==2) {
+// Use explosives for this one.
+playsound("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Fire.wav", me.bounds, false);
+ Bullet@ b=newBullet("Explosive", me.bounds.x, me.bounds.y+((me.crouching) ? 0.1 : 1));
+ b.v.x=random(10, 20);
+ b.v.y=((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) ? 0.5 : 2.5; // Umm... This seems a bit weird.
+ b.hits=10;
+ b.damage=random(500, 2000); // Again, meh.
+// Else? I don't think so?
+b.bounds.width=3.3; b.bounds.height=1.3;
+if(!me.east) b.v.x*=-1.0;
+bullets.insert_last(b);
+
+}// RPG7
+else if(me.weapon==3) {
+// This is just insane.
+playsound("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Fire.wav", me.bounds, false);
+ Bullet@ b=newBullet("Grenade", me.bounds.x, me.bounds.y+((me.crouching) ? 0.1 : 1));
+ b.v.x=random(10, 20);
+ b.v.y=((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) ? 0.5 : 2.5; // Umm... This seems a bit weird.
+ b.hits=10;
+ b.damage=random(500, 2000); // Again, meh.
+// Else? I don't think so?
+b.bounds.width=3.3; b.bounds.height=3.3;
+if(!me.east) b.v.x*=-1.0;
+bullets.insert_last(b);
+}// Scorpion.
+
+}// Explosives.
+}// Shooting.
+}// Have weapon will shoot.
+}// Shoot.
+if((key_pressed(KEY_T))&&(me.counter==0.0)) {
+ if(me.weaponClass==7) {
+ if(me.weapon==1) {
+me.modes[7][1]++; if(me.modes[7][1]>2) me.modes[7][1]=0;
+string[] lvs={"Light", "Heavy", "Maximum"};
+pool.play_stationary("sounds/weapons/Longbow/Pull" + lvs[me.modes[7][1]] + ".wav", false);
+ voice.speak_interrupt(lvs[me.modes[7][1]] + " Pull");
+}// longbow.
+ else if(me.weapon==2) {
+me.modes[7][2]^=1;
+ string res=(me.modes[7][2]==0) ? "Off" : "On";
+ pool.play_stationary("sounds/weapons/Crossbow/Repeat" + res + ".wav", false);
+}// Crossbow.
+}// Bows.
+}// Toggle mode. :(
+if((key_pressed(KEY_R))&&(me.counter==0.0)) {
+if(me.weaponClass==2) {
+if(me.ammo9mm<=0) voice.speak_interrupt("No more of that ammo left");
+else if((me.weapon==0)&&(me.ammos[me.weaponClass][me.weapon]<15)) {
+int total=math_min(15-me.ammos[2][0], me.ammo9mm);
+me.ammo9mm-=total; me.ammos[2][0]+=total;
+pool.play_stationary("sounds/weapons/G19/reloading.wav", false); me.state=5; me.counter=1.0;
+}
+else if((me.weapon==1)&&(me.ammos[2][1]<17)) {
+int total=math_min(17-me.ammos[2][1], me.ammo9mm);
+me.ammo9mm-=total; me.ammos[2][1]+=total;
+pool.play_stationary("sounds/weapons/G17/reloading.wav", false);
+me.counter=0.75; me.state=5;
+}// G17.
+else if(me.weapon==2) {
+int total=math_min(30-me.ammos[2][1], me.ammo9mm);
+me.ammo9mm-=total; me.ammos[2][2]+=total;
+pool.play_stationary("sounds/weapons/G17/reloading.wav", false);
+me.counter=1.75; me.state=5;
+pool.play_stationary("sounds/weapons/G19/reloaded.wav", false);
+}// Two pistols.
+}// Pistols.
+ else if((me.weaponClass==3)&&(me.shells>0)) {
+int total=(me.weapon==0) ? 2 : (me.weapon==2) ? 20 : 8;
+if(me.ammos[me.weaponClass][me.weapon]<total) {
+ total-=me.ammos[me.weaponClass][me.weapon];
+ total=math_min(total, me.shells);
+ me.ammos[me.weaponClass][me.weapon]+=total; me.shells-=total;
+me.counter=1.0; me.state=5; pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/reloading.wav", false);
+}}// Shotguns.
+else if((me.weaponClass==4)&&(me.ammo30cal>0)&&(me.ammos[me.weaponClass][me.weapon]<5+me.weapon)) {
+ int total=math_min(5+me.weapon-me.ammos[me.weaponClass][me.weapon], me.ammo30cal);
+ me.ammo30cal-=total; me.ammos[me.weaponClass][me.weapon]+=total;
+me.counter=1.0; me.state=5; pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/reloading.wav", false);
+}// Reloading Sport rifles.
+ else if(me.weaponClass==5) {
+ int total=(me.weapon==0) ? 30 : (me.weapon==1) ? 40 : (me.weapon==2) ? 40 : 25;
+total-=me.ammos[5][me.weapon];
+ total=math_min(total, me.ammo9mm);
+ me.ammo9mm-=total; me.ammos[me.weaponClass][me.weapon]+=total;
+ pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/reloading.wav", false); me.state=5; me.counter=1.0;
+}// Submachineguns.
+else if(me.weaponClass==6) {
+ int total=(me.weapon<3) ? 30 : 40;
+ total-=me.ammos[6][me.weapon];
+ if((me.weapon>3)&&(me.ammo762>0)) {
+ total=math_min(total, me.ammo762);
+me.ammos[6][me.weapon]+=total; me.ammo762-=total;
+}// 762
+ else if(me.ammo56>0) {
+total=math_min(me.ammo56, total);
+ me.ammo56-=total; me.ammos[6][me.weapon]+=total;
+}// 5.6
+else total=0;
+ if(total>0) { me.counter=1.0; me.state=5; pool.play_stationary("sounds/weapons/" + weaponNames[6][me.weapon] + "/reloading.wav", false);}
+}// Meh.
+ else if(me.weaponClass==7) {
+int total=1; if(me.weapon>2) total++;
+ total-=me.ammos[7][me.weapon];
+ if((me.weapon==2)&&(me.modes[7][2]!=0)) total+=3;
+ total=math_min(total, (me.weapon>2) ? me.knives : me.arrows);
+if(total>0) {
+ if(me.weapon>2) me.knives-=total; else me.arrows-=total;
+ me.ammos[7][me.weapon]+=total;
+ me.counter=0.5*(me.modes[7][me.weapon]+1); me.state=5;
+ if(me.modes[7][me.weapon]==2) me.counter=3;
+if((me.weapon!=1)&&(me.modes[7][me.weapon]==0)) pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Reloading.wav", false);
+ else if(me.weapon==2) pool.play_stationary("sounds/weapons/Crossbow/ReloadingR.wav", false);
+ else pool.play_stationary("sounds/weapons/Longbow/Reload" + ((me.modes[7][1]==1) ? "Heavy" : (me.modes[7][1]==0) ? "Light" : "Maximum" ) + ".wav", false);
+}
+}// Bows and knives.
+ else if(me.weaponClass==8) {
+ int total=1000;
+total-=me.ammos[me.weaponClass][me.weapon];
+total=math_min(total, me.gas);
+if(total>0) {me.ammos[8][me.weapon]+=total; me.gas-=total; pool.play_stationary("sounds/weapons/" + weaponNames[8][me.weapon] + "/reloading.wav", false); me.counter=1.0; me.state=5;}
+ else voice.speak_interrupt("Not enough gas");
+ if(!weaponSound.playing) {weaponSound.load("sounds/weapons/" + weaponNames[8][me.weapon] + "/idle.wav"); weaponSound.play_looped();}
+}// Refueling, that's pretty straightforward. Except for the motor thing.
+ else if(me.weaponClass==9) {
+int total=1-me.ammos[9][me.weapon];
+total=math_min(total, me.ammo762);
+ if(total>0) {
+me.ammo762-=total; me.ammos[9][me.weapon]+=total;
+ me.counter=1.0; me.state=5; pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/reloading.wav", false);
+}// Reload. 
+}// Sniper rifles.
+ else if(me.weaponClass==10) {
+ int total=100-me.ammos[10][me.weapon];
+ total=math_min(me.ammo762, total);
+ if(total>0) {me.ammo762-=total; me.ammos[10][me.weapon]+=total; me.counter=1.5; playsound("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/reloading.wav", me.bounds, false); me.state=5;}
+ else voice.speak_interrupt("No more of that ammo.");
+}// Machineguns.
+else if(me.weaponClass==11) {
+ int total=1000-me.ammos[11][me.weapon]-(500*me.weapon);
+ total=math_min(total, me.ammo762);
+if(total>0) {me.state=5; me.counter=2.5; me.ammo762-=total; me.ammos[11][me.weapon]+=total; playsound("sounds/weapons/" + weaponNames[11][me.weapon] + "/reloading.wav", me.bounds, false);} // Jeqocon2: was sounds/weapon/
+ else voice.speak_interrupt("No more of that ammo.");
+}// Gatlanguns.
+ else if(me.weaponClass==12) {
+ // Hmm. This should be... interesting?
+// The M79 and RPG7 seem like they should function similarly.
+int total=1-me.ammos[12][me.weapon];
+total=math_min(total, (me.weapon>1) ? me.warheads : me.grenades );
+if(total>0) {
+me.ammos[12][me.weapon]+=total;
+if(me.weapon>1) me.warheads-=total; else me.grenades-=total;
+me.counter=0.5+(0.5*me.weapon);
+me.state=5;
+pool.play_stationary("sounds/weapons/" + weaponNames[12][me.weapon] + "/reloading.wav", false);
+if(me.weapon==0) pool.play_stationary("sounds/weapons/Grenade/pullPin.wav", false);
+}// Yay?
+}// Explosives.
+}// Reload
+else if(key_pressed(KEY_GRAVE)) {
+if(me.medkits<=0) playsound("sounds/weapons/FieldKit/empty.wav", me.bounds, false);
+else {me.health+=20; if(me.health>=100.0) me.health=100.0; playsound("sounds/weapons/fieldkit/apply.wav", me.bounds); me.medkits--; voice.speak_interrupt(me.medkits + " med kits remaining");
+Rectangle@ healbox=newRectangle(me.bounds.x-3, me.bounds.y, 7, 4);
+ if(!allies.is_empty()) for(uint ii=0; ii<allies.length(); ii++) {
+ if(healbox.intersects(allies[ii].bounds)) {allies[ii].health=100.0; allies[ii].leg=false; allies[ii].ankle=false;}
+}// Heal allies.
+}
+}
+else {
+int num=-1;
+if(key_pressed(KEY_1)) num=1;
+else if(key_pressed(KEY_2)) num=2;
+ else if(key_pressed(KEY_3)) num=3;
+else if(key_pressed(KEY_4)) num=4;
+else if(key_pressed(KEY_5)) num=5;
+else if(key_pressed(KEY_6)) num=6;
+else if(key_pressed(KEY_7)) num=7;
+else if(key_pressed(KEY_8)) num=8;
+ else if(key_pressed(KEY_9)) num=9;
+ else if(key_pressed(KEY_0)) num=10;
+ else if(key_pressed(KEY_MINUS)) num=11;
+ else if(key_pressed(KEY_EQUALS)) num=12;
+if((num>=0)&&(num<me.weapons.length())) {
+// Should have done this sooner, but: (4:28 AM 8/31/2013)
+string[] classes={"Medical", "melee weapons", "pistols", "shotguns", "sport rifles", "submachineguns", "assault rifles", "archery weapons", "combustion weapons", "sniper rifles", "machineguns", "giant uncarryable artillery guns", "explosive weapons"};
+if(num==me.weaponClass) {
+int w=me.weapon; // Probably worth saving.
+do {
+ me.weapon++;
+if(me.weapon>=me.weapons[me.weaponClass].length()) me.weapon=0; // IoBEs are probably going to pop up anyway, somehow.
+ } while((me.weapon!=w)&&(me.weapons[me.weaponClass][me.weapon]<1));
+if(me.weapons[me.weaponClass][me.weapon]>0) {
+pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/draw.wav", false);
+voice.speak_interrupt(weaponNames[me.weaponClass][me.weapon] + " equipped"); // Could add ammo, but that'd actually be kinda complicated.
+}// Draw.
+else voice.speak_interrupt("You don\'t have any " + classes[me.weaponClass] + " weapons.");
+}// Already in that class, cycle.
+else {
+// In this case, we only actually change anything if we find a weapon.
+int w=0;
+while((w<me.weapons[num].length())&&(me.weapons[num][w]<1)) {w++;}
+if((w<0)||(w>=me.weapons[num].length())||(me.weapons[num][w]<=0)) voice.speak_interrupt("You have no " + classes[num] + ". ");
+ else {
+me.weaponClass=num; me.weapon=w;
+ pool.play_stationary("sounds/weapons/" + weaponNames[num][w] + "/draw.wav", false);
+ voice.speak_interrupt(weaponNames[num][w] + " equipped"); // Again, ammo would take more than one line (or some crazy nested choices).
+
+}// Draw.
+}// Enter a class.
+
+ if(me.weaponClass==8) {
+ if(me.ammos[me.weaponClass][me.weapon]>0) {weaponSound.stop(); weaponSound.load("sounds/weapons/" + weaponNames[8][me.weapon] + "/Idle.wav"); weaponSound.play_looped();}
+ else pool.play_stationary("sounds/weapons/" + weaponNames[8][me.weapon] + "/turnOff.wav", false);
+}// Sound, gas, etc.
+else {weaponSound.stop(); weaponSound.close();}
+
+}// Switch weapons.
+}
+
+if(key_pressed(KEY_Z)) {
+if((me.weaponClass>=0)&&(me.weaponClass<weaponNames.length())&&(me.weapon>=0)&&(me.weapon<me.weapons[me.weaponClass].length())) {
+string tosay="" + weaponNames[me.weaponClass][me.weapon];
+tosay += " equipped";
+if(me.weaponClass!=1) tosay += ", " + me.ammos[me.weaponClass][me.weapon] + " loaded";
+if(me.weaponClass==0) tosay += ", and " + me.medkits + " med kits in reserve";
+else if(me.weaponClass==2) tosay += ", with " + me.ammo9mm + " 9mm ammo in reserve";
+else if(me.weaponClass==3) tosay += ", and " + me.shells + " shotgun shells in reserve";
+else if(me.weaponClass==4) tosay += ", and " + me.ammo30cal + " .30 calibur ammo in reserve.";
+ else if(me.weaponClass==5) tosay += ", and " + me.ammo9mm + " 9mm ammo in reserve.";
+ else if((me.weaponClass==6)&&(me.weapon<4)) tosay += ", and " + me.ammo56 + " 5.6mm ammo in reserve";
+ else if(me.weaponClass==7) tosay += ", and " + ((me.weapon==3) ? "" + me.knives + " knives" : "" + me.arrows + " arrows") + " in reserve.";
+ else if(me.weaponClass==8) {
+tosay="" + weaponNames[me.weaponClass][me.weapon] + " equipped. You have " + (round(me.ammos[me.weaponClass][me.weapon]/10, 1)) + "% in your tank, and " + round(me.gas/1000, 1) + " tanks of gas in reserve.";
+}// Gas.
+else if(me.weaponClass!=12) tosay += ", and " + me.ammo762 + " .762 ammo in reserve.";
+else tosay += ", and " + me.grenades + " grenades in reserve";
+voice.speak_interrupt(tosay);
+}
+else voice.speak_interrupt("Nothing equipped.");
+}
+else if(key_pressed(KEY_O)) voice.speak_interrupt("There are " + map.objects.length() + " objects, " + movers.length() + " of which are moving. There are " + map.zombies.length() + " zombies.");
+else if(key_pressed(KEY_Q)) {
+ string tosay="Find the exit!";
+ switch (stage) {
+ case 0 : tosay="Go to the gas station."; break;
+  case 2 : {tosay="Find " + (5-crates) + " more crates."; if(crates>=5) tosay="Go to our truck!";}; break;
+  case 1 : tosay=(crates==0) ? "Find Diesel for our truck!" : "Return the Fuel to the Safe Zone!"; break;
+ case 3 : tosay="Get to the helicopter!"; break;
+  case 4 : tosay=(crates<4) ? "Lead all the survivors to the helicopter!" : "Stop the raiders from shooting down our helicopter!"; break;
+  case 5 : tosay="Get the survivors out of this place!"; break;
+  case 9 : tosay=(crates<(5+(stage-2))) ? "Find " + (-crates+(5+(stage-2))) + " more crates" : "Get to our truck!"; break;
+case 10 : tosay=(((me.attachments)&16)==16) ? "Get the flag to our base!" : (crates<5) ? "Capture the flag from the other team!" : "Get to our truck!"; break;
+}// Hmm.
+ voice.speak_interrupt(tosay);
+}// Quest.
+else if(key_pressed(KEY_X)) {
+string tosay="Your health is at " + round(me.health, 0) + "%. ";
+if(me.armor==0) tosay += "You have no armor.";
+ else {
+tosay += " You are wearing ";
+int a=me.armor;
+bool comma=((a&7)!=0);
+if((a&4)==4) tosay += "a military helmet";
+else if((a&2)==2) tosay += "a football helmet";
+else if((a&1)==1) tosay += "a bike helmet";
+if((comma)&&((a&56)!=0)) {comma=true; tosay += ", ";}
+if((a&32)==32) tosay += "a kevlar vest";
+else if((a&16)==16) tosay += "football pads";
+else if((a&8)==8) tosay += "a leather jacket";
+if((comma)&&((a&192)!=0)) {comma=true; tosay += ", ";}
+if((a&128)==128) tosay += "metal arm guards";
+else if((a&64)==64) tosay += "arm guards";
+if((comma)&&((a&(256|512))!=0)) {comma=true; tosay += ", and ";}
+if((a&512)==512) tosay += "metal shin pads";
+else if((a&256)==256) tosay += "shin guards";
+tosay += ". ";
+if((a&(1024|2048|4096|8192|16384|32768))!=0) tosay += "As secondary armor you are wearing ";
+comma=false;
+if((a&1024)==1024) {comma=true; tosay += "a hockey mask";}
+if((a&2048)==2048) {if(comma) tosay += ", "; comma=true; tosay += "leather gloves";}
+if((a&4096)==4096) {if(comma) tosay += ", "; comma=true; tosay += "shoulder pads";}
+if((a&8192)==8192) {if(comma) tosay += ", "; comma=true; tosay += "an athletic cup";}
+if((a&16384)==16384) {if(comma) tosay += ", "; comma=true; tosay += "knee pads";}
+if((a&32768)==32768) {if(comma) tosay += ", and "; tosay += "elbow pads";}
+}
+voice.speak_interrupt(tosay);
+}
+else if(key_pressed(KEY_C)) {
+string tosay = "You are at level " + level + ", with " + kills + " kills, " + rep + " reputation, and " + exp + " experience.";
+voice.speak_interrupt(tosay);
+}// Kills/rep/exp/etc.
+else if(key_pressed(KEY_V)) {
+string tosay="";
+if(@(me.atop)!=null) tosay += me.atop.name + ". ";
+ tosay += "You are at coordinates " + round(me.bounds.x+0.5, 0) + ", - " + round(me.bounds.y, 0) + ". ";
+voice.speak_interrupt(tosay);
+}
+if((key_pressed(KEY_TAB))||(key_pressed(KEY_F5))) voice.options_menu();
+else if(key_pressed(KEY_F1)) {
+// We have a memory leak. Let's find it.
+string results="";
+for(uint i=0; i<pool.items.length(); i++) {
+if(@(pool.items[i])!=null and @(pool.items[i].handle)!=null and pool.items[i].handle.playing==false and pool.items[i].persistent and pool.items[i].looping==false) {
+
+// Match it to a zombie or ally.
+bool found=false;
+for(uint j=0; j<map.zombies.length(); j++) {
+if(i==map.zombies[j].slot) {found=true; j+=100;}
+}// Zombies.
+if(!found) for(uint j=0; j<allyslots.length(); j++) {
+if(allyslots[j]==i) {found=true; j+=100;}
+}// Allies.
+if(!found) {
+results += "\r\n" + i + ", " + pool.items[i].filename;
+pool.destroy_sound(i);
+}// Clean it up, too.
+}// Non-playing, persistent sound.
+}// Loop.
+voice.speak_interrupt("Results (also copied to clipboard):\n" + results);
+clipboard_copy_text(results);
+}// Diagnosing sound bugs.
+else if(key_pressed(KEY_F11)) {stage++; pool.destroy_all(); pool.play_stationary("sounds/player/success.wav", false); wait(2000); @map=null; movers.resize(0); leftEdge=-1; rightEdge=-1; hurtslot=-1; }
+if(key_pressed(KEY_ESCAPE)) {
+pool.destroy_all(); // GRAAAAAAAH!!!
+paused=true; pool.play_stationary("sounds/menu/select.wav", false);
+leftEdge=-1; rightEdge=-1; hurtslot=-1;
+garbage_collect();
+for(uint i=0; i<map.objects.length(); i++) {
+ map.objects[i].slot=play_looped(map.objects[i].filename, map.objects[i].bounds, true);
+}
+
+}
+}// alt is not down.
+}
+bool bumped=false; // Bwahahaha?
+void step(double dt) {
+dt*=0.001;
+if(@map==null) {
+
+return;
+}// load map.
+tick++;
+if(me.counter>0.0) {me.counter-=dt; if(me.counter<=0.0) {me.counter=0.0;
+if(me.state==5) {me.state=0; pool.play_stationary("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Reloaded.wav", false);}
+}
+}
+else if(me.counter<0.0) {me.counter+=dt; if(me.counter>0.0) me.counter=0.0;}
+
+// Combustion weapons use gas.
+if(me.weaponClass==8) {
+ if(me.ammos[8][me.weapon]>0) {
+ if(AICounter%5==2) me.ammos[8][me.weapon]--;
+}// Using gas.
+ else if(weaponSound.playing) {weaponSound.stop(); pool.play_stationary("sounds/weapons/" + weaponNames[8][me.weapon] + "/TurnOff.wav", false);}
+ if((weaponSound.active)&&(!weaponSound.playing)&&(me.ammos[8][me.weapon]>0)) {weaponSound.stop(); weaponSound.load("sounds/weapons/" + weaponNames[8][me.weapon] + "/idle.wav"); weaponSound.play_looped();}
+}// Use gas.
+
+Rectangle@ b=newRectangle(me.bounds.x, me.bounds.y, me.bounds.width, me.bounds.height);
+double dx=dt*me.v.x;
+double dy=dt*me.v.y;
+ if((me.weaponClass==8)&&(me.weapon==2)&&(me.ammos[8][2]>0)) {
+dx*=2.0; // That might be too fast...
+ if((dx!=0.0)&&(weaponSound.pitch<=150)) weaponSound.pitch=weaponSound.pitch+1;
+ else if(weaponSound.pitch>100) weaponSound.pitch=weaponSound.pitch-random(4, 10);
+if(AICounter%5==0) makeNoise(me.bounds, 7);
+}// Motorcycle.
+else if(me.weaponClass==10) {dx*=0.5; if(dy>0.0) dy*=0.25;}
+ else if(me.weaponClass==11) {dx*=0.2; if(dy>0.0) dy=0.0;
+if((weaponSound.active)&&(!weaponSound.playing)) {pool.play_stationary("sounds/weapons/" + weaponNames[11][me.weapon] + "/Tail.wav", false); weaponSound.close();}
+ else if(weaponSound.playing) dx=0.0;
+}// Gatlanguns
+
+b.x+=dx; b.y+=dy;
+bool move=true;
+for(uint i=0; i<map.objects.length(); i++) {
+Object@ o=map.objects[i];
+//clipboard_copy_text("Object check " + i + ", tick " + tick + ". ");
+if(b.collide(o.bounds)) {
+if(o.type<8) {
+ if(((o.type)&2)==2) {
+if(me.bounds.y>o.bounds.y+o.bounds.height) {me.v.y=0; b.y=o.bounds.y+o.bounds.height; setAtop(o);}
+}// platform that's only solid from above.
+else if(((o.type)&1)==1) {
+if(me.bounds.y>=o.bounds.y+o.bounds.height) {me.v.y=0; b.y=o.bounds.y+o.bounds.height; setAtop(o);}
+else {move=false; bumped=true; playsound(getBump(o.terrain), o.bounds, false);
+//alert("Results", "You hit something. Your position is " + round(me.bounds.x, 3) + ", " + round(me.bounds.y, 3) + ", and the object is " + round(o.bounds.x, 1) + ", " + round(o.bounds.y, 1) + ", " + round(o.bounds.width, 1) + ", " + round(o.bounds.height, 1) + ". Your velocity is " + round(me.v.x, 3) + ", " + round(me.v.y, 3) + ". ");
+//exit();
+}
+}// solid.
+}// It might be solid.
+else if((o.type==lute)||(o.type==misc)) {getItem(o); map.objects.remove_at(i);
+if(o.v.x!=0 or o.v.y!=0) for(uint mmi=0; mmi<movers.length(); mmi++) {if(@(movers[mmi])==@o) movers.remove_at(mmi);}
+}
+else if((o.type==safezone)&&(me.health<100)) {me.health+=dt; if(me.health>=100.0) {me.health=100.0; voice.speak_interrupt("Full health");}
+//clipboard_copy_text("Healing...");
+ for(uint jj=0; jj<allies.length(); jj++) {
+if(allies[jj].bounds.intersects(o.bounds)) {
+crates++;
+ playsound("sounds/voices/" + allies[jj].voice + "/" + ((random(0, 5)<2) ? "Brag" : (random(0, 5)>3) ? "ready" : (random(0, 5)==2) ? "Battlecry" : "mission") + random(1, 3) + ".wav", allies[jj].bounds, false);
+pool.destroy_sound(allyslots[jj]);
+allies.remove_at(jj); allyslots.remove_at(jj);
+story_check();
+}// Ally escapes.
+// if there's a missing brace, this is where it goes.
+}
+}
+else if(o.type==safezone) {
+//clipboard_copy_text("Full health.");
+ for(uint jj=0; jj<allies.length(); jj++) {
+if(allies[jj].bounds.intersects(o.bounds)) {
+crates++;
+ playsound("sounds/voices/" + allies[jj].voice + "/" + ((random(0, 5)<2) ? "Brag" : (random(0, 5)>3) ? "ready" : (random(0, 5)==2) ? "Battlecry" : "mission") + random(1, 3) + ".wav", allies[jj].bounds, false);
+pool.destroy_sound(allyslots[jj]);
+allies.remove_at(jj); allyslots.remove_at(jj);
+story_check();
+}// Ally escapes.
+}
+ if((key_pressed(KEY_RETURN))&&(rep>=100.0)) {
+time.pause();
+pool.pause_all();
+pool.play_stationary("sounds/menu/menu.wav", false);
+ garbage_collect();
+voice.speak_interrupt("Safe zone menu");
+int mx=0;
+string[] options={"Return to game", "Play slots"};
+keys_pressed();
+ bool mcont=true;
+while(mcont) {
+if(key_pressed(KEY_F4)) exit();
+bool mspeak=true;
+if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) mx--;
+else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) mx++;
+ else if(key_pressed(KEY_ESCAPE)) {mspeak=false; mcont=false;}
+ else if(key_pressed(KEY_RETURN)) {
+if(mx==1) {
+ rep-=100.0;
+pool.play_stationary("sounds/menu/upgrade.wav", false); wait(500);
+voice.speak_interrupt("Press space to stop each wheel. If all three match, you\'ll receive a weapon, or ammo if you already have it. The weapons will be stronger the higher your level. Press enter to begin.");
+slot_machine();
+}// Slots.
+mcont=false; mspeak=false;
+}
+else mspeak=false;
+ if(mx<0) mx=options.length()-1;
+ else if(mx>=options.length()) mx=0;
+ if(mspeak) {pool.play_stationary("sounds/menu/select.wav", false); voice.speak_interrupt(options[mx]);}
+
+wait(5);
+}
+pool.play_stationary("sounds/menu/enter.wav", false);
+pool.resume_all();
+time.restart(); time.resume();
+}// Slots.
+}
+else if((o.type==trap)&&((hurtslot<0)||(!pool.sound_is_playing(hurtslot)))) {if(hurtslot>=0) pool.destroy_sound(hurtslot); hurtslot=playsound("sounds/voices/" + me.voice + "/hurt" + random(1, 3) + ".wav", b, true); me.health-=random(0, 10);}
+else if(o.type==deathtrap) me.health=0.0;
+}// Meh.
+}//loop.
+if(move) {
+if((round(b.x, 0)!=round(me.bounds.x, 0))&&(@(me.atop)!=null)) playsound("sounds/steps/" + me.atop.terrain + "/run" + random(1, 9) + ".wav", b, false);
+me.bounds.x=b.x; me.bounds.y=b.y;
+}
+if(@(me.atop)!=null) {
+if(!me.bounds.collide(me.atop.bounds)) @(me.atop)=null;
+}
+else {me.v.y-=9.8*dt;
+}
+if(me.bounds.x<map.bounds.x) me.bounds.x=map.bounds.x;
+else if(me.bounds.y<map.bounds.y) {
+pool.destroy_all();
+pool.play_stationary("sounds/weapons/kill" + random(1, 4) + ".wav", false);
+leftEdge=-1; rightEdge=-1; hurtslot=-1;
+garbage_collect();
+voice.speak_interrupt("You have fallen to your death.");
+@map=null;
+movers.resize(0);
+ allies.resize(0); allyslots.resize(0);
+return;
+}
+bool opt=(movers.length()*map.objects.length()>512);
+if(opt) {movcount++; if(movcount>=movers.length()) movcount=0; dt*=movers.length();}
+if(dt>=1.0) {voice.speak("DT too large: " + dt + ". "); dt=0.05;}
+for(uint i=0; i<movers.length(); i++) {
+if((opt)&&(movcount!=i)) continue; //movcounter--; if(movcount<0) movcount=movers.length()-1; // 2:07 PM 11/15/2013, for efficiency's sake?
+// adjust DT, and this should be fine.
+Rectangle@ b=newRectangle(movers[i].bounds.x, movers[i].bounds.y, movers[i].bounds.width, movers[i].bounds.height);
+Object@ o=movers[i];
+b.x+=o.v.x*dt; b.y+=o.v.y*dt;
+move=true;
+for(uint j=0; j<map.objects.length(); j++) {
+Object@ o2=map.objects[j];
+if(@o2==@o) continue;
+if((o2.type<8)&&(((o2.type)&1)==1)&&(o2.bounds.collide(b))) {
+if(o.bounds.x>o2.bounds.x+o2.bounds.width) o.v.x*=-1;
+else if(o.bounds.x+o.bounds.width<o2.bounds.x) o.v.x*=-1;
+if((o.bounds.y>o2.bounds.y+o2.bounds.height)||(o.bounds.y+o.bounds.height<o2.bounds.y)) o.v.y*=-1;
+move=false;
+playsound(getBump(o.terrain), b, false);
+}// No move.
+}// loop?
+if((b.x<map.bounds.x)||(b.x+b.width>=map.bounds.x+map.bounds.width)) {move=false; o.v.x*=-1;}
+if((b.y<map.bounds.y)||(b.y+b.height>map.bounds.y+map.bounds.height)) {move=false; o.v.y*=-1;}
+if(move) {movers[i].bounds.x=b.x; o.bounds.y=b.y;
+if(movers[i].slot>=0) pool.update_sound_2d(o.slot, o.bounds.x, o.bounds.y);
+if(@(me.atop)==@o) {me.bounds.x+=o.v.x*dt; me.bounds.y+=o.v.y*dt; me.bounds.y=o.bounds.y+o.bounds.height; // 9:44 PM 11/15/2013: Sick of getting dumped from vertical-scrolling platforms.
+if(rightEdge>=0) pool.update_sound_2d(rightEdge, o.bounds.x+o.bounds.width, o.bounds.y+o.bounds.height);
+if(leftEdge>=0) pool.update_sound_2d(leftEdge, o.bounds.x, o.bounds.y+o.bounds.height);
+}// You're atop this moving object.
+}//Move
+}// movers.
+if(opt) dt/=movers.length();
+if(!allies.is_empty()) for(uint i=0; i<allies.length(); i++) {
+Char@ ally=allies[i];
+if(ally.counter==0.0) {
+if((@(me.atop)==null and stage<10) or key_down(KEY_F)) {
+
+if(me.bounds.x<ally.bounds.x) ally.v.x=-4.0; else if(me.bounds.x>ally.bounds.x) ally.v.x=4.0;
+ if((me.bounds.y>ally.bounds.y)&&(ally.v.y<=0.0)) ally.v.y=9.8;
+@(ally.atop)=null;
+}// Moving.
+ else if(@(ally.atop)==@(me.atop)) {
+ ally.bounds.y=me.bounds.y;
+ if(@(me.atop)!=null and me.atop.v.x!=0.0) ally.v.x=ally.atop.v.x; else if(ally.bounds.x<me.bounds.x) ally.v.x=4.0; else if(ally.bounds.x>me.bounds.x) ally.v.x=-4.0;
+}// On the same platform.
+ else if(@(ally.atop)==null) {
+@(ally.atop)=me.atop;
+if(@(ally.atop)==null) @(ally.atop)=map.objects[random(0, map.objects.length()-1)];
+ally.bounds.y=ally.atop.bounds.y+ally.atop.bounds.height;
+if(ally.bounds.x<ally.atop.bounds.x) ally.bounds.x=ally.bounds.x;
+else if(ally.bounds.x>ally.atop.bounds.x+ally.atop.bounds.width) ally.bounds.x=ally.atop.bounds.x+ally.atop.bounds.width;
+}// What to do...?
+else {
+ ally.bounds.y=ally.atop.bounds.y+ally.atop.bounds.height;
+if(ally.atop.v.x!=0.0) ally.v.x=ally.atop.v.x; else if(ally.east) ally.v.x=4.0; else ally.v.x=-4.0;
+if(ally.bounds.x<ally.atop.bounds.x) ally.east=true; else if(ally.bounds.x>=ally.atop.bounds.x+ally.atop.bounds.width) {ally.east=false; ally.v.x=-4.0;}
+}// Hmm.
+
+double second=0.001*allytimer.elapsed;
+if(floor(second)!=floor(second-dt)) {
+int sec=floor(second);
+if(sec%allies.length()==i) {
+ if(ally.health<75) playsound("sounds/voices/" + ally.voice + "/Medic" + random(1, 3) + ".wav", ally.bounds, false);
+else if(ally.ammos[ally.weaponClass][ally.weapon]<=0) {
+ally.state=5; ally.counter=2.0;
+ playsound("sounds/voices/" + ally.voice + ((ally.weaponClass>1) ? "/Reload" : "/CoverMe") + random(-2, 3) + ".wav", ally.bounds, false);
+ playsound("sounds/weapons/" + weaponNames[ally.weaponClass][ally.weapon] + "/reloading.wav", ally.bounds, false);
+ ally.ammos[ally.weaponClass][ally.weapon]=24; // 9:13 PM 1/11/2015: was originally 30. I fixed a bug that screwed with their aim, so I reduced the ammo to be closer to average.
+}// Reload.
+else if(@(ally.atop)!=@(me.atop)) playsound("sounds/voices/" + ally.voice + "/Beckon" + random(1, 3) + ".wav", ally.bounds, false);
+}// Talk?
+}// Yay?
+
+if((ally.counter==0.0)&&(ally.ammos[ally.weaponClass][ally.weapon]>0)) {
+int range=ally.weaponClass*3;
+ if(ally.weaponClass==8) range=4;
+Rectangle@ fight=newRectangle(ally.bounds.x-range, ally.bounds.y, 2*range-1, ally.bounds.height);
+for(uint j=0; j<map.zombies.length(); j++) {
+ if(map.zombies[j].bounds.collide(fight)) {
+ally.counter=0.50;
+Bullet@ b=newBullet(
+"Bullet",
+ally.bounds.x, ally.bounds.y+0.4);
+ b.bounds.width=0.5; b.bounds.height=0.5;
+ b.damage=random(25, 300); b.hits=1;
+b.v.x=10.0; if(map.zombies[j].bounds.x<ally.bounds.x) b.v.x*=-10.0;
+b.counter=3.0;
+ally.counter=0.5;
+switch (ally.weaponClass) {
+ case 8 :
+case 1 : {
+b.counter=0.3; b.v.x=0; b.bounds.x=ally.bounds.x- ((ally.weaponClass==8) ? 2 : 1); b.bounds.y=ally.bounds.y; b.bounds.width=(ally.weaponClass==8) ? 5 : 3; b.bounds.height=3;
+ b.name=weaponNames[ally.weaponClass][ally.weapon];
+ if(b.name=="Machete") b.name="Sword";
+ if((ally.weaponClass==8)&&(ally.weapon!=0)) b.name=(ally.weapon==1) ? "Flame" : "Chainsaw";
+}; break;
+ case 3 : b.name="Shell"; break;
+case 10 :
+ case 11 :
+ case 5 :
+ case 6 : b.name="Burst"; break;
+ case 7 : {
+ b.name="Arrow"; if(ally.weapon==3) b.name="Knife";
+}; break;
+ case 9 : {b.name="Sniper"; b.damage=random(60, 500); ally.counter=1.0;}; break;
+}//  WeaponClass Switch.
+bullets.insert_last(b); ally.ammos[ally.weaponClass][ally.weapon]--;
+if(b.name=="burst") ally.ammos[ally.weaponClass][ally.weapon]-=2;
+ if((ally.weaponClass==5)||(ally.weaponClass==6)) playsound("sounds/weapons/" + weaponNames[ally.weaponClass][ally.weapon] + "/BurstM.wav", ally.bounds, false);
+ else playsound("sounds/weapons/" + weaponNames[ally.weaponClass][ally.weapon] + "/FireM.wav", ally.bounds, false);
+
+}// Attack!
+}// Zombies.
+}// Fighting.
+
+}// Counter=0.0;
+ else if(ally.counter>0.0) {ally.counter-=dt; if(ally.counter<=0.0) {ally.counter=0.0; if(ally.state==5) playsound("sounds/weapons/" + weaponNames[ally.weaponClass][ally.weapon] + "/Reloaded.wav", ally.bounds, false); ally.state=0;}}
+ else if(ally.counter<0.0) {ally.counter+=dt; if(ally.counter>=0.0) ally.counter=0.0;}
+ 
+ if(@(ally.atop)==null) ally.v.y-=9.0*dt;
+double x=floor(ally.bounds.x);
+ally.bounds.x+=ally.v.x*dt; ally.bounds.y+=ally.v.y*dt;
+if((x!=floor(ally.bounds.x))&&(@(ally.atop)!=null)) playsound("sounds/steps/" + ally.atop.terrain + "/run" + random(1, 9) + ".wav", ally.bounds, false);
+pool.update_sound_2d(allyslots[i], ally.bounds.x, ally.bounds.y);
+
+}// Allies.
+
+
+if(me.health<=0.0) {playsound("sounds/player/death" + random(1, 3) + ".wav", me.bounds, false);
+@map=null;
+ allies.resize(0); allyslots.resize(0);
+wait(1500);
+voice.speak_interrupt_wait("You have been killed!");
+@map=null;
+movers.resize(0);
+me.health=100;
+pool.destroy_all();
+leftEdge=-1; rightEdge=-1; hurtslot=-1;
+garbage_collect();
+return;
+}// death
+
+if(@map!=null) {
+if(AICounter>=map.zombies.length()) AICounter=0;
+else if(AICounter<0) AICounter=0;
+else {
+Zombie@ z=map.zombies[AICounter];
+z.step(dt*map.zombies.length()); //Yes?
+ if((z.counter==0.0)&&(z.bounds.collide(me.bounds))&&(z.name!="Raider")) {
+bool blocked=false;
+if(me.weaponClass==1) {
+ if(me.weapon==0) blocked=(random(1, 10)==8);
+ else if(me.weapon==1) blocked=(random(1, 10)!=4);
+ else if(me.weapon==3) blocked=(random(1, 10)>=8);
+}// Melee.
+ else if((me.weaponClass==8)&&(random(0, 10)>5)&&((me.weapon==0))) blocked=true;
+ else if((me.weaponClass==6)&&(random(0, 10)>8)&&((me.weapon==6)||(me.weapon==1))) blocked=true;
+ else if((me.weaponClass==7)&&(me.weapon==3)&&(random(0, 10)>8)) {blocked=true; playsound("sounds/Weapons/AK47/Block" + random(1, 3) + ".wav", me.bounds, false);}
+if(blocked) {playsound("sounds/weapons/" + weaponNames[me.weaponClass][me.weapon] + "/Block" + random(1, 3) + ".wav", me.bounds, false); z.counter=z.aspeed/random(1, 10); if(me.weapon>=2) me.counter=0.0;}
+else {
+ playsound("sounds/zombies/" + z.name + "/attack" + random(1, 3) + ".wav", z.bounds, false);
+z.counter=z.aspeed/random(1, 10);
+double armor=1.0;
+int a=me.armor;
+ if((a&4)==4) armor-=0.1;
+ else if((a&2)==2) armor-=0.075;
+ else if((a&1)==1) armor-=0.05;
+ if((a&32)==32) armor-=0.1;
+ else if((a&16)==16) armor-=0.075;
+ else if((a&8)==8) armor-=0.05;
+ if((a&128)==128) armor-=0.1;
+ else if((a&64)==64) armor-=0.075;
+ if((a&512)==512) armor-=0.1;
+ else if((a&256)==256) armor-=0.075;
+
+
+if((a&(1024|2048|4096|8192|16384|32768))!=0) {
+for(uint j=1024; j<=32768; j<<=1) {if((a&j)==j) armor-=0.025;}
+}// Secondary armor.
+if(armor<=0.25) clipboard_copy_text("Too much armor! " + round(armor, 3));
+if(armor<=0.0) armor=0.25;
+me.health-=armor*z.strength/random(1, 10);
+if(z.name=="Tentacle") {
+z.state=2;
+}// Dragging.
+}}// damage player.
+if((z.counter==0.0)&&(!allies.is_empty())) {
+for(uint ii=0; ii<allies.length(); ii++) {
+if(z.bounds.intersects(allies[ii].bounds)) {
+ playsound("sounds/zombies/" + z.name + "/attack" + random(1, 3) + ".wav", z.bounds, false);
+// Tentacles can drag allies away, too.
+if(z.name=="Tentacle") z.state=2;
+z.counter=z.aspeed/random(1, 10);
+ allies[ii].health-=z.strength/random(1, 10);
+ playsound("sounds/voices/" + allies[ii].voice + "/hurt" + random(1, 3) + ".wav", allies[ii].bounds, false);
+if(allies[ii].health<=0.0) {
+pool.destroy_all();
+ sound snd;
+snd.load("sounds/Ambience/Fail.wav");
+ snd.play_wait();
+
+ me.health=-1;
+break;
+}// Mission Failed.
+}}
+}// Allies.
+if((z.counter==0.0)&&((z.slot<0)||(!pool.sound_is_playing(z.slot)))&&(random(1, 5)==4)&&(absolute(z.bounds.x-me.bounds.x)<=10)&&(absolute(z.bounds.y-me.bounds.y)<=10)) {
+if((random(1, 10)==4)&&(z.name=="Matriarch")) {
+z.counter=1.0;
+pool.destroy_sound(z.slot);
+ z.slot=playsound("sounds/zombies/Matriarch/call" + random(1, 3) + ".wav", z.bounds);
+// Not... sure how these should work. Summoning? Luring doesn't seem very practical.
+
+// 10:30 AM 11/19/2013: Ok, she can summon.
+Object@ o=me.atop;
+ if(@o==null) @o=z.atop;
+ if(@o /*still*/ == null) {
+map.addZombie("Normal", me.bounds.x+random(-5, 6), me.bounds.y); map.zombies[map.zombies.length()-1].fallchance=50;
+map.addZombie("Stalker", me.bounds.x+random(-5, 6), me.bounds.y); map.zombies[map.zombies.length()-1].fallchance=50;
+}// Magic floating zombies or something.
+ else {map.addZombie("Normal", o); map.addZombie("Stalker", o);}
+makeNoise(z.bounds, 10);
+}// Matriarch call.
+else if((z.name=="Dire")&&(stage>5)&&(random(1, 10)==7)&&(absolute(z.bounds.x-me.bounds.x)<=10)&&(absolute(z.bounds.y-me.bounds.y)<=5)) {
+z.play("sounds/zombies/Dire/howl" + random(1, 3) + ".wav");
+z.counter=3.0;
+Object@ o=me.atop;
+ if(@(z.atop)!=null) @o=z.atop;
+ if(@o!=null) {map.addZombie("Canine", o); map.addZombie("Canine", o);}
+makeNoise(z.bounds, 15);
+}// Dire howls.
+else if(z.name=="Raider") {
+int rvoice=(AICounter%55)+1;
+int w=z.strength;
+int wc=(w>>4)&0xF;
+w&=0xF;
+ int ract=random(1, 5);
+ if(ract<4) {z.clearSlot();
+ if(stage==10 and crates<15 and z.awareness!=5) z.slot=playsound("sounds/Ambience/Cry" + random(1, 5) + ".wav", z.bounds, true);
+ else z.slot=playsound("sounds/voices/" + rvoice + "/taunt" + ract + ".wav", z.bounds, true);
+ z.counter=3.0;}
+// else if(ract==5) {z.clearSlot(); z.slot=playsound("sounds/voices/" + rvoice + "/reload" + random(1, 3) + ".wav", z.bounds, true); z.counter=1.25; z.state=2;}
+ else {z.state=2; z.counter=random(2, 8);}
+}// Raiders.
+// Should the Behemoth spawn more tentacles?
+else z.play("sounds/zombies/" + z.name + "/growl" + random(1, 7) + ".wav");
+}// Growls and howls.
+else if((absolute(z.bounds.x-me.bounds.x)>10)||(absolute(z.bounds.y-me.bounds.y)>10)) {if(z.slot>=0) z.clearSlot();}
+
+if(stage==10) {
+if(@(z.atop)==null) {
+		@(z.atop)=map.objects[random(0, map.objects.length()-1)];
+		z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+	}// Find something to stand on, for this is important.
+		if(round(z.bounds.x, 0)<=z.atop.bounds.x) {
+if(string_left(z.atop.name, 3)=="Red") {
+ if(z.awareness==5) {
+@(z.atop)=map.objects[2];
+z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+z.bounds.x=z.atop.bounds.x+1;
+if(z.v.x<0) z.v.x*=-1;
+playsound("sounds/weapons/m40/CrouchOn.wav", z.bounds, false);
+}// No flag.
+}// Red base
+else if(z.awareness==5 and @(z.atop)==@(map.objects[0])) {
+z.bounds.x=4; if(z.v.x<0) z.v.x*=-1;
+@(z.atop)=map.objects[5];
+z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+playsound("sounds/weapons/m40/CrouchOff.wav", z.bounds, false);
+}// entering the blue base.
+else if(z.awareness==5 and z.bounds.x<1.0) {
+z.awareness=4;
+z.v.x=absolute(z.v.x);
+pool.play_stationary("sounds/player/Receive.wav", false);
+voice.speak_interrupt("The enemy has your flag!");
+playsound("sounds/ambience/cry" + random(1, 5) + ".wav", z.bounds, false);
+}// Stealing the flag.
+else if(z.awareness!=5 and @(z.atop)==@(map.objects[5])) {
+ @(z.atop)=map.objects[0];
+z.bounds.y=z.atop.bounds.height;
+playsound("sounds/weapons/m40/crouchon.wav", z.bounds, false);
+z.v.x=absolute(z.v.x);
+}// Leaving the blue base.
+else if(z.awareness!=5 and @(z.atop)==@(map.objects[2])) {
+@(z.atop)=map.objects[4];
+z.bounds.x=z.atop.bounds.x+0.9;
+z.v.x=absolute(z.v.x);
+z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+playsound("sounds/weapons/m40/CrouchOff.wav", z.bounds, false);
+}// Inside the Red Base.
+}// Left edge.
+else if(z.bounds.x>=z.atop.bounds.x+z.atop.bounds.width-0.01) {
+if(z.awareness!=5 and @(z.atop)==@(map.objects[0])) {
+@(z.atop)=map.objects[2];
+z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+z.bounds.x=z.atop.bounds.x+z.atop.bounds.width-1;
+playsound("sounds/weapons/m40/crouchoff.wav", z.bounds, false);
+}// Entering the red base.
+else if(z.awareness==5 and @(z.atop)==@(map.objects[5])) {
+@(z.atop)=@(map.objects[7]);
+z.bounds.x=z.atop.bounds.x+z.atop.bounds.width-0.5;
+z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+playsound("sounds/weapons/m40/CrouchOff.wav", z.bounds, false);
+z.v.x=-absolute(z.v.x);
+playsound("sounds/ambience/alarm" + random(1, 3) + ".wav", newRectangle(0, 0, 20, 20), false);
+}// Inside the blue base.
+else if(z.awareness!=5 and @(z.atop)==@(map.objects[7])) {
+@(z.atop)=map.objects[5];
+ z.bounds.y=z.atop.bounds.y+z.atop.bounds.height;
+z.bounds.x++;
+z.v.x=-absolute(z.v.x);
+playsound("sounds/weapons/M40/CrouchOn.wav", z.bounds, false);
+}// leaving the blue base.
+else if(z.awareness!=5 and crates<4 and @(z.atop)==@(map.objects[4])) {
+me.health=-1;
+pool.pause_all();
+sound snd;
+snd.load("sounds/ambience/fail.wav");
+snd.play_wait();
+}// Failed.
+}// right edge.
+
+}// CTF AI.
+
+if(z.state==2 and z.name=="Raider") {
+int rvoice=(AICounter%55)+1;
+int w=z.strength;
+int wc=(w>>4)&0xF;
+w&=0xF;
+
+int cnt=z.counter;
+double decim=z.counter-cnt;
+if(decim<dt*map.zombies.length() or decim>1.0-(dt*map.zombies.length())) {
+ cnt=round(z.counter, 0);
+ if(cnt==1) {
+ z.clearSlot();
+ z.slot=playsound("sounds/weapons/" + weaponNames[wc][w] + "/Reloading.wav", z.bounds, true);
+}
+else if(cnt>1) {
+int range=wc*3;
+ if(wc==8) range=4;
+Rectangle@ fight=newRectangle(z.bounds.x-range, z.bounds.y, 2*range-1, z.bounds.height);
+Bullet@ b=newBullet(
+"Bullet",
+z.bounds.x, z.bounds.y+0.4);
+ b.bounds.width=0.5; b.bounds.height=0.5;
+ b.damage=random(25, 100); b.hits=1;
+b.v.x=10.0; if(me.bounds.x<z.bounds.x) b.v.x*=-10.0;
+b.counter=3.0;
+
+switch (wc) {
+ case 8 :
+case 1 : {
+b.counter=0.3; b.v.x=0; b.bounds.x=z.bounds.x- ((wc==8) ? 2 : 1); b.bounds.y=z.bounds.y; b.bounds.width=(wc==8) ? 5 : 3; b.bounds.height=3;
+ b.name=weaponNames[wc][w];
+ if(b.name=="Machete") b.name="Sword";
+ if((wc==8)&&(w!=0)) b.name=(w==1) ? "Flame" : "Chainsaw";
+}; break;
+ case 3 : b.name="Shell"; break;
+case 10 :
+ case 11 :
+ case 5 :
+ case 6 : b.name="Burst"; break;
+ case 7 : {
+ b.name="Arrow"; if(w==3) b.name="Knife";
+}; break;
+ case 9 : {b.name="Sniper"; b.damage=random(60, 500); z.counter=1.05; b.bounds.height=1.0; b.bounds.width=1.0;}; break;
+case 12 : {
+b.name=(w<2) ? "Grenade" : "Explosive";
+if(w==0) b.v.x*=0.5;
+z.counter=1.05;
+}; break;
+}//  WeaponClass Switch.
+b.name=string_to_upper_case(b.name);
+bullets.insert_last(b);
+
+ if((wc==5)||(wc==6)) playsound("sounds/weapons/" + weaponNames[wc][w] + "/BurstM.wav", z.bounds, false);
+ else playsound("sounds/weapons/" + weaponNames[wc][w] + "/FireM.wav", z.bounds, false);
+
+}//Shooting.
+}// second.
+else if(z.counter<=dt*map.zombies.length()) {playsound("sounds/weapons/" + weaponNames[wc][w] + "/Reloaded.wav", z.bounds, false); z.state=0;}
+}// raider AI.
+else if(z.state==2 and z.name=="Tentacle") {
+// Two things: find the target, and find the Behemoth.
+// If there is no Behemoth, turn into a Lamprey or Flayer or something.
+Zombie@ beh=null;
+Char@ victim=null;
+for(uint jb=0; jb<map.zombies.length(); jb++) {
+if(map.zombies[jb].name=="Behemoth") {@beh=map.zombies[jb]; jb=map.zombies.length();}
+}
+if(@beh==null) {
+ z.name="Flayer";
+ z.strength*=1.5;
+ z.exp+=5;
+ z.health=300;
+ z.bounds.width=1.25;
+ z.bounds.height=1.75;
+ z.speed+=0.1; z.speed=round(z.speed, 0);
+ z.awareness++;
+ playsound("sounds/zombies/Flayer/growl" + random(1, 7) + ".wav", z.bounds, false);
+ // Feel like I missed something. Oh yeah! State changes!
+ z.state=0;
+ z.counter/=random(1, 20);
+}// Flayer.
+ else {
+ for(uint ji=0; ji<allies.length(); ji++) {
+   if(z.bounds.collide(allies[ji].bounds)) @victim=allies[ji];
+}// Allies.
+if(@victim==null) @victim=me;
+ Rectangle@ targ=(!victim.bounds.collide(z.bounds)) ? victim.bounds : beh.bounds;
+if(z.bounds.x<targ.x) z.v.x=z.speed;
+else if(z.bounds.x>=targ.x+targ.width) z.v.x=-z.speed;
+else z.v.x=0.0;
+if(z.bounds.y>targ.y) z.v.y=-z.speed;
+ else if(z.bounds.y<targ.y) z.v.y=z.speed;
+ else {
+z.v.y=0.0;
+ // Atop?
+}
+ if(@targ!=@(victim.bounds)) {victim.v.x+=z.v.x; victim.v.y=z.v.y;
+ // But...
+  victim.bounds.x+=z.v.x*dt*AICounter; victim.bounds.y+=z.v.y*dt*AICounter; // Danger!
+}
+
+// Dragging through walls is horrible, so let's not.
+ for(uint oi=0; oi<map.objects.length(); oi++) {
+if(map.objects[oi].type==solid and victim.bounds.collide(map.objects[oi].bounds)) {
+if(beh.bounds.y<victim.bounds.y) {victim.bounds.y-=dt*AICounter*4.0; z.bounds.y=victim.bounds.y; if(victim.bounds.collide(map.objects[oi].bounds)) oi--;}
+else {victim.bounds.y=map.objects[oi].bounds.y+map.objects[oi].bounds.height; @(victim.atop)=map.objects[oi]; @(z.atop)=victim.atop; z.bounds.y=victim.bounds.y;}
+}
+}// dragging through walls.
+
+}// Behemoth found.
+}// dragging.
+
+if(z.health<=0.0) {//if(z.slot>=0) pool.destroy_sound(z.slot);
+z.clearSlot(); if(z.slot>=0) alert("The pfargtl?", "Z.Clearslot clearly failed.");
+ playsound("sounds/weapons/kill" + random(1, 4) + ".wav", z.bounds, false); map.zombies.remove_at(AICounter);
+if(stage==10 and z.awareness!=5 and z.name[2]=="i") getItem(newObject("crate", 9, z.bounds));
+kills++; addExp(z.exp);
+string[] zoms={"Canine", "Normal", "Stalker", "Giant", "Lamprey", "Normal", "Stalker", "Canine", "Giant", "Matriarch", "Tyrant"};
+if(stage>1) zoms.insert_last("Dire");
+if(stage>5) {zoms.insert_last("Amorphous"); zoms.insert_last("Matriarch"); zoms.insert_last("Amorphous");}
+if(stage>7) {zoms.insert_last("Tentacle"); zoms.insert_last("Dire"); zoms.insert_last("Tentacle"); zoms.insert_last("Dire"); zoms.insert_last("Behemoth"); zoms.insert_last("Tyrant");}
+if(stage>8) {zoms.insert_last("Hulk"); zoms.insert_last("Raider"); zoms.remove_at(0); zoms.remove_at(0);}
+Object@[] bg; bg.reserve(10);
+for(uint jj=0; jj<map.objects.length(); jj++) {
+Object@ o=map.objects[jj];
+ if(((o.type!=solid)&&(o.type!=platform))||(o.bounds.width<5.0)) continue;
+bg.insert_last(o);
+}// Pick somewhere to spawn the zombie.
+int maxz=20;
+if(stage==6 or stage==8 or stage==9) maxz=30;
+if(stage==10) {maxz=random(3, 10); zoms.resize(3); zoms[0]="Raider"; zoms[1]="raider"; zoms[2]="Raider"; zoms.insert_last("Hulk");}
+while((stage>0)&&(map.zombies.length()<maxz)) {
+ map.addZombie(zoms[random(0, zoms.length()-1)], bg[random(0, bg.length()-1)]);
+}// Respawn!
+ }
+AICounter++; if(AICounter>=map.zombies.length()) AICounter=0;
+}// In range?
+}// zombies.
+
+for(uint i=0; i<bullets.length(); i++) {
+Bullet@ bullet=bullets[i];
+bool grenade=(bullet.name=="Grenade" or bullet.name=="GRENADE");
+
+ if((bullet.v.x!=0.0)||(bullet.v.y!=0.0)) {
+ bullet.bounds.x+=bullet.v.x*dt; bullet.bounds.y+=bullet.v.y*dt;
+if(grenade) {
+bool grav=true;
+for(uint oj=0; oj<map.objects.length(); oj++) {
+ if(((map.objects[oj].type==solid)||(map.objects[oj].type==(breakable|solid)))&&(map.objects[oj].bounds.intersects(bullet.bounds))) {
+if(bullet.bounds.y+bullet.bounds.height>map.objects[oj].bounds.y+map.objects[oj].bounds.height) {
+bullet.bounds.y=map.objects[oj].bounds.y+map.objects[oj].bounds.height;
+if(bullet.v.y<0.0) { bullet.v.y=0.0; playsound("sounds/weapons/Grenade/roll.wav", bullet.bounds, false);}
+grav=false;
+}// roll.
+else if(bullet.bounds.y<map.objects[oj].bounds.y) {
+if(bullet.v.y>=0.0) bullet.v.y=-1.0;
+ bullet.bounds.y=map.objects[oj].bounds.y-bullet.bounds.height-0.01;
+}// bounce.
+else bullet.counter=0.0;
+}// Umm.
+}// Loop.
+if((grav)&&(bullet.v.y>-10.0)) bullet.v.y-=9.8*dt;
+}// Grenades can collide.
+
+}// Moving bullets, I really don't want to handle collision with walls.
+
+for(uint j=0; j<map.zombies.length(); j++) {if(bullet.bounds.collide(map.zombies[j].bounds)) {
+if(grenade) bullet.counter=0.0;
+if(map.zombies[j].name=="Raider") {
+ if(!string_is_upper_case(bullet.name)) {
+map.zombies[j].health-=bullet.damage;
+map.zombies[j].clearSlot();
+playsound("sounds/voices/" + ((j%55)+1) + "/hurt" + random(1, 3) + ".wav", map.zombies[j].bounds, false);
+}// hitting raiders.
+else bullet.hits++;
+}// raiders.
+else map.zombies[j].health-=bullet.damage;
+string toplay="sounds/zombies/" + map.zombies[j].name + "/" + bullet.name + random(1, 3) + ".wav";
+playsound(toplay, map.zombies[j].bounds, false);
+bullet.hits--;
+ if(bullet.hits<=0) j=map.zombies.length();
+}}// hit zombie.
+
+ if(string_is_upper_case(bullet.name) and bullet.bounds.collide(me.bounds)) {
+ if((me.crouching or (me.weaponClass==1 and me.weapon==1)) and random(1, 10)!=4) {
+ string toplay="G17";
+  if(bullet.name=="SHELL") toplay="AA12";
+  else if(bullet.name=="BURST") toplay="ACR";
+  else if(bullet.name=="VULCAN") toplay="VULCAN";
+  else if(bullet.name=="SNIPER") toplay="M40";
+  else if(bullet.name=="ARROW") toplay="Crossbow";
+  playsound("sounds/weapons/" + toplay + "/wall.wav", bullet.bounds, false);
+ bullet.hits=0;
+}// dodge.
+ else {
+ me.health-=random(0, bullet.damage);
+ playsound("sounds/zombies/normal/" + bullet.name + "1.wav", bullet.bounds, false);
+  playsound("sounds/player/hurt" + random(1, 3) + ".wav", me.bounds, false); // Jeqocon2: was sounds/player.hurt
+  bullet.hits=0;
+ }// hit player.
+}// Raiders.
+
+bullet.counter-=dt;
+if((bullet.counter<=0.0)||(bullet.hits<=0)) {bullets.remove_at(i);
+if(grenade) {
+Bullet@ b=newBullet("Explosive", bullet.bounds.x-2, bullet.bounds.y-1);
+ b.bounds.width=5; b.bounds.height=4;
+b.counter=1.0; b.v.x=0.0; b.v.y=0.01*random(-50, 50);
+b.damage=random(60, 500);
+ b.hits=random(3, 10);
+playsound(
+((bullet.v.x>=5.0) ? "sounds/Weapons/M79/Explode.wav" : "sounds/weapons/Grenade/Explode.wav"), // Jeqocon2: was sounds/M79/
+ b.bounds, false);
+bullets.insert_last(b);
+for(uint oj=0; oj<map.objects.length(); oj++) {
+if((map.objects[oj].type<8)&&(map.objects[oj].type>=4)&&(map.objects[oj].bounds.collide(b.bounds))) {
+pool.play_2d("sounds/weapons/Grenade/debris1.wav", camera.x, camera.y, map.objects[oj].bounds.x, map.objects[oj].bounds.y, false);
+pool.play_2d("sounds/weapons/Grenade/debris2.wav", camera.x, camera.y, map.objects[oj].bounds.x, map.objects[oj].bounds.y+map.objects[oj].bounds.height, false);
+pool.play_2d("sounds/weapons/Grenade/debris3.wav", camera.x, camera.y, map.objects[oj].bounds.x+map.objects[oj].bounds.width, map.objects[oj].bounds.y, false);
+pool.play_2d("sounds/weapons/Grenade/debris4.wav", camera.x, camera.y, map.objects[oj].bounds.x+map.objects[oj].bounds.width, map.objects[oj].bounds.y+map.objects[oj].bounds.height, false);
+pool.play_2d("sounds/weapons/Grenade/debris5.wav", camera.x, camera.y, map.objects[oj].bounds.x+(0.5*map.objects[oj].bounds.width), map.objects[oj].bounds.y+(0.5*map.objects[oj].bounds.height), false);
+pool.destroy_sound(map.objects[oj].slot);
+map.objects.remove_at(oj);
+}// Blown up.
+}// Breakable objects.
+}// Grenades, maybe others as well.
+}// Dead bullet.
+}// bullets.
+pool.update_listener_2d(camera.x, camera.y);
+}// dt.
+int kills=0;
+void debug_mode() {
+time.pause();
+voice.speak_interrupt("Debugging map. Use arrow keys to move, m to set mark, shift+m to move to mark, enter to select the object under the cursor, space to add an object between the mark and the cursor, v to hear position, z to select zombies and shift+z to add zombies. And shift+enter to edit the selected object. And shift+directions to move the selected zombie. And n to rename the selected zombie. Buh.");
+if(@map==null) {Map m; @map=m;}
+int x=0; int y=0; vector mark(0, 0, 0);
+int obj=-1;
+int zom=-1;
+ while(true) {
+if(key_pressed(KEY_F4)) exit();
+if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) voice.stop();
+if(key_pressed(KEY_L)) {
+string inp=input_box("File name", "Enter map file name, or escape to cancel.");
+if(inp.is_empty()) voice.speak_interrupt("Canceled");
+else if(map.load(inp)) voice.speak_interrupt("Loaded");
+else voice.speak_interrupt("Unable to load map " + inp + ". ");
+}
+else if(key_pressed(KEY_S)) {
+string inp=input_box("File name", "Enter save file name and press enter, or escape to cancel.");
+if(inp.is_empty()) voice.speak_interrupt("Canceled");
+else {voice.speak_interrupt("Saving, please wait."); map.save(inp); voice.speak_interrupt("Saved.");}
+}// save.
+else if(key_pressed(KEY_W)) {string inp=input_box("Enter map width", "Enter map width (currently " + map.bounds.width + ")."); if(!inp.is_empty()) map.bounds.width=string_to_number(inp);}
+else if(key_pressed(KEY_H)) {string inp=input_box("Enter map height", "Enter map height (currently " + map.bounds.height + ")."); if(!inp.is_empty()) map.bounds.height=string_to_number(inp);}
+else if(key_pressed(KEY_ESCAPE)) {wait(500); keys_pressed(); if(question("Are you sure?", "Are you sure you want to close the editor?")==1) {time.restart(); time.resume(); pool.play_stationary("sounds/menu/back.wav", false); return;}}
+
+bool steps=false;
+if((key_pressed(KEY_LEFT))||(key_pressed(KEY_A))) {x--; steps=true;}
+ else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_D))) {x++; steps=true;}
+else if((key_pressed(KEY_W))||(key_pressed(KEY_UP))) {y++; steps=true;}
+ else if((key_pressed(KEY_DOWN))||(key_pressed(KEY_S))) {y--; steps=true;}
+else if(key_pressed(KEY_HOME)) {x=map.bounds.x; steps=true;}
+else if(key_pressed(KEY_END)) {x=map.bounds.x+map.bounds.width; steps=true;}
+else if(key_pressed(KEY_PRIOR)) {y=map.bounds.y+map.bounds.height; steps=true;}
+else if(key_pressed(KEY_NEXT)) {y=map.bounds.y; steps=true;}
+else if(key_pressed(KEY_RETURN)) {
+if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) {
+if((obj<0)||(obj>=map.objects.length())) voice.speak_interrupt("No selection");
+ else edit(map.objects[obj]);
+}// edit.
+ else {
+bool found=false;
+for(int i=obj+1; i!=obj; i++) {
+if(i>=map.objects.length()) i=-2;
+if((i>=0)&&(i<map.objects.length())) {
+if(map.objects[i].bounds.contains(x, y)) {obj=i; found=true; i--; break;}
+}// Found.
+}// loop.
+if((obj<0)||(obj>=map.objects.length())) voice.speak_interrupt("No selection");
+ else {voice.speak_interrupt("Selecting " + map.objects[obj].name + ". "); if(map.objects[obj].slot<0) map.objects[obj].slot=play_looped(map.objects[obj].filename, map.objects[obj].bounds, true);}
+}}// selecting.
+else if(key_pressed(KEY_SPACE)) {
+double xx=x; double yy=y; double w=mark.x-xx; double h=mark.y-yy;
+if(w<0) {xx=mark.x; w=x-xx;}
+if(h<0) {yy=mark.y; h=y-yy;}
+Object@ o=newObject("Object " + map.objects.length(), 0, newRectangle(xx, yy, w, h)); map.objects.insert_last(o); edit(o);
+}// space
+else if(key_pressed(KEY_DELETE)) {if((key_down(KEY_LSHIFT))&&(key_down(KEY_RSHIFT))&&(obj>=0)&&(obj<map.objects.length())) {map.objects.remove_at(obj); voice.speak_interrupt("Object " + obj + " deleted.");} else voice.speak_interrupt("Hold shift, and press delete, to delete the selected object.");}
+else if(key_pressed(KEY_Z)) {
+if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) {
+string inp=input_box("Zombie name", "Enter zombie name, or leave blankt o cancel.");
+if(!inp.is_empty()) {Zombie@ z=map.addZombie(inp, x, y);
+for(uint i=0; i<map.objects.length(); i++) {
+Object@ o=map.objects[i];
+ if(( ((o.type)&3)!=0)&&(o.type<8)&&(o.bounds.collide(z.bounds))&&(round(z.bounds.y, 1)==round(o.bounds.y+o.bounds.height, 1))) @(z.atop)=o;
+}// find atop for this zombie.
+ z.slot=play_looped("sounds/zombies/" + z.name + "/growl" + random(1, 7) + ".wav", z.bounds, true);
+}// zombie added.
+}// Creating a zombie.
+else {
+
+}// selecting zombies.
+}// Zombies.
+else if(key_pressed(KEY_X)) {string inp=input_box("X", "Enter X, or escape to cancel"); if(!inp.is_empty()) x=string_to_number(inp);}
+else if(key_pressed(KEY_Y)) {string inp=input_box("Y", "Enter Y, or escape to cancel"); if(!inp.is_empty()) y=string_to_number(inp);}
+else if(key_pressed(KEY_M)) {if((key_down(KEY_LSHIFT))||(key_down(KEY_RSHIFT))) {x=mark.x; y=mark.y; steps=true;} else {mark.x=x; mark.y=y; voice.speak_interrupt("Mark set to " + x + ", " + y + ". "); pool.play_stationary("sounds/menu/join.wav", false);}}
+else if(key_pressed(KEY_B)) {map.startpoint.x=x; map.startpoint.y=y; voice.speak_interrupt("Starting coordinates set to " + x + ", " + y + ". ");
+if(startpoints.length()<=stage) startpoints.resize(stage+1); startpoints[stage]=map.startpoint;
+}
+else if(key_pressed(KEY_V)) voice.speak_interrupt("You are at coordinates " + x + ", " + y + ". " + ((obj<0) ? "Nothing selected" : ("selecting" + map.objects[obj].name)));
+else if(key_pressed(KEY_F3)) {me.bounds.x=x; me.bounds.y=y;}
+ else if(key_pressed(KEY_N)) {Map m; @map=m; pool.destroy_all(); voice.speak_interrupt("New map created."); steps=false;}
+else if(key_pressed(KEY_F11)) rep=9000; // For testing, please remove.
+else if((key_pressed(KEY_I))&&(key_down(KEY_G))) {Object@ o=newObject(input_box("Get item", "Item name:"), lute, newRectangle(0, 0, 1, 1)); for(uint i=0; i<10; i++) getItem(o);}
+
+
+if(x<map.bounds.x) x=map.bounds.x;
+ if(x>map.bounds.x+map.bounds.width) x=map.bounds.x+map.bounds.width;
+if(y<map.bounds.y) y=map.bounds.y;
+if(y>map.bounds.y+map.bounds.height) y=map.bounds.y+map.bounds.height;
+
+if(steps) {
+Object@ o=null;
+for(uint i=0; i<map.objects.length(); i++) {
+if(map.objects[i].bounds.contains(x, y)) {@o=map.objects[i]; i=map.objects.length();}
+}
+if(@o==null) pool.play_stationary("sounds/radar/radar.wav", false);
+else if(o.type>=8) pool.play_stationary("sounds/radar/item.wav", false);
+ else if(y<round(o.bounds.y+o.bounds.height, 0)) pool.play_stationary(getBump(o.terrain), false);
+ else pool.play_stationary("sounds/steps/" + o.terrain + "/run" + random(1, 9) + ".wav", false);
+}// Find something to step on?
+pool.update_listener_2d(x, y);
+camera.x=x; camera.y=y;
+wait(5);
+}// debugging maps.
+}
+void edit(Object@ o) {
+pool.pause_all();
+// name.
+string inp=input_box("Name", "Enter name (currently " + o.name + "), or press escape to cancel.");
+if(!inp.is_empty()) o.name=inp;
+else return; // GRAAAAAAh!!!!
+// type
+string[] types={"None", "Solid", "Platform, solid only from above", "somehow solid from above and all sides simultaneously", "Breakable", "Breakable, solid", "breakable, platform", "Breakable, 3",
+"ambience", "Lute", "special item",
+"Trap, like fire, which slowly takes away health",
+"Safe zone, slowly restores health",
+"Deathtrap, kills instantly"
+};
+voice.speak_interrupt("Choose type.");
+keys_pressed();
+menuX=-1;
+while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {
+bool speak=true;
+if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) menuX--;
+else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) menuX++;
+ else speak=false;
+if(menuX>=types.length()) menuX=0; else if(menuX<0) menuX=types.length()-1;
+if(speak) voice.speak_interrupt(types[menuX]);
+wait(5);
+}
+o.type=menuX;
+
+string[] files=find_files("sounds/platforms/*.wav");
+if(o.type==lute) o.filename="sounds/items/corpse" + random(1, 5) + ".wav";
+else if(o.type==misc) {o.filename="sounds/items/quest.wav"; if(o.name=="ally") o.filename="sounds/voices/" + random(1, 56) + "/" + ((random(0, 5)>2) ? "Beckon" : "Medic") + random(1, 3) + ".wav"; }
+else {
+// sound.
+
+menuX=-1;
+voice.speak_interrupt("Choose sound. Hold alt, and Press A for ambiences, P for platforms, or O for obstacles.");
+int dir=0;
+keys_pressed();
+menuX=-1;
+while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {
+bool speak=true;
+if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) menuX--;
+else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) menuX++;
+else if((key_down(KEY_LMENU))||(key_down(KEY_RMENU))) {
+if(key_pressed(KEY_A)) {files=find_files("sounds/ambience/*.wav"); dir=1;}
+else if(key_pressed(KEY_O)) {files=find_files("sounds/obstacles/*.wav"); dir=2;}
+else if(key_pressed(KEY_P)) {files=find_files("sounds/platforms/*.*"); dir=0;}
+else speak=false;
+}
+ else {
+speak=false;
+string cn=get_characters();
+if((!cn.is_empty())&&(menuX>=0)&&(menuX<files.length())) {
+cn=string_to_lower_case(cn);
+string str=string_to_lower_case(files[menuX]);
+int i=0;
+if(str[0]==cn[0]) i=menuX;
+for(i=i; i<files.length(); i++) {
+str=string_to_lower_case(files[i]);
+if(str[0]==cn[0]) {menuX=i; i=files.length(); speak=true;}
+}// loop.
+}// Letter search.
+}
+if(menuX>=files.length()) menuX=0; else if(menuX<0) menuX=files.length()-1;
+if(speak) {voice.speak_interrupt(files[menuX]); pool.play_stationary("sounds/" + ((dir==1) ? "ambience/" : (dir==2) ? "obstacles/" : "platforms/") + files[menuX], false);}
+wait(5);
+}
+o.filename="sounds/" + ((dir==1) ? "ambience/" : (dir==2) ? "Obstacles/" : "platforms/") + files[menuX];
+}// Non-lute.
+// terrain.
+ files=find_directories("sounds/steps/*");
+menuX=-1;
+voice.speak_interrupt("Choose terrain.");
+keys_pressed();
+menuX=-1;
+while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {
+bool speak=true;
+if((key_pressed(KEY_LEFT))||(key_pressed(KEY_UP))) menuX--;
+else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) menuX++;
+ else speak=false;
+if(menuX>=files.length()) menuX=0; else if(menuX<0) menuX=files.length()-1;
+if(speak) {voice.speak_interrupt(files[menuX]); pool.play_stationary("sounds/steps/" + files[menuX] + "/run" + random(1, 9) + ".wav", false);}
+wait(5);
+}
+o.terrain=files[menuX];
+
+// Velocity.
+voice.speak_interrupt("Velocity. Objects are not affected by gravity.");
+keys_pressed();
+while((!key_pressed(KEY_RETURN))&&(!key_pressed(KEY_SPACE))) {
+bool speak=true;
+if(key_pressed(KEY_RIGHT)) o.v.x+=0.5;
+else if(key_pressed(KEY_LEFT)) o.v.x-=0.5;
+else if(key_pressed(KEY_UP)) o.v.y+=0.5;
+ else if(key_pressed(KEY_DOWN)) o.v.y-=0.5;
+ else speak=false;
+ if(speak) {
+pool.play_extended_1d("sounds/menu/select.wav", 0, 0, 0, 0, false, 0, 0, 0, 100+o.v.length());
+voice.speak_interrupt("VX is " + o.v.x + ", v y is " + o.v.y + ". ");
+}
+wait(5);
+}// loop.
+
+pool.resume_all();
+}// edit object.
+string getBump(string terrain) {
+string ret="wall.wav";
+terrain=string_to_lower_case(terrain);
+if(terrain=="water") ret="river.wav";
+else if(terrain=="steel") ret="isle.wav";
+else if(terrain=="bridge") ret="fence.wav";
+ else if(terrain=="concrete") ret="border.wav";
+else if(terrain=="pipe") ret="grate.wav";
+else if(terrain=="gate") ret="gate.wav";
+else if(terrain=="leaves") ret="brush.wav";
+
+
+return "sounds/obstacles/" + ret;
+}// get bump.
+Object@[] movers;
+void setAtop(Object@ o) {
+if(@(me.atop)!=@o) {
+pool.destroy_sound(leftEdge); pool.destroy_sound(rightEdge);
+Rectangle@ b=newRectangle(o.bounds.x-0.5, o.bounds.y+o.bounds.height, 0.49, 0);
+// Search for the correct edge 6:35 AM 6/9/2015:
+int cols=0;
+do {
+cols=0;
+for(uint le=0; le<map.objects.length(); le++) {if(map.objects[le].type<5 and map.objects[le].bounds.collide(b)) {cols++; b.x=map.objects[le].bounds.x-0.5; le+=50;}}
+} while(cols>0);
+
+leftEdge=play_looped("sounds/ambience/wind" + random(1, 5) + ".wav", b, true);
+
+@b=newRectangle(o.bounds.x+o.bounds.width+0.01, o.bounds.y+o.bounds.height, 0.4, 0);
+do {
+cols=0;
+for(uint le=0; le<map.objects.length(); le++) {if(map.objects[le].type<5 and map.objects[le].bounds.collide(b)) {cols++; b.x=map.objects[le].bounds.x+map.objects[le].bounds.width+0.01; le+=50;}}
+} while(cols>0);
+
+ rightEdge=play_looped("sounds/ambience/wind" + random(1, 5) + ".wav", b, true);
+playsound("sounds/steps/" + o.terrain + "/run" + random(1, 9) + ".wav", me.bounds, false);
+}
+@(me.atop)=o;
+}
+
+void getItem(Object@ o) {
+bool found=false;
+for(uint i=0; i<weaponNames.length(); i++) {
+for(uint j=0; j<weaponNames[i].length(); j++) {
+if(weaponNames[i][j]==o.name) {found=true;
+if(me.weapons[i][j]>0) {
+playsound("sounds/items/ammo.wav", me.bounds, false);
+string ts2="You have found ";
+if((i==2)||(i==5)) {me.ammo9mm+=30; ts2 += "30 9mm ammo";}
+ else if(i==4) {me.ammo30cal+=20; ts2 += "20 .30callibor ammo";}
+ else if(i==3) {me.shells+=12; ts2 += "12 shotgun shells";}
+ else if((i==6)&&(j<4)) {me.ammo56+=30; ts2 += "30 .56mm ammo";}
+ else if(i==7) {me.arrows+=20; if(j>2) {me.knives+=12; ts2 += "12 knives";} else ts2 += "20 arrows";}
+ else if(i==8) {me.gas+=1500; ts2 += "1 tank of gas";}
+else if(i==12 and j<2) {me.grenades++; ts2 += "1 grenade";}
+else if(i==12 and j>=2) {me.warheads++; ts2 += "1 warhead";}
+else {me.ammo762+=40; ts2 += "40 .762 Ammo";}
+voice.speak_interrupt(ts2);
+}// Ammo.
+else {me.weapons[i][j]++;
+playsound("sounds/items/weapon.wav", me.bounds, false);
+voice.speak_interrupt("You have found 1 " + weaponNames[i][j]);
+if(i==2) me.ammos[i][j]=15+(j*2);
+else if(i==1) me.ammos[i][j]++;
+else if(i==3) {me.shells+=12; if(j==0) me.ammos[i][j]=2; else if(j==1) me.ammos[i][j]=8; else me.ammos[i][j]=20;}
+ else if(i==4) {me.ammos[i][j]=5+j;}
+ else if(i==5) me.ammos[i][j]=(j==0) ? 30 : (j==4) ? 25 : 40;
+ else if(i==6) me.ammos[i][j]=(j<4) ? 30 : 40;
+ else if(i==7) {me.arrows+=16; if(j>2) me.knives+=12;}
+ else if(i==8) me.ammos[i][j]=1000;
+ else if(i==9) me.ammos[i][j]=1;
+ else if(i==10) me.ammos[i][j]=100;
+ else if(i==11) {
+ me.ammos[i][j]=500;
+}// Umm.
+ else if(i==12) me.ammos[i][j]=1;
+}// get weapon.
+}// found.
+}}
+if(!found) {
+if(o.name=="Med kit") {me.medkits++; playsound("sounds/items/restorative.wav", o.bounds, false); voice.speak_interrupt("You have found 1 med kit.");}
+else if(o.name=="crate") {
+playsound("sounds/items/misc.wav", o.bounds, false);
+int targ;
+do {
+ targ=random(0, map.objects.length()-1);
+} while(map.objects[targ].type>=8);
+crates++;
+o.bounds.x=random(map.objects[targ].bounds.x-o.bounds.width, map.objects[targ].bounds.x+map.objects[targ].bounds.width);
+o.bounds.y=map.objects[targ].bounds.y+map.objects[targ].bounds.height;
+map.objects.insert_last(o);
+if((o.slot>=0)&&(pool.sound_is_active(o.slot))) pool.update_sound_2d(o.slot, o.bounds.x, o.bounds.y);
+else {if(o.slot>=0) pool.destroy_sound(o.slot); o.slot=play_looped(o.filename, o.bounds, true);}
+voice.speak_interrupt("You have " + crates + " of 5 crates.");
+if(crates>=5+(stage-2)) {
+@o=newObject("Exit", 2, newRectangle(85, 2, 5, 2)); map.objects.insert_last(o); o.slot=play_looped("sounds/ambience/idle.wav", o.bounds, true); o.filename="sounds/ambience/idle.wav";
+}// Add the exit.
+return;
+}// crate
+else if(o.name=="Kevlar vest") {me.armor|=32; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Military helmet") {me.armor|=4; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Arm guards") {me.armor|=64; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Bike helmet") {me.armor|=1; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Football helmet") {me.armor|=2; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Football pads") {me.armor|=16; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Leather jacket") {me.armor|=8; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Shin guards") {me.armor|=256; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Metal Arm Guards") {me.armor|=128; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Metal Shin Guards") {me.armor|=512; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Hockey mask") {me.armor|=1024; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Leather gloves") {me.armor|=2048; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Shoulder pads") {me.armor|=4096; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Athletic cup") {me.armor|=8192; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Knee pads") {me.armor|=16384; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Elbow pads") {me.armor|=32768; playsound("sounds/items/armour.wav", o.bounds, false);}
+else if(o.name=="Gas" or o.name=="gas") {me.gas+=1500; playsound("sounds/items/Ammo.wav", me.bounds, false);}
+ else if(o.name=="Yukon Scope") {playsound("sounds/weapons/Winchester/scopeOn.wav", me.bounds, false); 
+ me.attachments|=4;
+  }// Scope.
+else if(o.name=="Diesel") {playsound("sounds/items/gascan.wav", me.bounds, false); voice.speak_interrupt("This diesel should get our truck running.");
+pool.destroy_sound(o.slot);
+@o=newObject("Semi", misc, newRectangle(75, 147, 2, 3)); map.objects.insert_last(o);
+o.filename="sounds/ambience/idle.wav"; o.slot=playsound(o.filename, o.bounds, true);
+return;
+}// Diesel.
+else if(o.name=="Semi") {
+pool.destroy_sound(o.slot);
+pool.play_stationary("sounds/ambience/truck.wav", false);
+for(uint i=8; i<map.objects.length(); i++) {
+if((map.objects[i].name=="Destroyed business")&&(map.objects[i].terrain=="Roof")&&(map.objects[i].bounds.x>25)) {
+pool.destroy_sound(map.objects[i].slot);
+map.objects[i].type=lute;
+map.objects[i].name="Med kit";
+playsound("sounds/ambience/wallbreak.wav", map.objects[i].bounds, false);
+
+ i=map.objects.length();
+}
+}// Find the wall and break it.
+}// Semi.
+else if(o.name=="Diesel Fuel") {
+playsound("sounds/items/gascan.wav", me.bounds, false); voice.speak_interrupt("This diesel should get our truck running; now get it back to the Safe Zone!"); crates++;
+Object@ ex=newObject("Exit", platform, newRectangle(195, 90, 5, 1));
+ map.objects.insert_last(ex);
+ex.slot=play_looped("sounds/Ambience/CB1.wav", ex.bounds, true);
+ex.filename="sounds/Ambience/CB1.wav";
+}// Diesel 2.
+else if(o.name=="ally") {
+Char ally;
+ @(ally.bounds)=newRectangle(me.bounds.x, me.bounds.y, me.bounds.width, me.bounds.height);
+ @(ally.atop)=me.atop;
+string[] parts=string_split(o.filename, "/", true);
+ if(parts.length()>2) ally.voice=string_to_number(parts[2]);
+ if(ally.voice<=0) ally.voice=random(1, 56);
+allyslots.insert_last(play_looped("sounds/radar/player.wav", ally.bounds, true));
+ally.weaponClass=random(1, 7);
+ally.weapons=me.weapons; ally.ammos=me.ammos; // ???
+ally.health=100; ally.armor=random(0, 1<<12); ally.weaponClass=random(0, 6); ally.weapon=random(1, weaponNames[ally.weaponClass].length()-1);
+ally.ammos[ally.weaponClass][ally.weapon]=30;
+allies.insert_last(ally);
+playsound("sounds/voices/" + ally.voice + "/confirm" + random(1, 3) + ".wav", ally.bounds, false);
+}// Wonk.
+else if(o.name=="Squirrel" or o.name=="squirrel") {
+for(uint als=0; als<2; als++) {
+Object@ o2=map.objects[random(0, map.objects.length()/2)];
+Object@ ally=newObject("ally", lute, newRectangle(random(o2.bounds.x, o2.bounds.x+o2.bounds.width-1), o2.bounds.y+o2.bounds.height, 2, 2));
+ally.filename="sounds/voices/" + random(1, 56) + "/Greeting" + random(1, 3) + ".wav";
+map.objects.insert_last(ally);
+ally.slot=play_looped(ally.filename, ally.bounds);
+}// Loop, because one just seems unfair.
+voice.speak_interrupt("You caught a squirrel!");
+pool.play_stationary("sounds/items/quest.wav", false);
+return;
+//if(o.slot>=0) pool.destroy_sound(o.slot);
+}// Squirrel of Sidequesting!
+else if(o.name=="CTF Badge") {
+pool.play_stationary("sounds/Weapons/Break.wav", false);
+for(uint i=0; i<me.weapons.length(); i++) for(uint j=0; j<me.weapons[i].length(); j++) {
+if(random(0, 10)!=4) me.weapons[i][j]=0;
+else voice.speak_interrupt("For this mission, you only get to keep your " + weaponNames[i][j] + "!");
+}
+crates=4;
+int wc=random(0, weaponNames.length()-1);
+int ww=random(0, weaponNames[wc].length()-1);
+ me.weapons[wc][ww]++;
+me.ammos[wc][ww]=(wc<8) ? 40 : (wc<11) ? 100 : (wc==11) ? 1000 : 4;
+if(wc==10 or wc==12) me.weapons[1][0]++; // To be fair.
+return;
+}// Remove weapons.
+else if(o.name=="Loot") {
+int type=random(0, 5);
+if(type<2) o.name="Med kit";
+else if(type<4) {
+int wc=random(0, weaponNames.length()-1);
+o.name=weaponNames[wc][random(0, weaponNames[wc].length()-1)];
+}// weapons.
+else {
+string[] arms={"Kevlar vest", "Military helmet", "Shin guards", "Arm guards", "Metal Shin Guards", "Metal Arm Guards", "Hockey mask", "Leather gloves", "Leather jacket", "Football pads", "Football helmet", "Bike helmet", "Elbow pads", "Knee pads", "Shoulder pads", "Athletic cup", "Yukon Scope",
+ "Med kit"};
+o.name=arms[random(0, arms.length()-1)];
+}// Armor.
+getItem(o); return;
+}// Loot.
+else if(o.name=="Flag") {
+if(((me.attachments)&16)==0) me.attachments|=16;
+else crates+=stage;
+pool.play_stationary("sounds/items/crate.wav", false);
+}// Flag.
+voice.speak_interrupt("You have found 1 " + o.name + ". ");
+}// Check for ammo, or whatever.
+if(o.slot>=0) pool.destroy_sound(o.slot);
+}
+int tick=0;
+int hurtslot=-1, AICounter=0;
+int crates=0;
+
+void addExp(double xp) {
+rep+=xp;
+exp+=xp;
+if(exp>=500) {exp-=500; pool.play_stationary("sounds/player/level" + random(1, 5) + ".wav", false); level++;}
+}
+
+void debugMovers() {
+int m=0;
+voice.speak_interrupt("Use arrow keys to select a moving object, and space to edit its properties. Press escape when done.");
+while(!key_pressed(KEY_ESCAPE)) {
+if((key_down(KEY_LCONTROL))||(key_down(KEY_RCONTROL))) voice.stop();
+bool speak=true;
+ if((key_pressed(KEY_UP))||(key_pressed(KEY_LEFT))) m--;
+else if((key_pressed(KEY_RIGHT))||(key_pressed(KEY_DOWN))) m++;
+else if((key_pressed(KEY_SPACE))||(key_pressed(KEY_RETURN))) edit(movers[m]);
+else speak=false;
+if(m<0) m=movers.length()-1; else if(m>=movers.length()) m=0;
+if(speak) {voice.speak_interrupt(movers[m].name + ", at " + movers[m].bounds.x + ", " + movers[m].bounds.y + ". ");}
+pool.update_listener_2d(movers[m].bounds.x+(0.5*movers[m].bounds.width), movers[m].bounds.y);
+wait(5);
+}// Loop.
+}
+
+void makeNoise(Rectangle@ src, int level) {
+if(@src==null) @src=me.bounds;
+double x1=src.x; double x2=src.x+src.width;
+double y1=src.y; double y2=src.y+src.height;
+
+for(uint i=0; i<map.zombies.length(); i++) {
+if(@(map.zombies[i])!=null) {
+int stren=level+map.zombies[i].awareness;
+// We want the distance between two rectangles, not the distance between an arbitrary point on the rectangles. Grr.
+double y3=map.zombies[i].bounds.y; double y4=y3+map.zombies[i].bounds.height;
+double x3=map.zombies[i].bounds.x; double x4=x3+map.zombies[i].bounds.width;
+double dy=math_min(abs(y3-y1), abs(y4-y2))*2.0; //???
+double dx=math_min(abs(x3-x1), abs(x4-x2));
+stren-=square_root((dy*dy)+(dx*dx));
+if(stren>=0) {
+@(map.zombies[i].target)=src;
+map.zombies[i].v.x=map.zombies[i].speed+random(0, map.zombies[i].speed*0.5);
+if(x2<x3) map.zombies[i].v.x*=-1;
+if((y1>y4)&&(map.zombies[i].fallchance>=50)&&((map.zombies[i].name=="Canine")||(map.zombies[i].name=="Dire")||(map.zombies[i].name=="Amorphus"))) map.zombies[i].v.y=map.zombies[i].speed;
+}
+}
+}// Zombie loop.
+}// Noise to attract zombies.
+
+void slot_machine() {
+string[] prizes={
+ "Two pistols", "MP5", "M40",
+"MP5", "M40", "AR15",
+"Marlin", "M40", "M60",
+"Remington", "WA2000", "Vulcan",
+ "UMP45", "M60", "Motorcycle",
+"M1928", "Vulcan", "SCARH",
+"Grenade", "XM301", "Scorpion"
+};
+string[] c={"Grass", "Glass", "Cement"};
+ int[] slots={-1, -1, -1};
+int cs=0;
+keys_pressed();
+int center=slots.length()/2;
+sound_pool pool2; pool2.pan_step=2; 
+while(cs<slots.length()) {
+ slots[cs]++; if(slots[cs]>=c.length()) slots[cs]=0;
+pool.play_1d("sounds/steps/" + c[slots[cs]] + "/run" + random(1, 9) + ".wav", 0, (cs-center)*3, false);
+for(uint i=0; i<40; i++) {
+if(key_pressed(KEY_SPACE)) {
+pool.play_stationary("sounds/menu/Create.wav", false);
+wait(250);
+pool2.play_1d("sounds/steps/" + c[slots[cs]] + "/run" + random(1, 9) + ".wav", 0, (cs-center)*5, true);
+
+cs++;}
+wait(5);
+}// Wait loop?
+
+}// Yeah.
+wait(250);
+int val=slots[0];
+pool2.destroy_all();
+for(uint i=0; i<slots.length(); i++) {
+//clipboard_copy_text("Slot " + i + " = " + slots[i] + ". ");
+if((slots[i]<0)||(slots[i]>=c.length())) alert("Bug!", "slot " + i + " is " + slots[i] + ". The range should be 0-2, but really it\'s " + c.length() + ". ");
+if(slots[i]!=val) {
+pool.play_stationary("sounds/menu/abort.wav", false); wait(1000); return;
+}
+else {pool.play_1d("sounds/steps/" + c[slots[i]] + "/run" + random(1, 9) + ".wav", 0, (i-center)*5, false); wait(333);}
+}// fail.
+wait(100);
+Object@ o=newObject(prizes[((level*3)+val)%prizes.length()], lute, me.bounds);
+getItem(o);
+}// Slot machine
+
+Char@[] allies;
+int movcount=0; // Hmm.
+timer allytimer;
+int[] allyslots;
+
+void story_check() {
+
+switch (stage) {
+case 4 : {
+if(crates>=4) {
+pool.play_stationary("sounds/weapons/Scorpion/Fire.wav", false);
+wait(2000);
+pool.play_stationary("sounds/player/receive.wav", false);
+ voice.speak_interrupt("Someone\'s firing at us! You\'ll have to find them and take them out before we can launch!");
+wait(3000);
+ Object@ o=null; for(uint i=0; i<map.objects.length(); i++) {if(string_contains(map.objects[i].name, "usiness", 1)>0) {@o=map.objects[i]; i=map.objects.length(); }}
+ map.addZombie("Hulk", o);
+map.add(newObject("Exit", platform, newRectangle(98, o.bounds.y+o.bounds.height+1, 3, 2)));
+ map.objects[map.objects.length()-1].v.x=-3;
+map.objects[map.objects.length()-1].filename="sounds/weapons/Scorpion/FireM.wav";
+map.objects[map.objects.length()-1].slot=play_looped("sounds/weapons/Scorpion/FireM.wav", map.objects[map.objects.length()-1].bounds, true);
+ movers.insert_last(map.objects[map.objects.length()-1]);
+}
+}; break;
+case 5 : {
+ map.addZombie("Tyrant", map.objects[random(0, 3)]);
+ map.addZombie("Tyrant", map.objects[random(0, 3)]);
+ map.addZombie("Tyrant", map.objects[random(0, 4)]);
+ map.addZombie("Tyrant", map.objects[random(0, 4)]);
+if(crates>3) {
+pool.play_stationary("sounds/Ambience/WallBreak.wav", false);
+wait(2000);
+ pool.play_stationary("sounds/player/receive.wav", false);
+ voice.speak_interrupt_wait("Too many zombies! We can\'t bring you this way! We\'ll try and make an exit back where we came in!");
+Object@ ex=newObject("Exit", platform, newRectangle(0, 0, 4, 1));
+ex.filename="sounds/Weapons/Vulcan/Fire.wav";
+ map.add(ex);
+ex.slot=play_looped(ex.filename, ex.bounds, true);
+}
+}; break;
+case 9 : {
+// Add more of the boss-class enemies, heal the player, subtract crates.
+crates--;
+me.health=100.0;
+string[] bosses={"Matriarch", "Dire", "Tyrant", "Raider", "Behemoth", "Hulk", "Tentacle"};
+for(uint i=0; i<bosses.length(); i++) {
+Object@ o;
+do {
+@o=map.objects[random(0, map.objects.length()-1)];
+} while(o.type>3);
+map.addZombie(bosses[i], o);
+}// 10 zombies? OUCH!
+}; break;
+case 10 : {
+if(((me.attachments)&16)==16) {crates+=stage; me.attachments^=16;}
+}; break;
+}// stageswitch in story check.
+}
+sound weaponSound; // For the combustion weapons and firing sounds with tails.
+
+bool load_game(string filename) {
+if(!file_exists(filename)) {alert("File not found", "Could not find the " + filename + " file."); return false;}
+file fin; fin.open(filename, "rb");
+string txt=string_decrypt(fin.read(0), "kelly the rabbit");
+fin.close();
+string[] lines=string_split(txt, "\n", true);
+uint l=0;
+for(uint wc=0; wc<weaponNames.length(); wc++) {
+for(uint w=0; w<weaponNames[wc].length(); w++) {
+if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.weapons[wc][w]=string_to_number(lines[l]);
+l++;
+me.ammos[wc][w]=string_to_number(lines[l]);
+l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+}}
+me.medkits=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+level=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+exp=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+stage=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.ammo9mm=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.ammo30cal=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.ammo56=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.ammo762=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.arrows=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.armor=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.grenades=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.knives=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+me.gas=string_to_number(lines[l]); l++; if(l>=lines.length()) {alert("Error", "Invalid save file."); return false;}
+rep=string_to_number(lines[l]);
+
+return true;
+}
+void save_game(string filename) {
+if(file_exists(filename)) {if(question("Confirm file replace", "The file " + filename + " already exists. Are you sure you want to overwrite it?")!=1) return;}
+
+string txt="";
+for(uint wc=0; wc<weaponNames.length(); wc++) {
+for(uint w=0; w<weaponNames[wc].length(); w++) {
+txt += me.weapons[wc][w] + "\n" + me.ammos[wc][w] + "\n";
+}}
+txt += me.medkits + "\n"
+ + level + "\n"
+ + exp + "\n"
+ + stage + "\n"
++ me.ammo9mm + "\n"
++ me.ammo30cal + "\n"
+ + me.ammo56 + "\n"
+ + me.ammo762 + "\n"
+ + me.arrows + "\n"
+ + me.armor + "\n"
+ + me.grenades + "\n"
+ + me.knives + "\n"
+ + me.gas + "\n"
+ + rep + "\n";
+
+file fout;
+fout.open(filename, "wb");
+fout.write(string_encrypt(txt, "kelly the rabbit"));
+fout.close();
+voice.speak_interrupt("Game saved successfully.");
+}
+
+int x=0;
+int y=0;
+int ping=-1;

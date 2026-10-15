@@ -1,0 +1,144 @@
+#include "BitRoom.bgt"
+
+class HitArea {
+// public static final int lowest=1, low3=2, low2=4, low=8, mid=16, high=32, high2=64, high3=128, highest=256;
+ int x1; int y1; int x; int y; int z1; int z;
+ bool continuous;
+
+ HitArea() {
+ x1=0; y1=0; x=0; y=0; z1=0; z=0;
+ continuous=false;
+ xrange1=0; xrange=1; yrange1=0; yrange=1;
+}
+int xrange1; int xrange; int yrange1; int yrange;
+string limb; //Just 1? Royce's Headbutt/uppercut has one hitArea, but uses no less than two limbs, counting the head.
+ // Also, defended areas? Meh.
+ string type; // The Technique type usually is enough, but consider something like a lance, flail, spear or burning staff, all which are sharp on one end, but can still connect with the blunt part
+ } 
+
+
+ class TTechnique {
+
+// public static final int lowest=1, low3=2, low2=4, low=8, mid=16, high=32, high2=64, high3=128, highest=256;
+ string name;
+  string[] startSounds;
+ string[] hitsounds;
+ string[] blockSounds;
+ HitArea@[] hitAreas; 
+ string[] poses; // Meep!!!
+double damage;
+ double dvx; double dvy;
+ double dvz;
+ double fx; 
+ double fy; 
+ double fz; 
+ double duration; 
+double stun;
+ double recovery; 
+double mp; 
+double ap; 
+double hp;
+
+ string endState; string targetState;
+ // A crap-ton more. :o.
+ bool weightless; bool crouching;
+ double guarded; double blockDamage;
+ string type; string limb; string limb1; string limb2; // It's rare that we have three bodyparts acting at once. The only example that immediately comes to mind is Esulcer's all-arm-spin, but I'm not adding six or an ArrayList for that.
+ // I will, however, add limbs to HitArea.
+
+ TTechnique(double d) {duration=d; init();}
+ TTechnique (double d, string n) {duration=d; name=n; init();}
+ TTechnique(string n, double d) {name=n; duration=d; init();}
+// Cloning can definitely wait!
+ // What bodyparts are involved? I dunno. 
+ void init() {
+ rotate=0;
+ damage=0.0; dvx=0.0; dvy=0.0; dvz=0.0; fx=0.0; fy=0.0; fz=0.0;
+ stun=0.0; recovery=0.0; mp=0.0; ap=0.0; hp=0.0;
+
+ endState="wait"; targetState="wait";
+
+ weightless=false; crouching=false;
+ guarded=0.0; blockDamage=0.5;
+
+
+ }// *Cries*
+// void addStartSound(string str) {addStartSound(new File(str));}
+// public void addStartSound(File f) {if(startSounds==null) startSounds=new ArrayList(); startSounds.add(f);}
+ void addStartSound(string str) {startSounds.insert_last(str);}
+// public void addHitSound(string str) {addHitSound(new File(str));}
+ void addHitSound(string str) {hitsounds.insert_last(str);}
+ void addHitsound(string str) {addHitSound(str);}
+// public void addHitsound(File f) {addHitSound(f);}
+// public void addHitSound(File f) {if(hitsounds==null) hitsounds=new ArrayList(); hitsounds.add(f);}
+ void addBlockSound(string str) { blockSounds.insert_last(str); } //addBlockSound(new File(str));}
+// public void addBlockSound(File f) {if(blockSounds==null) blockSounds=new ArrayList(); blockSounds.add(f);}
+ string randomStart() {
+ if(startSounds.length()<1) return "";
+ return startSounds[random(0, startSounds.length()-1)];
+ }
+string randomHit() {
+ if(hitsounds.length()<1) return "";
+ return hitsounds[random(0, hitsounds.length()-1)];
+ }
+ string randomBlock() {
+ if(blockSounds.length()<1) return "";
+ return blockSounds[random(0, blockSounds.length()-1)];
+ }
+
+ // Returns a list of all limbs involved in this Technique.
+ // A GUChar using this Technique should have all of the necessary limbs available.
+ // If a GUChar tries to use a Technique involving limbs said GUChar lacks, the Technique will not start.
+ // If a GUChar tries to use a Technique involving a limb occupied by an item, the item-free Technique will not start,
+ //  but if the GUChar's movelist contains a Technique corresponding to
+ //  the same state with the item in question, that Technique
+ //  will be started instead.
+ //  This should typically ignore wielding of multiple items.
+/* public ArrayList getLimbs() {
+ ArrayList ret=new ArrayList();
+ if(limb1!=null) ret.add(limb1);
+ if(limb2!=null) ret.add(limb2);
+ if(hitAreas!=null) for(int i=0; i<hitAreas.length(); i++) {
+ // if( ((HitArea)(hitAreas.get(i))).limb!=null) ret.add( ((HitArea)(hitAreas.get(i))).limb);
+}//HitAreas.
+ ; return ret;
+} // Get Limbs.
+ */
+ // Returns a specified HitArea.
+ 
+ HitArea@ getHitArea(uint i) {
+ HitArea@ ret;
+ if((i<0)||(i>=hitAreas.length()))  @ret=null;
+ else @ret=hitAreas[i];
+ return ret;
+ }// GetHitArea.
+ HitArea@ addHitArea(int x, int y, int z, int xrange, int yrange) {
+ HitArea ret;
+ ret.x=x; ret.y=y; ret.z=z;
+ ret.xrange=xrange; ret.yrange=yrange;
+// if(hitAreas==null) hitAreas=new ArrayList();
+ hitAreas.insert_last(ret);
+ return ret;
+ }//Add Hit Area.
+ HitArea@ addHitArea(int x, int y, int z, int xrange, int yrange, string l) {
+ HitArea@ ret=addHitArea(x, y, z, xrange, yrange);
+ ret.limb=l;
+ return ret;
+ }//Add Hit Area with limbs.
+ HitArea getLastHitArea() {
+// if(hitAreas==null) return null;
+ return hitAreas[hitAreas.length()-1];
+ }//GetLastHitArea.
+
+ int rotate; // For face-changes. 1 = 45 degrees.
+
+
+ // 8:46 AM 5/25/2010.
+ void addBlocksound(string str) {addBlockSound(str);}
+// public void addBlocksound(File f) {addBlockSound(f);}
+/* public void addPose(string p) {
+ if(poses==null) poses=new ArrayList();
+poses.add(p);}
+ public string getPose(int index) {return (string)(poses.get(index));}
+*/
+}

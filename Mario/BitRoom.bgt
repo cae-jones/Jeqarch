@@ -1,0 +1,809 @@
+#include "TTechnique.bgt"
+
+    void addNorthsouth(TyleMap@ onnorth, TyleMap@ onsouth) { @(onnorth.south)=onsouth; @(onsouth.north)=onnorth;}
+ void addEastwest(TyleMap@ onwest, TyleMap@ oneast) {@(onwest.east)=oneast; @(oneast.west)=onwest;}
+
+
+
+ int array_contains(TyleChar@[] ar, TyleChar@ q) {
+ for(uint i=0; i<ar.length(); i++) {if(@(ar[i])==@q) return i;}
+; return -1;
+ }
+
+
+/*
+   BitRoom.java copyright 2009 C. A. E. Jones.
+   10:41 AM 5/22/2009
+*/
+
+
+/*
+ An instance of BitRoom can represent a map (or board) of equal-size objects in terms of [x, y].
+  The goal of this class is to provide a minimalist approach to representing a tyled space;
+  rather than a string-map (where each space is represented by a char),
+  or an object-oriented map (where each object is an instance of an Object class of some kind),
+  each object in a BitRoom is represented by a single bit,
+   where an integer represents each horizontal row.
+  The limitation of this method is that it restricts the diversity of objects in the room;
+  typically, a BitRoom is only more efficient than a CharRoom when
+  the number of types is less than sqrt(width * height).
+*/
+
+ class BitRoom {
+ int[][] map;
+ int width;
+ int height;
+ int typeNum;
+
+ BitRoom(int w, int h, int t) {
+ width=w;
+ height=h;
+ typeNum=t;
+ if(width>32) alert("Illegal Argument Exception!", "Width must be between 0 and 32.");
+
+// map=new int[typeNum][height];
+ map.resize(typeNum);
+ for(int i=0; i<typeNum; i++) {map[typeNum].resize(height);
+ for(int y=0; y<height; i++) map[i][y]=0;
+}// Initialize!
+}
+
+//Returns the typeIndex for the given coordinates.
+//If nothing is found at [x, y], return -1.
+//If multiple objects exist at [x, y], which is returned?
+ int get(int x, int y) {
+ if((x<0)||(x>width)||(y<0)||(y>=height)) return -1; //throw new IndexOutOfBoundsException(" [" + x + ", " + y + "] is out of range [" + width + ", " + height + "].");
+
+for(int i=0; i<typeNum; i++) {
+if(((map[i][y]) & (1<<x))!=0) return i;
+}
+
+return -1;
+}
+
+//Sets [x, y, t] to true.
+ void set(int x, int y, int t) {
+if((x<0)||(x>width)||(y<0)||(y>=height)||(t<0)||(t>=typeNum)) return; //throw new IndexOutOfBoundsException(" [" + x + ", " + y + ", " + t + "] is out of range [" + width + ", " + height + ", " + typeNum + "]. ");
+map[t][y]|=(1<<x);
+}
+//Drawn from [0, 0] = top left corner. 
+/* string tostring() {
+string ret="";
+for(int y=0; y<height; y++) {
+for(int x=0; x<=width; x++) ret +=(char)(get(x, y)+49);
+; ; ;
+ ret =ret + "\n";
+}
+return ret; 
+}*/
+
+ int getWidth() {return width;}
+ int getHeight() {return height;}
+ int getTypeNum() {return typeNum;}
+
+//Clears the given space of all types.
+ void clear (int x, int y) {
+ if((x<0)||(x>width)||(y<0)||(y>=height)) return; //throw new IndexOutOfBoundsException("[0, 0] to [" + width + ", " + height + "]: [" + x + ", " + y + "].");
+ int c=~(1<<x); //And this with each entry to clear only the specified x.
+for(int t=0; t<typeNum; t++) map[t][y]&=c;
+ //My confidence in this method is a bit lacking.
+}//Clear
+
+}
+
+
+//Converts a string Array to a BitRoom.
+
+/*  static*/ BitRoom@ getFromStringArray(string[] str) {
+//BitRoom ret=null;
+uint types=0;
+uint h=str.length();
+//We need to define properties before making the BitRoom.
+uint w=0;
+ string recognized=" ";
+for(uint i=0; i<str.length(); i++) {
+// if(str[i]==null) continue;
+ if(str[i].length()>w+1) w=str[i].length()-1; //Hmm.
+for(uint c=0; c<str[i].length(); c++) {
+if(string_contains(recognized, "" + str[i][c], 1)<0) {recognized = recognized + str[i][c]; types++;} 
+}// C Loop.
+}
+
+//Now we can make the BitRoom:
+ BitRoom ret(w, h, types);
+for(uint y=0; y<h; y++)
+for(uint x=0; x<=w; x++) {
+ if(str[y].length()<=x) {x=w; continue;}
+ string n="" + str[y][x];
+ if(n==" ") continue;
+ else ret.set(x, y, string_contains(recognized, n, 1)-1);
+}
+ return @ret;
+}
+
+/*
+  BitChar.java 1.0 9:42 AM 6/28/2009 by C. A. E. Jones.
+*/
+ class Point2D {
+ double x; double y;
+ Point2D(double xx, double yy) {x=xx; y=yy;}
+ double getX() {return x;}
+ double getY() {return y;}
+ }
+
+
+/*
+   BitChar made to accompany BitRoom.
+   A BitChar should facilitate position relative to a BitRoom,
+   Tile size and velocity.
+   Velocity is represented in terms of time between steps from tile to tile;
+*/
+
+ class BitChar {
+
+ double vx; 
+double vy;
+ int x; int y;
+  double counter;
+  int width; int height;
+ double speed;
+
+ BitChar() {width=1; height=1; init();}
+ BitChar(int w, int h) {width=w; height=h; init();}
+ void init() {
+ vx=0.0; vy=0.0; x=0; y=0; speed=0.5; counter=0.0;
+ } 
+ void setSpeed(double s) {speed=s;}
+ void setVX(double v) {vx=v;}
+ void setVY(double v) {vy=v;}
+ void setX(int i) {x=i;}
+ void setY(int i) {y=i;}
+ void setPose(int tx, int ty) {setX(tx); setY(ty);}
+// void setPose(Point2D p) {setPose((int)(p.getX()), (int)(p.getY()));}
+ void setCounter(double c) {counter=c;}
+ void step(double dt) {
+ if(counter>0.0) {counter-=dt;
+ if(counter<=0.0) {
+ counter=0.0;
+if(vx>0.0) x++; else if(vx<0.0) x--;
+ if(vy>0.0) y++; else if(vy<0.0) y--;
+}
+}//Descending
+ else if(counter<0.0) {counter+=dt;
+ if(counter>=0.0) {counter=0.0;
+//...
+}
+}//ascending.
+}
+}
+
+
+
+
+ class TyleMap : BitRoom {
+
+   double gravity; //Gravity's confusing.
+   string defaultLand; string defaultStep;  string defaultBump; string defaultFall;
+   string walls;  string platforms; // "platforms" are objects that are passable from all directions other than from above; the sort of thing one can jump to from below and stand on.
+ TyleChar@[] team1;
+ TyleChar@[] team2;
+ TyleChar@[] statics;
+ TyleChar@[] items;
+ TyleChar@[] projectiles; //Meh.
+ dictionary steps; dictionary landings; dictionary bumps; dictionary falls;
+
+   string ids;
+   TyleMap@ north; TyleMap@ south;
+ TyleMap@ east; 
+TyleMap@ west;
+   string bgm;
+   bool loop;
+
+   TyleMap(string[] str) {
+ super(0, 0, 0); //We're overriding most of this; will this suffice in the meantime?
+ init();
+ uint types=0;
+ uint h=str.length();
+//We need to define properties before making the BitRoom.
+ uint w=0;
+ string recognized=" ";
+for(uint i=0; i<str.length(); i++) {
+// if(str[i]==null) continue;
+ if(str[i].length()>w+1) w=str[i].length()-1; //Hmm.
+for(uint c=0; c<str[i].length(); c++) if(string_contains(recognized, "" + str[i][c], 1)<0) {
+ string n="" + str[i][c];
+ if((n==" ")||(n==",")||(n=="0")) continue;
+recognized = recognized + n; types++;} 
+}
+
+//Now we can make the BitRoom:
+if(types<recognized.length()) types=recognized.length();
+width=w; height=h; typeNum=types; ids=recognized;
+// map=new int[typeNum][height];
+ map.resize(typeNum);
+ for(uint i=0; i<map.length(); i++) {map[i].resize(height);
+ for(int y=0; y<height; y++) map[i][y]=0;
+ }
+
+for(uint y=0; y<h; y++)
+for(uint x=0; x<=w; x++) {
+ if(str[y].length()<=x) {x=w; continue;}
+  string n="" + str[y][x];
+ if((n==" ")||(n==",")||(n=="0")) continue;
+ else set(x, y, string_contains(recognized, n, 1));
+}
+}// There must be a better word for insane...
+
+ void init() {
+slopes=""; water="~";
+ gravity=0.25; //Gravity's confusing.
+
+    walls="|-"; platforms="=";
+
+ ids=" ";
+  @north=null; @south=null; @east=null; @west=null;
+ bgm="";
+loop=false;
+ }
+   string getC(int x, int y) {
+int c=get(x, y);
+if(c<0) return " ";
+ uint c2=0+c;
+ if(c2>=ids.length()) return "-";
+ return "" + ids[c];
+}
+   void setC(int x, int y, string t) {
+ if(string_contains(ids, t, 1)>=0) {clear(x, y); set(x, y, string_contains(ids, t, 1));}
+else {
+
+typeNum++;
+
+// try {
+
+ int[][] m;//=new int[typeNum][height];
+ m.resize(typeNum); for(uint i=0; i<m.length(); i++) m[i].resize(height);
+
+ for(int i=0; i<typeNum-1; i++) for(int cy=0; cy<height; cy++) m[i][cy]=map[i][cy];;;
+ for(int cy=0; cy<height; cy++) m[typeNum-1][cy]=0;
+
+ ids=ids + t;
+ map=m;
+ clear(x, y);
+
+  set(x, y, ids.length()-1);
+
+
+// } catch (Exception iobe) {iobe.printStackTrace();}
+}//Add another type.
+}
+
+ // (Maybe move these outside of the class?)
+    void addNorthsouth(TyleMap@ onnorth, TyleMap@ onsouth) {onnorth.south=onsouth; onsouth.north=onnorth;}
+ void addEastwest(TyleMap@ onwest, TyleMap@ oneast) {onwest.east=oneast; oneast.west=onwest;}
+
+   string toString() {
+ string ret="";
+for(int y=0; y<height; y++) {
+ for(int x=0; x<=width; x++) {
+ ret=ret + getC(x, y);
+}
+ ret=ret + "\n";
+ }//Do I really have to do this in earshot of... *sigh*.
+ return ret;
+}//toString.
+
+   bool isEnemy(TyleChar@ gua) {
+// if(team2==null) return false;
+ return array_contains(team2, gua)>=0;
+}//Enemy.
+
+   string slopes; string water; 
+   bool isSlope(string c) {return string_contains(slopes, c, 1)>=0;}
+   bool isSlope(int x, int y) {return isSlope(getC(x, y));}
+   string getStep(int x, int y) {return getStep(getC(x, y));}
+ string getStep(string c) {
+// Character key=new Character(c);
+// if(steps==null) return defaultStep;
+// return (steps.containsKey(key))?((File)(steps.get(key))):defaultStep;
+ if(steps.exists(c)) {string ret; steps.get(c, ret); return ret;}
+ return defaultStep;
+}//Get Step.
+   string getBump(int x, int y) {return getBump(getC(x, y));}
+   string getBump(string c) {
+// Character key=new Character(c);
+// if(bumps==null) return defaultBump;
+// return (bumps.containsKey(key))?((File)(bumps.get(key))):defaultBump;
+ if(bumps.exists(c)) {string ret; bumps.get(c, ret); return ret;}
+ return defaultBump;
+}//Get Bump.
+ string getLanding(int x, int y) {return getLanding(getC(x, y));}
+ string getLanding(string c) {
+// Character key=new Character(c);
+// if(landings==null) return defaultLand;
+// return (landings.containsKey(key))?((File)(landings.get(key))):defaultLand;
+ if(landings.exists(c)) {string ret; landings.get(c, ret); return ret;}
+ return defaultLand;
+}//Get Landing.
+ string getFall(int x, int y) {return getFall(getC(x, y));}
+ string getFall(string c) {
+// Character key=new Character(c);
+// if(falls==null) return defaultFall;
+// return (falls.containsKey(key))?((File)(falls.get(key))):defaultFall;
+ if(falls.exists(c)) {string ret; falls.get(c, ret); return ret;}
+ return defaultFall;
+}//Get Fall.
+   void add(TyleChar@ me, int team) {
+ if(@me==null) return;
+// ArrayList tea=(team==1)?team1:team2;
+// if(tea==null) {if(team==1) team1=new ArrayList(); else team2=new ArrayList(); tea=(team==1)?team1:team2;}
+// tea.add(me);
+ if(team==1) team1.insert_last(me); else team2.insert_last(me);
+ }//Add.
+   TyleChar@ remove (TyleChar@ me, int tea) {
+ if(@me==null) return me;
+// ArrayList team=(tea==1)?team1:team2;
+// if(team==null) return me; //?????????
+//  if(team.indexOf(me)>=0) team.remove(team.indexOf(me));
+  if(tea==1) {
+ int index=array_contains(team1, me);
+ if(index>=0) team1.remove_at(index);
+ }// Team1.
+ else {
+ int index=array_contains(team2, me);
+ if(index>=0) team2.remove_at(index);
+ }// Team2.
+ return me;
+}// Remove.
+//   Object remove(Object me) {return remove(me, (isEnemy(me))?2:1);}
+ TyleChar@ remove(TyleChar@ me) {
+ int tea=1;
+ if(isEnemy(me)) tea=2;
+ return remove(me, tea);
+ }
+
+   bool isWall(int x, int y) {return (string_contains(walls, getC(x, y), 1)>=0); }
+   bool isPlatform(int x, int y) {return (string_contains(platforms, getC(x, y), 1)>=0);}
+
+}// 2D maps.
+
+
+
+  class TyleChar {
+
+   TyleMap@ gloc;
+   string name;
+   double vx; double vy; double vz; // Hmm.
+   double counter; double meter; double hp; double mp;
+ double strength; double speed; double agility;
+
+//   static final int wait=0, forward=1, back=2, up=4, down=8, A=16, B=32, C=64;
+//   int state="wait";
+ string state;
+//   static final char north='n', east='e', west='w', south='s', southeast='E', southwest='S', northwest='W', northeast='N';
+ string face;
+
+ dictionary movelist; //   HashMap movelist=new HashMap(); // <Integer, TTechnique>.
+
+ // Include information on visuals here.
+
+//   File[] hitcries=new File[1];
+ string[] hitcries;
+//   File diesound=null;
+ string diesound;
+//   SoundBuffer sb=null;
+//   HashSet sounds=new HashSet(), // <File>
+ string[] sounds;
+//   hitSpaces=new HashSet(); // <Point3D>, or maybe just <Point>. I think including Z here is silly and should be handled by specific games (I'm primarily thinking of LC).
+ Point2D[] hitSpaces;
+
+ // Suspicious! I'd like to add more for special things, like equipment and the like, but... will add as necessary, I suppose.
+
+   int x;  int y; int z; int width; int height; // That's the norm, is it not?
+   bool normalSteps; // Most instances of this class will be humanoids that walk and use the step sounds provided by the map, but there will likely be many instances that do not use standard footsteps.
+   string defaultStep; // -_- Shouldn't be null.
+//   HashMap defenses=new HashMap(), skills=new HashMap(); // Should simplify many, many things.
+ dictionary defenses; dictionary skills;
+
+//   double maxHP=Double.MAX_VALUE, maxMP=Double.MAX_VALUE;
+   TTechnique@ lastHit;   double hitTimer; // Hahaha. I figure it's useful, since I intend to use this class for a variety of things, including games in which one is invincible for a few seconds after being hit. Also, keeping track of this could be useful for animations and the like.
+
+   TyleChar (string n) {name=n; init();}
+   TyleChar(string n, string[] h) {name=n; hitcries=h; init();}
+
+ void init() {
+ width=1; height=2; x=0; y=0; z=0; vz=0.0; vx=0.0; vy=0.0; counter=0.0; meter=0.0; hp=1.0; mp=1.0; strength=1.0; speed=1.0; agility=1.0;
+ @gloc=null;
+ normalSteps=true;
+ state="wait"; face="e";
+ migrates=false;
+ } // Initialize.
+
+   bool setState(string s) {
+ // Oh, this _is_ confusing.
+ if((counter<0.0)||((state=="wait")&&(counter>0.0))) return false; // Are there any other instances where it won't work?
+ string key=s;
+ if(!onGround()) key="air_" + s;
+ if(! movelist.exists(key)) return false;
+ string oldState=state;
+ state=s;
+ TTechnique@ act=getMove();
+ if(@act==null) {state=oldState; return false;}
+ if((act.mp>mp)&&(act.mp!=0.0)) {state=oldState; return false;}
+ else mp-=act.mp; // I remember there being a painful glitch with this in either FSF or JL, but I don't remember what?
+// if((act.ap>ap)&&(act.ap!=0.0)) {state=oldState; return false;}
+// else ap-=act.ap;
+
+ counter=act.duration;
+ string sn=act.randomStart(); sounds.insert_last(sn);
+
+ return state==s; // Hah, that makes things easier, doesn't it? XD
+ }// SetState.
+
+
+   void keyPressed(string k) {
+// if((state&k)==k) return; //Might be a mistake.
+// setState(state|k);
+ if(state=="wait") setState(k);
+ else if(string_contains(state, k, 1)>=0) return;
+ else setState(state + k);
+ }//KeyPressed.
+   void keyReleased(string k) {
+ // Too game-specific to catch here, so games have to be smart enough to handle it.
+ // For instance, the complicated button sequences in LC Vs. holding run in the likes of Mario...
+ if(k==state) {if(!setState("wait")) {state="wait"; counter=0.0;}}
+ }
+
+   bool migrates; //=false; // Generally true, but enemies are more common than player characters, and typically don't migrate between maps.
+
+   bool moveTo(int tx, int ty) {
+ if((x==tx)&&(y==ty)) return true;
+ if(@gloc==null) {x=tx; y=ty; return true;}
+ else {
+ if((tx<0)||(tx>gloc.getWidth())||(ty<0)||(ty>=gloc.getHeight())) {
+ if(!gloc.loop) {
+ if(!migrates) return false; // Or change to the next map, but... nah.
+ // 2:19 AM 5/22/2010: Added migrates. So let's migrate:
+ else {
+ TyleMap@ next=null;
+ if(tx<0) @next=gloc.west;
+ else if(tx>gloc.getWidth()) @next=gloc.east;
+ else if(ty<0) @next=gloc.north;
+ else if(ty>=gloc.getHeight()) @next=gloc.south;
+ if(@next==null) return false;
+ else {
+ int tea=1; if(gloc.isEnemy(this)) tea=2;
+ gloc.remove(this, tea);
+ next.add(this, tea);
+ @gloc=next;
+  if(tx<0) tx=gloc.getWidth()-1; else if(tx>=gloc.getWidth()) tx=0;
+//  if(ty<0) ty=gloc.getHeight()-1; else if(ty>=gloc.getHeight()) ty=0;
+ }// Changing maps.
+ }}// Non-looping maps.
+ else {if(tx<0) tx=gloc.getWidth()-1; else if(tx>=gloc.getWidth()) tx=0;
+  if(ty<0) ty=gloc.getHeight()-1; else if(ty>=gloc.getHeight()) ty=0;
+ }//Loop.
+ }// Out of bounds.
+ bool cont=true;
+ for(int dtx=0; dtx<width; dtx++) {for(int dty=0; dty<height; dty++) {
+ if((tx+dtx<0)||(tx+dtx>=gloc.getWidth())||(ty+dty<0)||(ty+dty>=gloc.getHeight())) continue;
+ if((gloc.isWall(tx+dtx, ty+dty))||((gloc.isPlatform(tx+dtx, ty+dty))&&(ty>y))) return false; //?????
+
+}}//Loop for size.
+
+ if(cont) {x=tx; y=ty; if(gloc.isSlope(x, y)) {y--; ty--;}}
+ return cont;
+ }//Map.
+
+}//Move To.
+
+   bool onGround() {
+// try {
+ bool ret=((@gloc!=null)&&(y<gloc.getHeight())&&((gloc.isWall(x, y+1))||(gloc.isSlope(x, y+1))||(gloc.isPlatform(x, y+1))));
+ if((!ret)&&(@gloc==null)) ret=(y<=0);
+ return ret;
+// } catch (Exception outOfBounds) {return false;}
+}
+   TTechnique@ getMove() {
+ //WEAPONS AND STUFF THAT CHANGE MOVES!
+// Object key=new Integer(state);
+ string key=state;
+/*
+ if((equipment!=null)&&(equipment.size()>0))  try {
+ for(int i=0; i<equipment.size(); i++) key="" + (equipment.get(i)) + "" + state;
+ System.out.println(key); // For debugging.
+ } catch (Exception MadIterator) {}
+*/
+
+ if(!onGround()) key="air_" + key; //key=(key instanceof String)?"air_" + key:"air_" + state;
+ if(!movelist.exists(key)) {
+//if((key instanceof String)&&(((String)key).indexOf("air_")>=0)) {key=((String)key).substring(((String)key).indexOf("air_")+4, ((String)key).length());
+ key=state;
+ if(!movelist.exists(key)) key="air_" + state;
+// }
+// if(!movelist.containsKey(key)) key=new Integer(state); // This might have to go. Air Vs. Ground and such.
+}
+ TTechnique@ ret;
+ @ret=null;
+ if(movelist.exists(key)) movelist.get(key, @ret);
+ return ret;
+ }// AH! :(.
+   void step(double dt) {
+
+ // We have _four_ things to deal with, I'm afraid...
+ if(counter>0.0) {counter-=dt; if(counter<=0.0) {counter=0.0;
+// System.out.println("0 from above.");
+ TTechnique@ act=getMove();
+ if(@act!=null) {
+//System.out.println("Technique non-null.");
+ if((act.hitAreas.length()>0)&&(@gloc!=null)) {
+// System.out.println("Act has hitareas.");
+// ArrayList team=(gloc.isEnemy(this))?gloc.team1:gloc.team2;
+ TyleChar@[] team=gloc.team2;
+ if(gloc.isEnemy(this)) team=gloc.team1;
+// System.out.println("Team: " + ((team==gloc.team2)?2:1) + ".");
+ double tm=1.0;
+for(uint i=0; i<act.hitAreas.length(); i++) {
+ Point2D[] points=getHitPoints(act.getHitArea(i), tm);
+ for(uint j=0; j<team.length(); j++) {
+team[j].hit(act, points, act.damage*strength);
+
+ }// *Headdesk*.
+ for(uint j=0; j<points.length(); j++) hitSpaces.insert_last(points[j]);
+ }// Check for continuous attacks? -_-.
+} // Non-null hitareas.
+ if(act.rotate!=0) {
+ string[] dirs={
+ "e", "ne", "n", "nw", "w", "sw", "s", "se"};
+ int ff=0;
+ uint chf=0;
+while((dirs[ff]!=face)&&(chf<dirs.length())) {ff++; chf=0; chf+=ff;}
+if(chf>=dirs.length()) ff=0;
+ ff+=act.rotate;
+ if(ff<0) ff=(ff+dirs.length())%dirs.length();
+ chf=0; chf+=ff;
+ if(chf>=dirs.length()) ff%=dirs.length(); // This _shouldn't_ happen, but apparently it did.
+ face=dirs[ff];
+}//Turning.
+
+
+
+
+ counter=act.recovery;
+ state=act.endState;
+ if(counter<0.0) {counter=0.0; setState(act.endState); counter=-act.recovery;} // Umm?
+ 
+ }
+ else state="wait";
+ }// 0 from above.
+ else {
+ // For continuous attacks, techniques that last long enough to move multiple spaces, Etc.
+ TTechnique@ act=getMove();
+ if(@act!=null) {
+ if((act.dvx!=0.0)&&(vx==0.0)) {vx=speed*act.dvx; if((normalSteps)&&(onGround())) sounds.insert_last(gloc.getStep(x, y)); else if(onGround()) sounds.insert_last(defaultStep);}
+ if((act.dvz!=0.0)&&(vz==0.0)) {vz=act.dvz;  if((normalSteps)&&(onGround())) sounds.insert_last(gloc.getStep(x, y)); else if(onGround()) sounds.insert_last(defaultStep);}
+ if((act.dvy!=0.0)&&(vy==0.0)) vy=act.dvy*agility;
+
+ if(act.hitAreas.length()>0) {
+// ArrayList team=(gloc.isEnemy(this))?gloc.team1:gloc.team2;
+ TyleChar@[] team=gloc.team2; if(gloc.isEnemy(this)) team=gloc.team1;
+ double tm=((act.duration-counter)/act.duration); // Is that really all?
+ if(tm<0.0) tm*=-1.0;
+// System.out.println("" + counter + "/" + (act.duration) + " = " + tm);
+ if(tm<1.0) {
+for(uint i=0; i<act.hitAreas.length(); i++) {
+ Point2D[] points=getHitPoints(act.getHitArea(i), tm);
+ for(uint j=0; j<team.length(); j++) team[j].hit(act, points, act.damage*strength);
+ }// Check for continuous attacks? -_-.
+ }// No messed up timing results in hitting 1.0 more than once.
+} // Non-null hitareas.
+ }//Non-null act.
+ }// v stuff.
+ }//Descending.
+ else if(counter<0.0) {counter+=dt; if(counter>=0.0) {counter=0.0;
+ }//0 from below.
+ }//Ascending.
+ // And do the same thing for vx, vy and vz.
+ int tx=x; int ty=y;
+ if(vx>0.0) {vx-=dt; if(vx<=0.0) {
+ vx=0.0;
+
+ if(face=="n") ty--;
+ else if(face=="ne") {ty--; tx++;}
+ else if(face=="e") tx++;
+ else if(face=="sw") {tx++; ty++; }
+ else if(face=="s") ty++;
+ else if(face=="sw") {ty++; tx--;}
+ else if(face=="w") tx--;
+ else if(face=="nw") {tx--; ty--; }
+
+ //m.out.print("Debug: vx" + vx + ", tx " + tx + ", ty " + ty + ", x " + x + ", y " + y + ". ");
+}}//Positive VX.
+ else if(vx<0.0) {vx+=dt; if(vx>=0.0) {vx=0.0;
+ if(face=="n") ty++;
+ else if(face=="ne") {ty++; tx--;}
+ else if(face=="e") tx--;
+ else if(face=="se") {tx--; ty--;}
+ else if(face=="s") ty--;
+ else if(face=="sw") {ty--; tx++; }
+ else if(face=="w") tx++;
+ else if(face=="nw") {ty++; tx++;}
+ 
+ }}//Negative VX.
+ if(vy>0.0) {vy-=dt; if(vy<=0.0) {vy=0.0;
+
+ if(face=="n") tx++;
+ else if(face=="ne") {tx++; ty++;}
+ else if((face=="e")||(face=="w")) ty++;
+ else if(face=="se") {ty++; tx--;}
+ else if(face=="s") tx--;
+ else if(face=="sw") {tx--; ty--;}
+// case west : ty--; break;
+ else if(face=="nw") {tx++; ty--;}
+
+ }}// Positive VY. Moving to the right.
+ else if(vy<0.0) {vy+=dt; if(vy>=0.0) {vy=0.0;
+
+ if(face=="n") tx--;
+ else if(face=="ne") {tx--; ty--;}
+ else if((face=="e")||(face=="w")) ty--;
+ else if(face=="se") {tx++; ty--;}
+ else if(face=="s") tx++;
+ else if(face=="sw") { tx++; ty++;}
+// case west : ty++; break;
+ else if(face=="nw") {tx--; ty++; }
+ }}//Negative vy. Moving left.
+ // Let's make things interesting and have movement happen between ascension and descension.
+ // That is, if you're going up, you might move when *kicks jaws*
+ // Ahem. You ascend before you move laterally, but descend afterward. Because it makes timing seem less annoying that way.
+ if(vz>0.0) {vz-=dt; if(vz<=0.0) {vz=0.0;
+ z++; // Umm. Oopse. :P.
+ // Big problem, though. As soon as one is in the air, the state goes from jump to air_jump. -_-
+ }}// Positive VZ. Ascending.
+ bool land=(ty==y+1)&&(!onGround());
+ if(((tx!=x)||(ty!=y))&&(moveTo(tx, ty))) {
+// Play sound if you're on the ground.
+ bool grounded=onGround();
+//try {
+ if((land)&&(grounded)) {
+
+ if(normalSteps) {if(@gloc==null) sounds.insert_last(defaultStep); else {string stp=gloc.getLanding(x, y+1); if((counter<0.0)&&(string_contains(state, "u", 1)>=0)) stp=gloc.getFall(x, y+1);  if(stp!="") sounds.insert_last(stp);}}
+
+ }//Landing.
+else  if((normalSteps)&&(grounded))  {if(@gloc==null) sounds.insert_last(defaultStep); else {string stp=gloc.getStep(x, y+1); if(stp!="") sounds.insert_last(stp);}} 
+//} catch (Exception nostep) {}
+}//Move successful.
+ else {
+ // Now's a good place for a "run into a wall" sound. Maybe.
+ if((tx!=x)||(ty!=y)) {
+ // We can take damage from running into certain things. I'm just not sure how this class will deal with that.
+ if((@gloc!=null)&&(tx>=0)&&(tx<=gloc.getWidth())&&(ty>=0)&&(ty<=gloc.getHeight())) {sounds.insert_last(gloc.getBump(tx, ty));} //catch (Exception iob) {} // Could go out of bounds, but better to skip it than failsafe it.
+ // Actually, that sound should be played at (tx, ty), and not (x, y). I don't think games can figure that out, though.
+ }//Tried to move to a different spot, so we can make bump noises.
+ }//Move unsuccessful.
+ if(vz<0.0) {
+ vz+=dt; if(vz>=0.0) {vz=0.0;
+// if(((@gloc!=null)&&(z>gloc.getHeightAt(x, y)))||((gloc==null)&&(z>0))) {
+ z--;
+ // Landing.
+
+// }//Landing
+}}//Falling.
+ if((vy==0.0)&&((@(getMove())==null)||(!(getMove().weightless)))&&(!onGround())) {//gravity.
+
+ if(@gloc!=null) {vy=gloc.gravity; if(vy<0.0) vy*=-1.0;}
+ else vy+=0.25; // Ouch. -_-
+// alert("Gravity", "State is " + state + ". Get move is null " + (@(getMove())==null) + ". ");
+ }//Gravity.
+
+ if(@lastHit!=null) hitTimer+=dt;
+ }// Step.
+
+
+   void hit(TTechnique@ t, Point2D[] points, double dmg) {
+ if((@t==null)||(points.length()<1)) return;
+ bool h=false;
+ TTechnique@ act=getMove();
+ bool crouching=((@act!=null)&&(act.crouching));
+ for(uint i=0; i<points.length(); i++) {
+//		 Point3D p=(Point3D)(points.get(i));
+ Point2D p=points[i];
+// System.out.print("Checking Point {" + p.x + ", " + p.y + ", " + p.z + ". ");
+ for(int j=0; j<width; j++) for(int k=0; k<height; k++) for(int l=0; l<height; l++) {
+ if((p.x==x+j)&&(p.y==y-k)) h=true;
+// else System.out.println(" Doesn\'t hit {" + (x+j) + ", " + (y-k) + ", " + (z+l) + ". ");
+ } ; ;  // Hit check.
+}//You know, I'm ignoring char size for the most part.
+ if(!h) return;
+// System.out.println("Attack connects!");
+
+// if((t.type!="")&&(defenses.exists(t.type))) dmg*=((defenses.get(t.type))).doubleValue();
+// else if(defenses.containsKey("")) dmg*=((defenses.get(""))).doubleValue();
+
+ if((@act!=null)&&(act.guarded!=0.0)) {
+ dmg*=(1.0-act.guarded)*t.blockDamage;
+ if((1.0-act.guarded)*t.blockDamage<=0.5) h=false;
+}// Blocking.
+
+ vx+=t.fx; vy+=t.fy; vz+=t.fz;
+
+ damage(dmg);
+ if(h) {
+ if(t.stun!=0.0) {
+ // There are bound to be situations in which you can't cancel attacks or whathaveyou.
+ state=t.targetState;
+ counter=-t.stun;
+ // That ... is... pretty makeshift.
+  }//Stuns, targetState, Etc.
+ @lastHit=t; hitTimer=0.0;
+ sounds.insert_last(t.randomHit()); // How did I forget that? 7:38 AM 5/26/2010
+ /*if(Math.random()>0.5)*/ if(hitcries.length()>0) sounds.insert_last(hitcries[random(0, hitcries.length()-1)]);}
+ else sounds.insert_last(t.randomBlock());
+
+ }//Hit.
+ void damage(double dmg) {
+  hp-=dmg;
+ if((hp<=0.0)&&(hp+dmg>0.0)) {
+ counter=-2.0; vy=-0.5; state="u"; vx=-0.5;
+ sounds.insert_last(diesound);
+ }//Dead.
+// else if(hp>maxHP) hp=maxHP;
+ }//Damage.
+
+   Point2D[] getHitPoints(HitArea ha, double d) {
+ Point2D[] ret;
+ if((ha.xrange1==0)&&(ha.yrange1==0)&&(d<1.0)) return ret; // Non-continuous attacks shouldn't do this?
+int cx=ha.x; int cy=ha.y;
+ int xrange=ha.xrange; int yrange=ha.yrange;
+ if(ha.xrange1!=0) {
+ cx=ha.x1+(0.5+(d*(ha.x-ha.x1)));
+  xrange =ha.xrange1+(0.5+(d*(ha.xrange-ha.xrange1)));
+}
+ if(ha.yrange1!=0) { // 3:54 AM 5/22/2010: That used to say >0. I'm not sure why.
+ cy=ha.y1+(0.5+(d*(ha.y-ha.y1)));
+  yrange =ha.yrange1+(0.5+(d*(ha.yrange-ha.yrange1)));
+}
+ int cz=ha.z1; if(d>=0.5) cz=ha.z;
+ if((ha.xrange<=0)&&(ha.yrange<=0)&&(d<1.0)) return ret;
+// ArrayList ret=new ArrayList();
+ int[] zs;
+/*
+ if((cz&lowest)>0) zs.add(new Integer(-3));
+ if((cz&low3)>0) zs.add(new Integer(-2));
+ if((cz&low2)>0) zs.add(new Integer(-1));
+ if((cz&low)>0) zs.add(new Integer(0));
+ if((cz&mid)>0) zs.add(new Integer(1));
+ if((cz&high)>0) zs.add(new Integer(2));
+ if((cz&high2)>0) zs.add(new Integer(3));
+ if((cz&high3)>0) zs.add(new Integer(4));
+ if((cz&highest)>0) zs.add(new Integer(5));
+*/
+ zs.insert_last(z+cz);
+for(int tx=0; tx<xrange; tx++)
+ for(int ty=0; ty<yrange; ty++)
+ for(uint tz=0; tz<zs.length(); tz++) {
+ Point2D p;
+ int mz=z+zs[tz];
+
+// switch (face) {
+ if(face=="n") {p.x=x+cy+ty; p.y=y-(cx+tx);} // mz); break;
+ else if(face=="ne") {
+  p.x=x+(cx+tx)+(cy+ty); p.y=y-(cx+tx)+(cy+ty); }//mz); break;
+ else if(face=="e") {//p=new Point3D(
+ p.x=x+cx+tx; p.y=y+cy+ty; }//mz); break;
+ else if(face=="se") { //p=new Point3D(
+ p.x=x+(cx+tx)-(cy+ty); p.y=y+(cx+tx)+(cy+ty); } // mz); break;
+ else if(face=="s") {// p=new Point3D(
+ p.x=x-(cy+ty); p.y=y+(cx+tx);}// mz); break;
+ else if(face=="sw") {// p=new Point3D(
+ p.x=x-(cx+tx)-(cy+ty); p.y=y+(cx+tx)-(cy+ty); }// mz); break;
+ else if(face=="w") { //p=new Point3D(
+ p.x=x-(cx+tx); p.y=y-(cy+ty); }//mz); break;
+ else if(face=="nw") {// p=new Point3D(
+ p.x=x-(cx+tx)+(cy+ty); p.y=y-(cx+tx)-(cy+ty); }// mz); break;
+//} // Switch.
+ if(@p!=null) ret.insert_last(p);
+ }
+ return ret;
+ }// Converts a 
+
+}// Tyle Char.

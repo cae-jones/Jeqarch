@@ -1,0 +1,42 @@
+// Jeqocon2: maps the sound paths the original code uses onto this folder's sounds/ tree.
+// "c:\jeqo\..." and run-dir paths like "downloads/..." become "sounds/jeqo/..." and "sounds/downloads/...".
+// Large WAVs were re-encoded as OGG, so a missing .wav falls back to the .ogg of the same name.
+// Paths that resolve nowhere are written once each to sound_missing.log, but only if that file already exists (create it to test).
+
+string sound_root="sounds/";
+int log_missing_sounds=-1; // -1: not checked yet
+int log_all_sounds=-1; // Same, for sound_all.log: every distinct path and what it resolved to.
+dictionary sound_paths;
+
+string sp(string p) {
+	if(p=="") return p;
+	string hit;
+	if(sound_paths.get(p, hit)) return hit;
+	string k=string_replace(p, "\\", "/", true);
+	if(string_to_lower_case(string_left(k, 3))=="c:/") k=string_trim_left(k, 3);
+	string f=sound_root + k;
+	string result=p;
+	if(file_exists(f)) result=f;
+	else if(string_to_lower_case(string_right(f, 4))==".wav" and file_exists(string_left(f, f.length()-4) + ".ogg")) result=string_left(f, f.length()-4) + ".ogg";
+	else if(file_exists(p)) result=p;
+	else {
+		if(log_missing_sounds<0) log_missing_sounds=file_exists("sound_missing.log") ? 1 : 0;
+		if(log_missing_sounds==1) {
+			file log;
+			if(log.open("sound_missing.log", "a")) {
+				log.write(p + "\r\n");
+				log.close();
+			}
+		}
+	}
+	if(log_all_sounds<0) log_all_sounds=file_exists("sound_all.log") ? 1 : 0;
+	if(log_all_sounds==1) {
+		file log;
+		if(log.open("sound_all.log", "a")) {
+			log.write(p + "\t" + result + "\r\n");
+			log.close();
+		}
+	}
+	sound_paths.set(p, result);
+	return result;
+}
