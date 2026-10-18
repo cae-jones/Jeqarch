@@ -1,0 +1,97 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 63 59
+obj sounds/ambience/Car2.wav Hospital_Parking_lot 1 0 0 0 0 6 0 Concrete
+obj sounds/ambience/Flag.wav Courtyard 1 0 0 7 0 10 0 Grass
+obj sounds/ambience/FountainW.wav Fountain 2 0 0 10 0 5 2 Water
+obj sounds/ambience/Light1.wav Main_Entrance 1 0 0 18 0 6 0 Marble
+obj sounds/ambience/Clock2.wav Main_Lobby 1 0 0 25 0 15 0 Carpet
+obj sounds/ambience/Bridge.wav Business_Rooftop 1 0 0 97 0 3 25 Roof
+obj sounds/ambience/ATM.wav Elevator_Shaft 1 0 0 41 0 1 9 Metal
+obj sounds/ambience/Elevator.wav Elevator 2 0 -1.5 43 7 5 2 Concrete
+obj sounds/platforms/squeakystep2.ogg Hallway 1 0 0 49 0 9 9 Marble
+obj sounds/platforms/squeakystep1.ogg Top_of_Stairs 1 0 0 59 0 2 7 Stairs
+obj sounds/ambience/Door1.wav Stairs 1 0 0 62 0 3 4 Stairs
+obj sounds/ambience/Clock2.wav Rear_Lobby 1 0 0 66 0 10 2 Carpet
+obj sounds/ambience/Car2.wav Hospital_Rear_Parking_Lot 1 0 0 77 0 6 1 Concrete
+obj sounds/ambience/Leaves.wav Grass 1 0 0 84 0 16 0 Grass
+obj sounds/ambience/Intercom.wav Counter 2 0 0 37 5 2 1 Wood
+obj sounds/ambience/Light2.wav Seating 1 0 0 31 0 3 3 Carpet
+obj sounds/items/quest.wav ally 10 0 0 37 0 1 2 Wood
+obj sounds/ambience/Hum4.wav Hallway 2 0 0 35 9 5 0 Marble
+obj sounds/ambience/Train.wav Fire_Escape 2 0 0 91 4 3 1 Stairs
+obj sounds/platforms/squeakystep1.ogg Fire_Escape 2 0 0 94 8 2 1 Stairs
+obj sounds/platforms/metalfall2-5.wav Ledge 1 0 0 90 12 4 1 Metal
+obj sounds/ambience/Bridge.wav Business_Rooftop 1 0 0 89 24 2 1 Roof
+obj sounds/ambience/Train.wav Business_Rooftop 2 0 0 92 24 4 1 Roof
+obj sounds/Obstacles/Fence.wav Fire_Escape 2 0 -1.5 90 22 4 1 Pipe
+obj sounds/ambience/Clock2.wav Second_Floor 1 0 0 49 14 10 3 Marble
+obj sounds/ambience/Light1.wav Second_Floor 1 0 0 32 14 10 3 Marble
+obj sounds/ambience/Hum1.wav Cafeteria 1 0 0 60 16 15 1 Concrete
+obj sounds/ambience/Electricity.wav Ransacked_Room 1 0 0 76 16 5 9 Glass
+obj sounds/ambience/ElectricFence.wav Power_lines 13 0 0 82 19 7 2 Steel
+obj sounds/ambience/Elevator.wav Elevator 2 0 1.5 43 16 5 1 Concrete
+obj sounds/Obstacles/Sign.wav Giftshop 1 0 0 26 14 5 7 Carpet
+obj sounds/ambience/WindowBreak.wav Broken_Window 1 0 0 21 14 4 10 Glass
+obj sounds/ambience/ElectricFence.wav Power_Lines 13 0 0 9 16 11 1 Steel
+obj sounds/ambience/Dryer.wav Delivery_Room_A 1 0 0 34 22 6 1 Wood
+obj sounds/ambience/Hum2.wav Elevator_Shaft 1 0 0 41 22 1 13 Metal
+obj sounds/ambience/Light1.wav Third_Floor 1 0 0 30 34 10 1 Marble
+obj sounds/ambience/Elevator.wav Elevator 2 0 -1.5 43 34 5 1 Concrete
+obj sounds/ambience/Light3.wav Delivery_Room_B 2 0 0 34 26 6 1 Wood
+obj sounds/voices/40/Beckon3.wav ally 10 0 0 38 27 1 2 Wood
+obj sounds/items/corpse5.wav Leather_jacket 9 0 0 26 21 1 1 Wood
+obj sounds/items/corpse2.wav Athletic_cup 9 0 0 29 21 1 1 Wood
+obj sounds/items/corpse4.wav Shield 9 0 0 19 27 1 1 Wood
+obj sounds/items/corpse4.wav Uzi 9 0 0 65 17 1 1 Wood
+obj sounds/items/corpse5.wav G17 9 0 0 78 25 2 1 Wood
+obj sounds/Obstacles/Door.wav Table 2 0 0 69 21 4 0 Bridge
+obj sounds/ambience/Fan1.wav Kitchen 2 0 0 61 25 10 0 Concrete
+obj sounds/ambience/Freezer1.wav Freezer 1 0 0 61 28 6 1 Concrete
+obj sounds/voices/36/Beckon1.wav ally 10 0 0 63 29 2 1 Wood
+obj sounds/ambience/Light2.wav Third_Floor 1 0 0 49 34 34 1 Marble
+obj sounds/ambience/Conveyor2.wav Physical_Therapy 1 0 0 80 31 6 0 Wood
+obj sounds/ambience/break.wav Broken_Window 1 0 0 87 31 5 10 Glass
+obj sounds/voices/35/Medic2.wav ally 10 0 0 90 41 1 2 Wood
+obj sounds/ambience/ElectricFence.wav Power_lines 13 0 0 92 33 8 2 Steel
+obj sounds/ambience/Light3.wav Hallway 2 0 0 83 37 3 1 Marble
+obj sounds/ambience/Clock2.wav Third_Floor 1 0 0 77 41 6 1 Tile
+obj sounds/items/corpse3.wav Shortbow 9 0 0 78 42 1 2 Wood
+obj sounds/ambience/Alarm2.wav Helivac 1 0 0 70 41 6 10 Stairs
+obj sounds/ambience/Bridge.wav Hospital_Roof 1 0 0 77 50 9 4 Roof
+obj sounds/ambience/Light3.wav Ransacked_room 2 0 0 63 38 6 0 Debris
+obj sounds/items/corpse2.wav Shortbow 9 0 0 65 42 1 1 Wood
+obj sounds/ambience/Clock2.wav Waiting_Room 1 0 0 22 34 7 1 Carpet
+obj sounds/ambience/Hum3.wav Seating 2 0 0 24 38 2 1 Bridge
+obj sounds/ambience/EKG.wav Broken_Window 1 0 0 16 34 5 8 Glass
+obj sounds/items/corpse1.wav G17 9 0 0 17 43 1 1 Wood
+obj sounds/ambience/Ventilator.wav Operating_Room 1 0 0 22 45 8 1 Wood
+obj sounds/ambience/Light3.wav Lab 1 0 0 31 45 9 5 Concrete
+obj sounds/items/corpse3.wav Longbow 9 0 0 35 50 1 1 Wood
+obj sounds/ambience/Heater.wav Elevator_Shaft 1 0 0 41 44 1 16 Metal
+obj sounds/ambience/Fan2.wav Hospital_Roof 1 0 0 20 59 20 1 Roof
+obj sounds/ambience/ElectricFence.wav Power_lines 13 0 0 2 53 22 2 Steel
+obj sounds/platforms/metalfall1.wav Hospital_Roof 1 0 0 46 57 15 3 Roof
+obj sounds/ambience/Hum1.wav Launch_pad 1 0 0 59 50 10 5 Steel
+obj sounds/platforms/squeakystep2.ogg Stairs_to_Launch_pad 2 0 0 62 58 3 0 Stairs
+obj sounds/ambience/Copter.wav Helicopter 12 0 0 65 55 4 3 Steel
+obj sounds/items/corpse4.wav Med_kit 9 0 0 63 34 1 1 Wood
+obj sounds/items/corpse3.wav Med_kit 9 0 0 84 31 1 1 Wood
+obj sounds/items/corpse5.wav Med_kit 9 0 0 82 32 1 1 Wood
+obj sounds/items/corpse5.wav Med_kit 9 0 0 86 32 0 1 Wood
+zombie 38 23 Stalker
+zombie 36 27 Matriarch
+zombie 78 25 Giant
+zombie 66 29 Reaper
+zombie 62 29 Stalker
+zombie 54 34 Tyrant
+zombie 61 34 Matriarch
+zombie 67 34 Normal
+zombie 72 34 Canine
+zombie 80 34 Reaper
+zombie 35 35 Tyrant
+zombie 31 35 Tyrant
+zombie 33 50 Stalker

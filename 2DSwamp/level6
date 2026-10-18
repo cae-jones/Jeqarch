@@ -1,0 +1,111 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 0 0
+obj sounds/ambience/Brook.wav Drainage_ditch 1 0 0 0 0 10 0 Swamp
+obj sounds/ambience/Leaves.wav Grass 1 0 0 0 3 3 1 Grass
+obj sounds/ambience/Car1.wav Avery_Drive 2 0 0 0 7 8 1 Concrete
+obj sounds/items/corpse2.wav Hammer 9 0 0 6 11 1 1 Wood
+obj sounds/ambience/Pipe.wav Drainage_Pipe 1 0 0 11 0 10 0 Sewer
+obj sounds/ambience/Trickle.wav Pipe 1 0 0 22 0 5 2 Pipe
+obj sounds/Obstacles/Sign.wav Pipe 1 0 0 11 5 7 10 Pipe
+obj sounds/platforms/watertwirl1.wav Floating_sack 1 -3 0 30 1 3 1 Debris
+obj sounds/ambience/Pipe.wav Pipe 1 0 0 39 0 5 2 Pipe
+obj sounds/ambience/Trickle.wav Sewer 1 0 0 45 0 10 0 Sewer
+obj sounds/Obstacles/Grate.wav Pipe 1 0 0 58 2 4 1 Pipe
+obj sounds/items/corpse2.wav Med_kit 9 0 0 56 6 1 1 Wood
+obj sounds/ambience/Pipe.wav Flooded_pipe 2 0 0 67 3 10 1 Sewer
+obj sounds/ambience/FountainW.wav Toxic_Water 11 0 1.5 69 0 3 2 Water
+obj sounds/platforms/squeakyhinge.ogg Broken_Pump 2 0 2.5 78 3 3 1 Pipe
+obj sounds/platforms/metalsteps1.wav Maintenance_tunnel 1 0 0 64 10 13 2 Pipe
+obj sounds/items/corpse4.wav Grenade 9 0 0 70 14 1 1 Wood
+obj sounds/platforms/waterwalk1.wav Dead_Zombie_Rat 1 -4 0 59 11 4 3 Mud
+obj sounds/items/corpse5.wav M4A1 9 0 0 13 18 1 1 Wood
+obj sounds/ambience/Light3.wav Fort 1 0 0 82 0 10 25 Steel
+obj sounds/ambience/SOS.wav Safe_Zone 12 0 0 82 24 10 5 Wood
+obj sounds/items/corpse4.wav Grenade 9 0 0 90 26 1 1 Wood
+obj sounds/items/corpse5.wav Med_kit 9 0 0 88 26 1 1 Wood
+obj sounds/items/corpse3.wav Knives 9 0 0 86 26 1 1 Wood
+obj sounds/ambience/Sewer.wav Sewer 2 0 0 28 17 10 1 Sewer
+obj sounds/ambience/Pipe.wav Pipe 1 0 0 23 18 5 3 Pipe
+obj sounds/ambience/Pipe.wav Pipe 1 0 0 38 18 7 4 Pipe
+obj sounds/platforms/metalledge1.ogg Maintenance_Tunnel 1 0 0 64 19 18 4 Pipe
+obj sounds/ambience/Brook.wav Sewer 2 0 0 18 24 5 1 Sewer
+obj sounds/Obstacles/Border.wav Sewer 2 0 0 45 25 17 1 Sewer
+obj sounds/items/corpse1.wav Med_kit 9 0 0 52 29 1 1 Wood
+obj sounds/items/corpse1.wav Med_kit 9 0 0 68 24 1 1 Wood
+obj sounds/ambience/FountainW.wav Sewer 2 0 0 11 28 20 1 Sewer
+obj sounds/ambience/Train.wav Long_tunnel 1 0 0 25 32 67 1 Pipe
+obj sounds/items/corpse5.wav Med_kit 9 0 0 57 33 1 1 Wood
+obj sounds/items/corpse5.wav M4A1 9 0 0 61 33 1 1 Wood
+obj sounds/items/corpse4.wav Gas 9 0 0 65 32 5 8 Wood
+obj sounds/Obstacles/Grate.wav Grating 1 0 0 77 33 5 5 Metal
+obj sounds/Obstacles/Gate.wav Breakable_Baricade 5 0 0 83 34 4 4 Rock
+obj sounds/platforms/squeakystep2.ogg Basement_Stairs 1 0 0 86 37 3 8 Stairs
+obj sounds/platforms/squeakyhinge.ogg Factory_Pump 2 0 3 90 37 2 0 Pipe
+obj sounds/ambience/Hum1.wav Factory_Basement 1 0 0 59 44 26 4 Concrete
+obj sounds/platforms/squeakystep1.ogg Staircase 1 0 0 81 52 11 1 Stairs
+obj sounds/items/corpse5.wav Med_kit 9 0 0 62 49 1 1 Wood
+obj sounds/items/corpse3.wav Benelli 9 0 0 67 49 1 1 Wood
+obj sounds/ambience/ElectricFence.wav Exposed_wires 13 0 0 53 44 5 1 Steel
+obj sounds/ambience/Conveyor3.wav Factory 1 0 0 59 56 19 2 Concrete
+obj sounds/Obstacles/Isle.wav Shelves 1 0 0 73 62 12 3 Steel
+obj sounds/platforms/squeakystep1.ogg Stairs 1 0 0 59 62 4 3 Stairs
+obj sounds/platforms/squeakyhinge.ogg Moving_Bin 2 -2.5 0 67 62 3 0 Pipe
+obj sounds/items/corpse1.wav Med_kit 9 0 0 80 65 1 1 Wood
+obj sounds/platforms/squeakystep2.ogg Second_floor_Staircase 2 0 0 59 69 5 1 Stairs
+obj sounds/ambience/Clock2.wav Employee_Lounge 2 0 0 87 68 5 1 Carpet
+obj sounds/ambience/Hum2.wav Factory 1 0 0 70 73 20 1 Concrete
+obj sounds/Obstacles/Crate.wav Breakable_crates 5 0 0 82 74 3 3 Bridge
+obj sounds/ambience/Car1.wav Factory_Parking_Lot 1 0 0 77 77 5 5 Concrete
+obj sounds/ambience/FenceBreak.wav Broken_Fence 1 0 0 83 81 9 3 Glass
+obj sounds/ambience/Leaves.wav Unremarkable_Field 1 0 0 93 0 7 83 Grass
+obj sounds/ambience/Telephone2.wav Exit 2 0 0 95 88 3 1 Tile
+obj sounds/ambience/Turnstile.wav Factory_Entrance 2 0 0 71 77 5 1 Carpet
+obj sounds/Obstacles/Fence.wav SUPER_WALL! 1 0 0 68 73 1 27 Cement
+obj sounds/ambience/Pump.wav Frate_Elevator 2 0 3.5 53 47 5 1 Cement
+obj sounds/ambience/Fan1.wav Factory_Roof 1 0 0 35 44 17 46 Roof
+obj sounds/ambience/Fan2.wav Factory_ROof 1 0 0 57 88 10 2 Roof
+obj sounds/ambience/Clock2.wav Second_Floor 2 0 0 59 73 6 1 Steel
+obj sounds/ambience/Computer3.wav Computer 2 0 0 58 77 3 2 Metal
+obj sounds/ambience/Telephone1.wav Desk 2 0 0 58 82 5 1 Marble
+obj sounds/platforms/squeakystep2.ogg Stairs_to_roof 2 0 0 53 84 3 1 Stairs
+obj sounds/items/corpse4.wav Med_kit 9 0 0 63 74 1 2 Wood
+obj sounds/items/corpse1.wav G17 9 0 0 64 85 1 1 Wood
+obj sounds/items/corpse2.wav Med_kit 9 0 0 64 91 1 1 Wood
+obj sounds/items/corpse3.wav Winchester 9 0 0 61 91 1 1 Wood
+obj sounds/ambience/Train.wav Railroad_Tracks 1 0 0 0 15 11 60 Steel
+obj sounds/ambience/Car1.wav Trailer_Lot 1 0 0 12 44 22 36 Concrete
+obj sounds/ambience/Idle.wav Semi_Trailer 2 0 0 26 81 6 4 Steel
+obj sounds/items/corpse3.wav Grenade 9 0 0 35 93 1 1 Wood
+obj sounds/items/corpse5.wav Grenade 9 0 0 23 89 1 1 Wood
+obj sounds/items/corpse2.wav Benelli 9 0 0 33 80 1 2 Wood
+obj sounds/items/corpse5.wav Flamethrower 9 0 0 6 75 1 2 Wood
+obj sounds/items/corpse1.wav Gas 9 0 0 0 78 1 2 Wood
+obj sounds/items/corpse2.wav Med_kit 9 0 0 16 82 1 1 Wood
+obj sounds/items/corpse5.wav Shortbow 9 0 0 67 66 1 1 Wood
+zombie 8 0 Normal
+zombie 4 8 Normal
+zombie 48 0 Matriarch
+zombie 53 0 Reaper
+zombie 15 15 Lamprey
+zombie 31 18 Lamprey
+zombie 35 18 Matriarch
+zombie 61 26 Lamprey
+zombie 55 26 Lamprey
+zombie 51 26 Matriarch
+zombie 46 26 Tyrant
+zombie 14 29 Lamprey
+zombie 34 33 Matriarch
+zombie 43 33 Matriarch
+zombie 52 33 Dire
+zombie 65 48 Matriarch
+zombie 72 48 Dire
+zombie 83 48 Matriarch
+zombie 77 65 Matriarch
+zombie 86 84 Dire
+zombie 91 84 Dire
+zombie 79 82 Matriarch
+zombie 3 75 Dire

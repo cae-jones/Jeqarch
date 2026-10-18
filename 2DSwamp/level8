@@ -1,0 +1,118 @@
+x 0
+y 0
+width 150
+height 75
+bgm music.mp3
+start 1 23
+obj sounds/platforms/cicada1.wav Grass 1 0 0 0 0 8 1 Grass
+obj sounds/Obstacles/Cone.wav Pylon 2 0 0 0 4 4 1 Cement
+obj sounds/ambience/Intersection.wav Parking_lot 1 0 0 4 8 4 1 Concrete
+obj sounds/ambience/Neon.wav "Welcome_to_Ranger_Park"_Sign 2 0 0 2 12 2 1 Steel
+obj sounds/ambience/Car1.wav Indy_Drive 1 0 0 6 15 4 1 Concrete
+obj sounds/ambience/Leaves.wav Wilson_Road 1 0 0 0 20 6 1 Concrete
+obj sounds/ambience/Intersection.wav Intersection_of_Indy_and_Wilson 2 0 0 10 21 3 1 Concrete
+obj sounds/ambience/Flag.wav Visitor's_Booth 1 0 0 18 25 5 6 Wood
+obj sounds/ambience/Car2.wav Burned_out_car 2 -2 0 14 25 3 1 Debris
+obj sounds/Obstacles/Sign.wav Wall 1 0 0 24 29 5 19 Roof
+obj sounds/items/corpse1.wav Med_kit 9 0 0 22 32 1 1 Wood
+obj sounds/items/corpse2.wav Med_kit 9 0 0 22 34 1 1 Wood
+obj sounds/items/corpse4.wav Med_kit 9 0 0 20 34 1 1 Wood
+obj sounds/items/corpse5.wav Med_kit 9 0 0 19 32 1 1 Wood
+obj sounds/items/corpse3.wav G19 9 0 0 5 9 1 1 Wood
+obj sounds/items/corpse4.wav MP5 9 0 0 8 10 1 1 Wood
+obj sounds/ambience/Swamp.wav Mud_drift 1 0 0 13 0 5 2 Mud
+obj sounds/Obstacles/Brush.wav Tree 2 0 0 17 5 2 1 Leaves
+obj sounds/platforms/leafstep1.ogg Tree 2 0 0 19 9 5 1 Leaves
+obj sounds/platforms/Horse.WAV Plateau 1 0 0 27 11 8 2 Grass
+obj sounds/items/corpse1.wav AA12 9 0 0 32 14 1 1 Wood
+obj sounds/platforms/cicada1.wav Hill 1 0 0 35 7 5 1 Rock
+obj sounds/ambience/River.wav Lake_Shallows 1 0 0 41 0 9 5 Water
+obj sounds/items/corpse3.wav M16 9 0 0 52 8 2 2 Wood
+obj sounds/platforms/leafstep1.ogg Forest_Trail 1 0 0 38 15 7 5 Leaves
+obj sounds/Obstacles/Door.wav Picnic_Table 2 0 0 30 17 3 1 Wood
+obj sounds/ambience/Leaves.wav Tree 2 0 0 26 20 4 1 Leaves
+obj sounds/items/corpse2.wav Med_kit 9 0 0 26 22 1 1 Wood
+obj sounds/Obstacles/Brush.wav Tree 2 0 0 29 24 4 1 Leaves
+obj sounds/ambience/Leaves.wav Tree 2 0 0 30 29 3 1 Leaves
+obj sounds/platforms/leaffall1.ogg Tall_Tree 1 0 0 38 31 3 15 Leaves
+obj sounds/items/corpse1.wav M240 9 0 0 26 50 1 1 Wood
+obj sounds/items/corpse2.wav M240 9 0 0 24 50 1 1 Wood
+obj sounds/platforms/hedgebump.ogg Log 2 -2.5 0 33 33 3 1 Leaves
+obj sounds/platforms/hammocktug1.ogg Vine 2 1.5 0 34 37 2 1 Leaves
+obj sounds/platforms/hammockstep1.ogg Vine 2 2 0 31 42 3 1 Leaves
+obj sounds/ambience/Bridge.wav Forest_Bridge 2 0 0 45 22 8 1 Bridge
+obj sounds/platforms/leafstep1.ogg Forest_Path 2 0 0 52 26 7 1 Leaves
+obj sounds/items/corpse5.wav Metal_Arm_Guards 9 0 0 48 31 2 2 Wood
+obj sounds/ambience/Swamp.wav Cliff 1 0 0 60 0 5 31 Grass
+obj sounds/ambience/Swamp.wav Ranger_Island 1 0 0 87 0 13 32 Grass
+obj sounds/ambience/Flag.wav Tent 2 0 0 93 32 4 3 Carpet
+obj sounds/items/corpse5.wav Gas 9 0 0 90 40 1 1 Wood
+obj sounds/items/quest.wav Squirrel 10 1.5 2 30 35 2 3 Wood
+obj sounds/items/corpse5.wav Med_kit 9 0 0 97 40 1 1 Wood
+obj sounds/platforms/waterwake2.ogg Driftwood 2 2.5 0 101 27 4 1 Swamp
+obj sounds/ambience/River.wav Brush_Lake 1 0 0 101 23 7 0 Water
+obj sounds/Obstacles/Border.wav Rock 1 0 0 111 23 4 7 Dirt
+obj sounds/Obstacles/River.wav Deep_water 1 0 0 115 0 2 41 Water
+obj sounds/platforms/waterstrike0.wav Boat 2 -2.5 -1.5 107 18 5 2 Bridge
+obj sounds/items/corpse2.wav AA12 9 0 0 102 18 1 1 Wood
+obj sounds/items/corpse5.wav Metal_Shin_Guards 9 0 0 110 17 1 1 Wood
+obj sounds/items/corpse4.wav Knives 9 0 0 110 0 1 1 Wood
+obj sounds/items/corpse2.wav Knives 9 0 0 107 0 1 1 Wood
+obj sounds/items/corpse3.wav Longbow 9 0 0 102 0 2 2 Wood
+obj sounds/platforms/waterwalk1.wav Crossbow 13 0 0 113 4 1 1 Wood
+obj sounds/Radar/wall.wav Rail 1 0 0 65 32 2 1 Metal
+obj sounds/platforms/hookUp.ogg Swing 1 0 -3 66 30 5 1 Metal
+obj sounds/Radar/wall.wav Rail 1 0 0 85 32 2 1 Metal
+obj sounds/platforms/squeakyhinge.ogg Swing 1 0 3 80 25 6 1 Metal
+obj sounds/platforms/leafstep1.ogg Tree 2 0 0 101 39 4 1 Leaves
+obj sounds/ambience/Leaves.wav Forest_Path 1 0 0 63 44 37 1 Leaves
+obj sounds/items/corpse5.wav Grenade 9 0 0 58 47 2 1 Wood
+obj sounds/platforms/leafstep1.ogg Tree 2 0 0 64 49 4 1 Leaves
+obj sounds/Obstacles/Brush.wav Forest_Path 1 0 0 71 53 15 1 Leaves
+obj sounds/platforms/cicada1.wav Trail 1 0 0 90 56 14 3 Dirt
+obj sounds/ambience/Swamp.wav Field 2 0 0 107 61 15 1 Grass
+obj sounds/ambience/Brook.wav Ditch 1 0 0 125 58 15 1 Swamp
+obj sounds/ambience/Train.wav Outpost 1 0 0 145 60 5 10 Roof
+obj sounds/Obstacles/Gate.wav Rail 1 0 0 149 0 1 59 Metal
+obj sounds/Obstacles/Fence.wav Drawbridge 2 0 -3 141 58 5 1 Bridge
+obj sounds/ambience/Car1.wav Bently_Road 1 0 0 122 0 13 1 Concrete
+obj sounds/ambience/Neon.wav "Ranger_Park"_sign 1 0 0 137 0 3 10 Steel
+obj sounds/ambience/ElectricFence.wav Torn_up_Power_Line 13 0 0 123 18 17 23 Steel
+obj sounds/ambience/Bridge.wav Acorn_Bridge 1 0 0 124 7 12 0 Bridge
+obj sounds/ambience/Telephone2.wav Exit 2 0 0 131 2 2 1 Carpet
+zombie 12 22 Dire
+zombie 9 16 Dire
+zombie 8 9 Dire
+zombie 0 1 Matriarch
+zombie 23 10 Tentacle
+zombie 45 5 Lamprey
+zombie 44 5 Lamprey
+zombie 47 5 Amorphous
+zombie 40 46 Tentacle
+zombie 51 23 Dire
+zombie 49 23 Normal
+zombie 62 31 Behemoth
+zombie 93 32 Dire
+zombie 98 32 Ally
+zombie 65 45 Dire
+zombie 75 45 Dire
+zombie 85 45 Tyrant
+zombie 95 45 Matriarch
+zombie 78 54 Tentacle
+zombie 74 54 Tentacle
+zombie 93 59 Tentacle
+zombie 97 59 Tentacle
+zombie 101 59 Dire
+zombie 118 62 Tentacle
+zombie 109 62 Tentacle
+zombie 113 62 Dire
+zombie 117 62 Dire
+zombie 140 58 Behemoth
+zombie 133 59 Behemoth
+zombie 129 59 Tentacle
+zombie 136 59 Tentacle
+zombie 129 1 Dire
+zombie 133 1 Dire
+zombie 131 7 Normal
+zombie 126 7 Tyrant
+zombie 131 7 Matriarch

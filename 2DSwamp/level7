@@ -1,0 +1,81 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 2 24
+obj sounds/platforms/cicada1.wav Field 1 0 0 0 0 10 0 Grass
+obj sounds/ambience/River.wav Lilly_pad 2 0 0 13 3 1 0 Water
+obj sounds/ambience/Brook.wav Shallow_Water 2 0 0 17 7 1 0 Water
+obj sounds/ambience/Fence.wav Embankment 2 0 0 14 11 12 1 Dirt
+obj sounds/ambience/Light3.wav Abandonned_Building 1 0 0 5 8 6 5 Wood
+obj sounds/items/corpse2.wav Benelli 9 0 0 7 13 2 1 Wood
+obj sounds/ambience/Car1.wav Wilson_Road 2 0 0 0 16 25 1 Concrete
+obj sounds/ambience/Bridge.wav Wilson_Bridge 2 0 0 23 18 27 1 Steel
+obj sounds/ambience/Car2.wav Abandonned_car 1 0 0 19 21 1 1 Carpet
+obj sounds/ambience/Car2.wav Abandonned_car 1 0 0 54 21 2 1 Carpet
+obj sounds/ambience/Fire3.wav Burning_Car 11 -3 0 37 20 2 2 Glass
+obj sounds/ambience/TruckStall.wav Abandonned_truck 1 0 0 27 19 4 2 Metal
+obj sounds/ambience/Car1.wav Wilson_Road 2 0 0 49 16 26 1 Concrete
+obj sounds/ambience/Hearth.wav Burned_out_building 1 0 0 11 25 7 2 Rock
+obj sounds/items/corpse2.wav Uzi 9 0 0 14 28 1 1 Wood
+obj sounds/ambience/River.wav Brush_Creek 1 0 0 19 31 7 1 Water
+obj sounds/ambience/Leaves.wav Field 2 0 0 0 36 19 1 Grass
+obj sounds/items/corpse1.wav Shoulder_pads 9 0 0 1 41 1 1 Wood
+obj sounds/items/corpse2.wav Shortbow 9 0 0 5 41 1 1 Wood
+obj sounds/items/corpse4.wav Med_kit 9 0 0 9 41 1 1 Wood
+obj sounds/items/corpse3.wav Med_kit 9 0 0 13 41 1 1 Wood
+obj sounds/Obstacles/River.wav Brush_Creek 13 0 0 28 0 17 12 Water
+obj sounds/Obstacles/Car.wav Baricade_of_Cars 1 0 0 42 21 4 6 Glass
+obj sounds/platforms/waterwake2.ogg Floating_seat 2 -4 0 36 31 4 3 Carpet
+obj sounds/ambience/Intersection.wav Parking_lot 2 0 0 60 12 19 1 Concrete
+obj sounds/platforms/cicada1.wav Field 2 0 0 68 21 13 1 Grass
+obj sounds/ambience/Car1.wav Steakhouse_Parking_lot 2 0 0 60 25 11 1 Concrete
+obj sounds/items/corpse2.wav Med_kit 9 0 0 80 26 1 1 Wood
+obj sounds/items/corpse3.wav Athletic_cup 9 0 0 77 26 1 1 Wood
+obj sounds/Obstacles/Wall.wav Behind_the_Steakhouse 1 0 0 55 27 1 11 Roof
+obj sounds/ambience/Train.wav Roof_of_the_Steakhouse 1 0 0 57 37 7 4 Roof
+obj sounds/items/corpse4.wav Shortbow 9 0 0 58 43 1 1 Wood
+obj sounds/items/corpse5.wav M79 9 0 0 62 45 1 1 Wood
+obj sounds/ambience/Generator.wav Outpost 1 0 0 57 32 3 1 Bridge
+obj sounds/items/corpse1.wav Knives 9 0 0 57 34 1 2 Wood
+obj sounds/ambience/Light2.wav Ken_and_Omar's_Steakhouse 2 0 0 57 29 8 1 Wood
+obj sounds/items/corpse5.wav Grenade 9 0 0 57 30 0 1 Wood
+obj sounds/ambience/Light1.wav Roof_of_Buck's_Sporting_Goods 1 0 0 85 10 5 31 Roof
+obj sounds/ambience/Flag.wav Exit 2 0 0 92 44 3 1 Carpet
+obj sounds/platforms/hit8.wav Breakable_Baricade 5 0 0 83 0 7 9 Rock
+obj sounds/Platforms/cicada1.wav Outside_the_Safe_Zone 1 0 0 78 0 22 0 Grass
+obj sounds/ambience/WindowBreak.wav Broken_Baricade 2 0 0 75 4 5 1 Glass
+obj sounds/ambience/Power.wav Destroyed_Safe_Zone 1 0 0 71 0 3 5 Wood
+obj sounds/ambience/Faucet1.wav Heaps_of_Mangled_Bodies 1 0 0 58 0 12 1 Swamp
+obj sounds/ambience/Radio.wav Ransacked_Defensive_Room 2 0 0 58 4 5 1 Debris
+obj sounds/Obstacles/Cone.wav Baricade_of_Cars 1 0 0 56 10 12 1 Metal
+obj sounds/items/corpse3.wav Grenade 9 0 0 58 8 1 1 Wood
+obj sounds/items/corpse5.wav Metal_Arm_Guards 9 0 0 61 8 1 1 Wood
+obj sounds/ambience/CB5.wav Buck's_Sporting_Goods 1 0 0 93 3 7 1 Wood
+obj sounds/ambience/Conveyor2.wav Escalator 2 0 2.5 91 5 3 1 Steel
+obj sounds/ambience/Clock2.wav Landing 1 0 0 90 13 2 1 Tile
+obj sounds/platforms/squeakystep1.ogg Second_floor_of_Sporting_Goods 1 0 0 94 18 6 0 Wood
+obj sounds/ambience/Conveyor1.wav Escalator 2 0 2.5 91 22 4 1 Steel
+obj sounds/Obstacles/Door.wav Empty_Gun_Racks 1 0 0 95 33 5 1 Bridge
+obj sounds/ambience/Train.wav Fire_escape 2 0 0 91 36 5 1 Stairs
+obj sounds/items/corpse4.wav Remington 9 0 0 99 22 1 1 Wood
+obj sounds/ambience/SafeZone.wav Safe_Zone 12 0 0 85 41 4 10 Wood
+obj sounds/items/corpse4.wav Med_kit 9 0 0 1 1 1 1 Wood
+obj sounds/items/corpse5.wav Aug 9 0 0 3 3 1 1 Wood
+zombie 30 21 Tyrant
+zombie 17 17 Matriarch
+zombie 14 17 Matriarch
+zombie 57 17 Normal
+zombie 62 17 Giant
+zombie 67 17 Tyrant
+zombie 71 17 Matriarch
+zombie 53 17 Tyrant
+zombie 78 22 Tyrant
+zombie 81 22 Tyrant
+zombie 67 26 Tyrant
+zombie 61 5 Tyrant
+zombie 59 5 Matriarch
+zombie 66 1 Matriarch
+zombie 97 18 Tyrant
+zombie 97 34 Matriarch

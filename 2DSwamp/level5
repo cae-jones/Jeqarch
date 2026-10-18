@@ -1,0 +1,25 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 0 0
+obj sounds/ambience/Swamp.wav Border 1 0 0 0 0 50 0 Grass
+obj sounds/ambience/Intersection.wav Park_Road 2 0 0 0 3 50 1 Concrete
+obj sounds/voices/42/Medic1.wav ally 10 0 0 23 4 1 2 Wood
+obj sounds/voices/21/Beckon1.wav ally 10 0 0 17 0 1 2 Wood
+obj sounds/ambience/Clock2.wav Amber's_House 1 0 0 34 7 10 1 Carpet
+obj sounds/voices/45/Beckon2.wav ally 10 0 0 39 8 1 2 Wood
+obj sounds/ambience/Faucet1.wav Charley's_House 1 0 0 5 7 10 1 Carpet
+obj sounds/ambience/Car1.wav Tomas_Street 2 0 0 17 11 14 1 Concrete
+obj sounds/ambience/Idle.wav Truck 12 0 0 22 15 5 5 Steel
+obj sounds/voices/55/Beckon3.wav ally 10 0 0 9 8 2 2 Wood
+obj sounds/voices/13/Medic3.wav ally 10 0 0 49 0 1 1 Wood
+zombie 41 0 Tyrant
+zombie 38 0 Tyrant
+zombie 35 0 Tyrant
+zombie 31 0 Tyrant
+zombie 0 4 Matriarch
+zombie 5 4 Tyrant
+zombie 10 4 Tyrant
+zombie 16 4 Tyrant

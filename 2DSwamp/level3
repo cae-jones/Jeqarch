@@ -1,0 +1,26 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 6 7
+obj sounds/ambience/Light1.wav Road 1 0 0 0 0 20 1 Concrete
+obj sounds/platforms/cicada1.wav Grass 1 0 0 23 0 13 1 Grass
+obj sounds/platforms/hammocktug1.ogg Rope_ladder 2 0 0 32 3 2 0 Stairs
+obj sounds/platforms/hammockstep1.ogg Rope_ladder 2 0 0 31 7 3 0 Stairs
+obj sounds/Obstacles/Fence.wav Bridge 2 0 0 23 11 15 1 Bridge
+obj sounds/platforms/squeakystep1.ogg Platform 2 0 0 41 11 5 3 Wood
+obj sounds/items/corpse1.wav Med_kit 9 0 0 21 13 1 1 Wood
+obj sounds/items/corpse4.wav Med_kit 9 0 -7 1 10 3 2 Wood
+obj sounds/ambience/Copter.wav Exit 1 0 0 47 12 10 1 Steel
+obj sounds/items/corpse4.wav Winchester 9 0 0 2 1 1 1 Water
+obj sounds/platforms/heartbeat2.wav Zombie_mount 1 0 0 93 0 7 6 Mud
+zombie 6 1 Normal
+zombie 13 1 Canine
+zombie 20 1 Normal
+zombie 27 1 Giant
+zombie 32 1 Giant
+zombie 37 12 Normal
+zombie 32 12 Stalker
+zombie 28 12 Lamprey
+zombie 44 14 Tyrant

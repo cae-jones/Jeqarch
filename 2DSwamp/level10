@@ -1,0 +1,46 @@
+x 0
+y 0
+width 100
+height 50
+bgm music.mp3
+start 1 11
+obj sounds/ambience/Swamp.wav Outside 1 0 0 0 0 100 0 Grass
+obj sounds/ambience/Heater.wav Wall_of_Red_Base 1 0 0 99 0 1 50 Roof
+obj sounds/platforms/squeakystep1.ogg Stairs 1 0 0 86 3 9 1 Stairs
+obj sounds/Obstacles/Sign.wav Red_Base_Wall 1 0 0 86 3 1 22 Roof
+obj sounds/ambience/Clock2.wav Red_Base 1 0 0 90 8 10 1 Wood
+obj sounds/platforms/squeakystep1.ogg Stairs 1 0 0 3 4 10 1 Stairs
+obj sounds/Obstacles/Cone.wav Blue_Base_Wall 1 0 0 12 4 2 21 Roof
+obj sounds/ambience/Clock2.wav Blue_Base 1 0 0 0 9 9 1 Wood
+obj sounds/items/quest.wav Flag 10 0 0 97 9 1 2 Wood
+obj sounds/ambience/Train.wav Destroyed_business 1 0 0 54 0 19 20 Roof
+obj sounds/voices/41/Beckon2.wav ally 10 0 0 71 20 1 1 Wood
+obj sounds/items/corpse5.wav Scorpion 9 0 0 62 0 3 5 Wood
+obj sounds/items/quest.wav Loot 10 0 0 62 0 3 5 Wood
+obj sounds/items/corpse1.wav Scorpion 9 0 0 62 0 3 5 Wood
+obj sounds/items/mask.wav CTF_Badge 9 0 0 0 10 2 2 Steel
+obj sounds/items/corpse3.wav Loot 9 0 0 5 10 2 3 Wood
+obj sounds/items/corpse4.wav Loot 9 4.5 0 0 1 2 2 Wood
+obj sounds/ambience/Light2.wav Crib 12 0 0 0 10 6 4 Wood
+obj sounds/ambience/Fence.wav Fence 1 0 0 24 4 3 0 Bridge
+obj sounds/items/corpse5.wav Loot 9 0 5 37 90 5 5 Wood
+obj sounds/platforms/squeakystep1.ogg Tower_Stairs 1 0 0 30 5 7 2 Steel
+obj sounds/ambience/Radio.wav Tower 2 0 0 35 10 5 1 Roof
+obj sounds/ambience/Alarm3.wav Abandonned_car 2 -3 0 40 15 5 1 Carpet
+obj sounds/voices/43/Medic2.wav ally 10 0 0 19 8 3 2 Wood
+obj sounds/ambience/Idle.wav Abandonned_Car 2 4.5 0 73 23 5 1 Steel
+obj sounds/items/corpse2.wav Loot 9 0 0 86 29 1 1 Wood
+obj sounds/voices/54/Medic2.wav ally 10 4.5 0 77 24 1 1 Wood
+obj sounds/voices/14/Beckon2.wav ally 10 0 0 12 25 2 1 Wood
+obj sounds/items/corpse2.wav Loot 9 0 0 4 23 3 4 Wood
+obj sounds/ambience/FenceBreak.wav Fence 1 0 0 76 3 4 1 Bridge
+obj sounds/ambience/CB6.wav Tower 1 0 0 80 8 7 1 Roof
+obj sounds/items/corpse3.wav Loot 9 -2.5 -4.5 75 9 4 4 Wood
+obj sounds/platforms/hammocktug1.ogg Rope_Bridge 2 0 0 74 12 4 1 Mud
+obj sounds/Weapons/Motorcycle/Idle.wav Abandonned_Motorcycle 2 3.5 0 74 15 2 1 Carpet
+obj sounds/Ambience/Idle.wav Semi 9 9 0 14 29 4 3 Steel
+zombie 93 9 Raider
+zombie 91 4 Raider AK47
+zombie 79 0 Raider Marlin
+zombie 66 20 Raider AA12
+zombie 82 9 Raider WA2000

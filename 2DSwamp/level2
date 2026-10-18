@@ -1,0 +1,82 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 2 7
+obj sounds/ambience/Car1.wav Parking_lot 1 0 0 0 0 10 1 Concrete
+obj sounds/ambience/Heater.wav Warehouse 1 0 0 10 0 70 1 Wood
+obj sounds/platforms/metalland3.wav Trailer_lot 1 0 0 81 0 9 1 Concrete
+obj sounds/ambience/Leaves.wav Grass 1 0 0 91 0 9 1 Grass
+obj sounds/ambience/WindowHit.wav West_wall 1 0 0 11 5 1 75 Roof
+obj sounds/ambience/BarrierHit.wav East_wall 1 0 0 80 16 2 64 Roof
+obj sounds/platforms/metalfall1.wav Wall 1 0 0 25 1 1 21 Wood
+obj sounds/Obstacles/Crate.wav Stacks_of_Crates 1 0 0 19 1 1 3 Stairs
+obj sounds/ambience/Conveyor1.wav Conveyer_belt 1 0 0 13 8 6 0 Steel
+obj sounds/platforms/squeakystep1.ogg Platform 2 0 0 14 12 3 0 Stairs
+obj sounds/ambience/Conveyor2.wav Conveyer_belt 1 0 0 17 13 7 2 Steel
+obj sounds/platforms/squeakystep2.ogg Platform 2 0 0 13 19 4 0 Stairs
+obj sounds/platforms/squeakystep1.ogg Platform 2 0 0 16 23 1 0 Stairs
+obj sounds/platforms/squeakystep2.ogg Platform 2 0 0 13 27 2 0 Stairs
+obj sounds/platforms/squeakyhinge.ogg Moving_bin 2 0 3 22 19 2 1 Pipe
+obj sounds/platforms/metalfall2-5.wav Storage 1 0 0 19 30 3 4 Concrete
+obj sounds/ambience/Light3.wav Monitoring_Station 2 0 0 26 30 2 1 Wood
+obj sounds/Obstacles/Door.wav Desk 2 0 0 26 35 3 0 Bridge
+obj sounds/ambience/Hum2.wav Wall 1 0 0 30 35 4 10 Roof
+obj sounds/platforms/squeakyhinge.ogg Moving_basket 2 4 0 25 38 3 1 Pipe
+obj sounds/ambience/Conveyor3.wav Conveyer_belt 2 -3.5 0 18 43 3 1 Steel
+obj sounds/items/corpse5.wav Med_kit 9 0 0 31 45 1 1 Wood
+obj sounds/items/corpse2.wav Med_kit 9 0 0 20 34 1 1 Wood
+obj sounds/items/quest.wav crate 10 0 0 23 1 1 1 Wood
+obj sounds/ambience/Alarm1.wav Sorting_floor 2 0 0 27 21 9 1 Wood
+obj sounds/ambience/Fire1.wav Fire 11 0 0 32 22 2 2 Rock
+obj sounds/platforms/squeakystep1.ogg Sorting_floor 2 0 0 39 22 8 1 Wood
+obj sounds/ambience/WindowHit.wav Wall 1 0 0 47 22 2 20 Roof
+obj sounds/items/corpse1.wav Med_kit 9 0 0 41 23 1 1 Wood
+obj sounds/items/corpse3.wav Med_kit 9 0 0 44 23 1 1 Wood
+obj sounds/platforms/metalledge1.ogg Huge_shelves 1 0 0 34 17 9 1 Steel
+obj sounds/platforms/metalland3.wav Huge_shelves 1 0 0 31 11 18 2 Steel
+obj sounds/items/corpse2.wav Med_kit 9 0 0 36 1 1 1 Wood
+obj sounds/platforms/squeakyhinge.ogg Moving_Basket 2 -4 0 39 7 2 1 Pipe
+obj sounds/items/corpse3.wav Hockey_mask 9 0 0 42 13 1 1 Wood
+obj sounds/Obstacles/Crate.wav Stacks_of_Crates 1 0 0 49 1 4 3 Stairs
+obj sounds/ambience/Fence.wav Package_Rollers 1 0 0 56 4 4 4 Bridge
+obj sounds/ambience/Fan2.wav Roof 1 0 0 16 79 20 1 Roof
+obj sounds/platforms/squeakyhinge.ogg Moving_basket 2 0 4 31 55 3 1 Pipe
+obj sounds/platforms/metalledge1.ogg Second_floor 1 0 0 36 65 43 6 Steel
+obj sounds/ambience/Alarm2.wav Roof 1 0 0 59 79 20 1 Roof
+obj sounds/ambience/Elevator.wav Elevator 2 0 2 54 76 6 1 Concrete
+obj sounds/items/corpse1.wav Med_kit 9 0 0 56 77 1 1 Wood
+obj sounds/items/corpse5.wav Kevlar_vest 9 0 0 77 80 1 1 Wood
+obj sounds/platforms/metalwhoosh.wav Broken_fan 2 5 0 41 79 4 1 Glass
+obj sounds/ambience/Fire3.wav Fire 11 0 0 61 1 7 7 Rock
+obj sounds/ambience/Idle.wav Semi_Trailer 2 0 0 74 4 5 1 Wood
+obj sounds/Obstacles/Car.wav Truck 1 0 0 80 3 4 4 Roof
+obj sounds/items/corpse4.wav Med_kit 9 0 0 78 5 1 1 Wood
+obj sounds/items/corpse2.wav Leather_gloves 9 0 0 78 1 14 4 Wood
+obj sounds/platforms/squeakystep2.ogg Stairs 2 0 0 35 56 4 1 Stairs
+obj sounds/platforms/squeakystep1.ogg Stairs 2 0 0 35 61 4 1 Stairs
+obj sounds/platforms/squeakystep2.ogg Stairs 2 0 0 34 65 1 1 Stairs
+obj sounds/items/corpse4.wav Gas 9 0 0 19 81 1 1 Wood
+obj sounds/items/corpse2.wav Chainsaw 9 0 0 51 45 1 1 Wood
+zombie 15 8 Normal
+zombie 18 8 Normal
+zombie 20 15 Giant
+zombie 23 15 Giant
+zombie 21 34 Giant
+zombie 19 34 Reaper
+zombie 27 31 Normal
+zombie 34 45 Stalker
+zombie 42 18 Normal
+zombie 39 18 Lamprey
+zombie 35 18 Stalker
+zombie 68 80 Stalker
+zombie 64 80 Normal
+zombie 61 80 Tyrant
+zombie 21 80 Giant
+zombie 27 80 Giant
+zombie 35 80 Reaper
+zombie 59 1 Dire
+zombie 93 1 Dire
+zombie 100 1 Dire
+zombie 80 1 Dire

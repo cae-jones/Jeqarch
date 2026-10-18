@@ -1,0 +1,152 @@
+x 0
+y 0
+width 100
+height 100
+bgm music.mp3
+start 2 69
+obj sounds/ambience/Swamp.wav Behind_the_Mall 1 0 0 0 0 100 0 Grass
+obj sounds/ambience/WindowBreak.wav Broken_wall 2 0 0 10 4 8 1 Rock
+obj sounds/ambience/Hum3.wav Maintenance_Tunnel 2 0 0 12 8 61 1 Cement
+obj sounds/ambience/WindowBreak.wav Broken_wall 2 0 0 71 3 7 1 Debris
+obj sounds/ambience/Clock2.wav Department_Store 1 0 0 72 13 17 1 Carpet
+obj sounds/ambience/Intersection.wav Department_store_parking_lot 1 0 0 90 13 6 12 Concrete
+obj sounds/Obstacles/Gate.wav Baricade 1 0 0 71 17 2 33 Bridge
+obj sounds/ambience/Flag.wav Clothes_rack 2 2.5 0 75 17 3 1 Marble
+obj sounds/ambience/Computer1.wav Office_supplies 1 0 0 84 21 5 1 Marble
+obj sounds/items/corpse1.wav Machete 9 0 0 88 23 1 1 Wood
+obj sounds/items/corpse3.wav Knives 9 0 0 85 23 1 1 Wood
+obj sounds/ambience/Washer.wav Home_Appliances 2 0 0 77 28 11 1 Marble
+obj sounds/items/corpse5.wav Grenade 9 0 0 78 29 1 2 Wood
+obj sounds/ambience/Dryer.wav Drier 2 0 0 84 32 1 1 Metal
+obj sounds/ambience/Telephone1.wav Manager's_office 2 0 0 76 36 6 1 Carpet
+obj sounds/items/corpse4.wav Benelli 9 0 0 74 41 1 1 Wood
+obj sounds/items/corpse2.wav Med_kit 9 0 0 82 41 1 1 Wood
+obj sounds/voices/39/Beckon1.wav ally 10 0 0 78 37 1 2 Wood
+obj sounds/ambience/WindowBreak.wav Store_ruins 1 0 0 60 12 7 1 Debris
+obj sounds/ambience/Fire1.wav Fire 11 0 0 67 13 2 3 Wood
+obj sounds/ambience/Hum1.wav Foodcourt_Entrance 1 0 0 45 9 10 12 Cement
+obj sounds/items/corpse5.wav AK47 9 0 0 61 14 1 1 Wood
+obj sounds/ambience/Light3.wav Broken_sign 2 0 0 64 16 2 1 Glass
+obj sounds/ambience/Alarm3.wav Shoot_out_zone 1 0 0 67 21 3 1 Concrete
+obj sounds/Obstacles/Sign.wav Baricade 1 0 0 56 21 1 15 Bridge
+obj sounds/ambience/Conveyor1.wav Escalator 2 0 2.5 65 24 3 1 Metal
+obj sounds/ambience/Freezer2.wav Food_court 1 0 0 57 35 8 1 Cement
+obj sounds/items/corpse3.wav Med_kit 9 0 0 68 38 1 1 Wood
+obj sounds/Obstacles/Door.wav Table 2 0 0 58 39 2 1 Wood
+obj sounds/ambience/Clock1.wav Northeast_Mall 2 0 0 56 44 9 1 Cement
+obj sounds/ambience/CB7.wav Raider_Outpost 2 0 0 64 48 6 1 Carpet
+obj sounds/items/corpse4.wav Grenade 9 0 0 67 51 1 1 Wood
+obj sounds/items/corpse5.wav WA2000 9 0 0 69 51 1 1 Wood
+obj sounds/ambience/Neon.wav Midnight_Matine 2 0 0 48 48 10 1 Carpet
+obj sounds/ambience/Alarm1.wav Northeast_Mall_Entrance 2 0 0 60 52 3 1 Cement
+obj sounds/items/corpse3.wav Med_kit 9 0 0 61 54 1 1 Wood
+obj sounds/ambience/Power.wav Theater 2 0 0 41 53 10 1 Carpet
+obj sounds/voices/14/Medic2.wav ally 10 0 0 46 54 1 2 Wood
+obj sounds/ambience/WindowBreak.wav Destroyed_Wall 1 0 0 36 54 5 4 Rock
+obj sounds/items/corpse4.wav AK47 9 0 0 42 55 2 2 Wood
+obj sounds/ambience/Gate.wav Roadblock 1 0 0 65 54 5 16 Pipe
+obj sounds/ambience/Fire2.wav Fire 11 0 0 31 9 4 4 Wood
+obj sounds/ambience/SOS.wav Back_of_Safe_Zone 1 0 0 10 12 18 1 Carpet
+obj sounds/ambience/Light1.wav Mall 1 0 0 31 13 6 10 Cement
+obj sounds/ambience/Flag.wav Destroyer's_Matress_Shack 2 0 0 38 18 4 1 Carpet
+obj sounds/items/quest.wav crate 10 0 0 41 9 2 1 Wood
+obj sounds/Obstacles/Sign.wav Mall_Wall 1 0 0 6 12 3 38 Roof
+obj sounds/ambience/SafeZone.wav Tactical_Room_of_Safe_Zone 1 0 0 12 16 18 1 Carpet
+obj sounds/ambience/Light2.wav Safe_Zone 12 0 0 10 13 20 7 Wood
+obj sounds/ambience/Faucet1.wav West_Mall 1 0 0 10 21 18 1 Cement
+obj sounds/ambience/Clock2.wav Cat's_Munchies 1 0 0 10 26 18 1 Carpet
+obj sounds/ambience/Clock1.wav Mall 2 0 0 28 31 17 1 Cement
+obj sounds/Obstacles/Isle.wav Northwest_Mall 1 0 0 13 31 4 19 Concrete
+obj sounds/items/quest.wav crate 10 0 0 10 31 1 1 Wood
+obj sounds/ambience/Fridge.wav Coffee_Shop 2 0 0 18 36 7 1 Wood
+obj sounds/items/corpse3.wav Med_kit 9 0 0 18 38 2 1 Wood
+obj sounds/items/corpse4.wav Remington 9 0 0 19 40 1 1 Wood
+obj sounds/ambience/Alarm1.wav North_Mall 1 0 0 27 41 10 1 Concrete
+obj sounds/ambience/ATM.wav Third_National_Bank 2 0 0 42 36 6 1 Carpet
+obj sounds/ambience/Gate.wav Vault 1 0 0 40 41 4 1 Pipe
+obj sounds/ambience/Heater.wav Wall 1 0 0 38 41 2 13 Roof
+obj sounds/platforms/metalfall1.wav Vault_Door 1 0 2 41 43 2 3 Metal
+obj sounds/voices/23/Medic2.wav ally 10 0 0 40 43 2 2 Wood
+obj sounds/items/corpse4.wav AK47 9 0 0 40 43 2 2 Wood
+obj sounds/platforms/squeakyhinge.ogg Tank 2 0 -2.5 32 51 4 1 Metal
+obj sounds/Obstacles/Brush.wav Northwest_of_Mall 2 0 0 19 56 16 1 Grass
+obj sounds/items/corpse3.wav M79 9 0 0 16 60 2 2 Wood
+obj sounds/items/corpse3.wav Med_kit 9 0 0 22 60 4 2 Wood
+obj sounds/ambience/Car2.wav Bently_Road 2 0 0 30 62 50 1 Concrete
+obj sounds/ambience/TruckCrash.wav Raider_Truck 11 -4 0 30 60 4 5 Steel
+obj sounds/ambience/Car1.wav Bently_Road 2 0 0 0 66 27 1 Concrete
+obj sounds/ambience/Sprinkler.wav Chain_of_fallen_Branches 2 4 0 10 71 7 1 Leaves
+obj sounds/ambience/Swamp.wav Forest_Path 2 0 0 27 76 20 1 Leaves
+obj sounds/items/corpse3.wav Vulcan 9 0 0 24 81 1 1 Wood
+obj sounds/items/corpse2.wav Med_kit 9 0 0 35 80 1 1 Bridge
+obj sounds/items/corpse5.wav Med_kit 9 0 0 37 80 1 1 Wood
+obj sounds/items/corpse4.wav Med_kit 9 0 0 39 80 2 2 Bridge
+obj sounds/items/corpse5.wav AA12 9 0 0 44 79 2 1 Wood
+obj sounds/items/corpse4.wav Grenade 9 0 0 48 80 2 3 Wood
+obj sounds/items/corpse4.wav M79 9 0 0 73 74 2 2 Wood
+obj sounds/voices/32/Medic1.wav ally 10 0 0 74 63 1 1 Wood
+obj sounds/items/corpse5.wav Med_kit 9 0 0 79 65 1 1 Wood
+obj sounds/items/corpse1.wav M79 9 0 0 83 65 2 2 Wood
+obj sounds/items/corpse5.wav Gas 9 0 0 83 59 3 6 Wood
+obj sounds/items/corpse1.wav Motorcycle 9 0 0 83 55 3 3 Wood
+zombie 5 0 Normal
+zombie 12 0 Normal
+zombie 19 0 Matriach
+zombie 29 0 Tyrant
+zombie 39 0 Normal
+zombie 49 0 Reaper
+zombie 59 0 Matriarch
+zombie 69 0 Dire
+zombie 80 0 Behemoth
+zombie 90 0 Hulk
+zombie 98 0 Tentacle
+zombie 86 14 Raider
+zombie 83 14 Dire
+zombie 87 22 Tyrant
+zombie 85 22 Matriarch
+zombie 93 25 Matriarch
+zombie 95 25 Dire
+zombie 92 25 Dire
+zombie 82 29 Raider
+zombie 50 21 Raider
+zombie 54 21 Matriarch
+zombie 69 22 Raider
+zombie 70 22 Raider
+zombie 59 36 Raider
+zombie 63 36 Raider
+zombie 60 36 Hulk
+zombie 72 50 Raider
+zombie 67 49 Raider
+zombie 52 49 Normal
+zombie 50 49 Matriarch
+zombie 44 54 Tentacle
+zombie 16 9 Dire
+zombie 17 9 Normal
+zombie 21 9 Matriarch
+zombie 33 23 Dire
+zombie 35 23 Tentacle
+zombie 11 22 Tentacle
+zombie 15 22 Dire
+zombie 18 22 Matriarch
+zombie 23 22 Tyrant
+zombie 24 22 Normal
+zombie 39 32 Tyrant
+zombie 32 32 Dire
+zombie 35 32 Matriarch
+zombie 7 50 Tentacle
+zombie 15 50 Tentacle
+zombie 16 27 Reaper
+zombie 18 27 Raider
+zombie 22 37 Giant
+zombie 45 37 Raider
+zombie 22 57 Behemoth
+zombie 29 57 Tyrant
+zombie 33 57 Matriarch
+zombie 37 58 Matriarch
+zombie 7 67 Normal
+zombie 14 67 Dire
+zombie 21 67 Matriarch
+zombie 27 67 Tyrant
+zombie 34 77 Dire
+zombie 39 77 Behemoth
+zombie 44 77 Hulk
